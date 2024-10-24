@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from fuzzywuzzy import process
 
 # Title and file uploader component
 st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
@@ -59,22 +58,27 @@ if uploaded_file is not None:
                 st.error(f"Found {len(generic_brand_issues)} products with GENERIC brand for valid CATEGORY_CODE.")
                 st.write(generic_brand_issues)
 
-            # Flag 6: Price and Keyword Check
-            flagged_perfumes = []
-            for index, row in data.iterrows():
-                brand = row['BRAND']
-                if brand in perfumes_data['BRAND'].values:
-                    keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
-                    for keyword in keywords:
-                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                            price_difference = row['GLOBAL_PRICE'] - perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
-                            if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
-                                flagged_perfumes.append(row)
-                                break  # Stop checking once we find a match
+            # Flag 6: Perfume Price and Keyword Check (Optimized)
+            # Step 1: Merge uploaded data with perfumes.xlsx based on BRAND
+            merged_data = pd.merge(data, perfumes_data[['BRAND', 'KEYWORD', 'PRICE']], on='BRAND', how='left')
 
-            if flagged_perfumes:
+            # Step 2: Filter rows where the NAME contains the keyword from perfumes.xlsx
+            # Use .str.contains() to find the keyword in the NAME (case insensitive)
+            merged_data['Keyword_Found'] = merged_data.apply(
+                lambda row: row['KEYWORD'].lower() in row['NAME'].lower() if pd.notna(row['KEYWORD']) and pd.notna(row['NAME']) else False,
+                axis=1
+            )
+
+            # Step 3: Calculate the price difference where keywords are found
+            # Flag rows where the keyword is found and the GLOBAL_PRICE is less than the perfume's PRICE
+            merged_data['Price_Difference'] = merged_data['GLOBAL_PRICE'] - merged_data['PRICE']
+
+            flagged_perfumes = merged_data[(merged_data['Keyword_Found'] == True) & (merged_data['Price_Difference'] < 0)]
+
+            # Step 4: Display flagged perfumes
+            if not flagged_perfumes.empty:
                 st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
-                st.write(pd.DataFrame(flagged_perfumes))
+                st.write(flagged_perfumes[['PRODUCT_SET_SID', 'PARENTSKU', 'NAME', 'BRAND', 'GLOBAL_PRICE', 'PRICE', 'Price_Difference']])
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
@@ -93,7 +97,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row in flagged_perfumes:
+                if row['PRODUCT_SET_SID'] in flagged_perfumes['PRODUCT_SET_SID'].values:
                     reasons.append("Perfume price issue")
 
                 status = 'Rejected' if reasons else 'Approved'
