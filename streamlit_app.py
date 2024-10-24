@@ -22,7 +22,7 @@ if uploaded_file is not None:
         # Load the uploaded CSV file
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
 
-        # Convert NAME column to string and fill NaNs
+        # Convert NAME column to string and fill NaNs with empty strings
         data['NAME'] = data['NAME'].astype(str).fillna('')
 
         if not data.empty:
@@ -74,7 +74,7 @@ if uploaded_file is not None:
                     for keyword in keywords:
                         if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
                             perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
-                            price_difference = row['GLOBAL_PRICE'] - perfume_price
+                            price_difference = row.get('GLOBAL_PRICE', float('inf')) - perfume_price  # Handle missing GLOBAL_PRICE gracefully
                             if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
                                 flagged_perfumes.append(row)
                                 break  # Stop checking once we find a match
@@ -120,8 +120,8 @@ if uploaded_file is not None:
                 comment = ', '.join(reasons) if reasons else 'No issues'
 
                 final_report_rows.append({
-                    'ProductSetSid': row['PRODUCT_SET_SID'],  # from CSV file
-                    'ParentSKU': row['PARENTSKU'],            # from CSV file
+                    'ProductSetSid': row.get('PRODUCT_SET_SID', ''),  # Safely get PRODUCT_SET_SID
+                    'ParentSKU': row.get('PARENTSKU', ''),           # Safely get PARENTSKU
                     'Status': status,
                     'Reason': reason,
                     'Comment': comment
@@ -129,11 +129,11 @@ if uploaded_file is not None:
 
             final_report = pd.DataFrame(final_report_rows)
 
-            rejection_reasons = pd.DataFrame()
-
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 final_report.to_excel(writer, sheet_name='ProductSets', index=False)
+                
+                rejection_reasons = pd.DataFrame()  # Create an empty DataFrame for RejectionReasons sheet
                 rejection_reasons.to_excel(writer, sheet_name='RejectionReasons', index=False)
 
             st.write("Here is a preview of the ProductSets sheet:")
