@@ -35,6 +35,11 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
+            # Ensure NAME and other string fields are converted to strings
+            data['NAME'] = data['NAME'].fillna('').astype(str)
+            data['BRAND'] = data['BRAND'].fillna('').astype(str)
+            data['COLOR'] = data['COLOR'].fillna('').astype(str)
+
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             if not missing_color.empty:
@@ -80,6 +85,7 @@ if uploaded_file is not None:
                     if brand in perfumes_data['BRAND'].values:
                         keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                         for keyword in keywords:
+                            # Ensure NAME is not a float before applying lower
                             if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
                                 price_difference = row['GLOBAL_PRICE'] - perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
                                 if price_difference < 0:  # Flag if uploaded price is less than the perfume price
