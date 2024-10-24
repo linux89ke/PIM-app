@@ -89,6 +89,13 @@ if uploaded_file is not None:
                 st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
                 st.write(flagged_blacklisted)
 
+            # Flag 8: Brand name repeated in NAME (case-insensitive)
+            brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+
+            if not brand_in_name.empty:
+                st.error(f"Found {len(brand_in_name)} products where BRAND name is repeated in NAME.")
+                st.write(brand_in_name)
+
             # Prepare a list to hold the final report rows
             final_report_rows = []
 
@@ -110,6 +117,9 @@ if uploaded_file is not None:
                     reasons.append("Perfume price issue")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
+                if row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
+                    reasons.append("BRAND name repeated in NAME")
+
                 status = 'Rejected' if reasons else 'Approved'
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
                 comment = ', '.join(reasons) if reasons else 'No issues'
