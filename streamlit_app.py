@@ -36,13 +36,14 @@ if uploaded_file is not None:
             st.write(data.head())
 
             # Flag 1: Missing COLOR
-            missing_color = data[data['COLOR'].isna() or (data['COLOR'] == '')]
+            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             if not missing_color.empty:
                 st.error(f"Found {len(missing_color)} products with missing COLOR fields.")
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
-            missing_brand_or_name = data[data['BRAND'].isna() or (data['BRAND'] == '') or data['NAME'].isna() or (data['NAME'] == '')]
+            missing_brand_or_name = data[(data['BRAND'].isna() | (data['BRAND'] == '')) |
+                                         (data['NAME'].isna() | (data['NAME'] == ''))]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
@@ -57,7 +58,7 @@ if uploaded_file is not None:
             if check_variation_data is not None:
                 valid_category_codes = check_variation_data['ID'].tolist()
                 category_variation_issues = data[data['CATEGORY_CODE'].isin(valid_category_codes) & 
-                                                  (data['VARIATION'].isna() or (data['VARIATION'] == ''))]
+                                                  (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
                 if not category_variation_issues.empty:
                     st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
                     st.write(category_variation_issues)
@@ -154,4 +155,3 @@ if uploaded_file is not None:
         st.error(f"An error occurred while processing the file: {e}")
 else:
     st.info("Please upload a CSV file to continue.")
-
