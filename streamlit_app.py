@@ -3,7 +3,7 @@ import streamlit as st
 from io import BytesIO
 
 # Title and file uploader component
-st.title("Product Checks")
+st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
@@ -33,15 +33,13 @@ if uploaded_file is not None:
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
-            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
-                                          (data['NAME'].isna()) | (data['NAME'] == '')]
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
-            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
-                                    (data['BRAND'] != 'Jumia Book')]
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
                 st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
                 st.write(single_word_name)
@@ -49,7 +47,7 @@ if uploaded_file is not None:
             # Flag 4: Category and Variation Check
             valid_category_codes = check_variation_data['ID'].tolist()
             category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & 
-                                              (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
+                                              ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
             if not category_variation_issues.empty:
                 st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
                 st.write(category_variation_issues)
@@ -63,7 +61,9 @@ if uploaded_file is not None:
                 st.write(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
-            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset="BRAND", keep="first")
+            # Sort by price and drop duplicates based on BRAND and KEYWORD, keeping the highest price
+            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
+
             flagged_perfumes = []
             for index, row in data.iterrows():
                 brand = row['BRAND']
@@ -71,7 +71,7 @@ if uploaded_file is not None:
                     keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                     for keyword in keywords:
                         if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                            perfume_price = perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
+                            perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
                             price_difference = row['GLOBAL_PRICE'] - perfume_price
                             if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
                                 flagged_perfumes.append(row)
@@ -82,19 +82,15 @@ if uploaded_file is not None:
                 st.write(pd.DataFrame(flagged_perfumes))
 
             # Flag 7: Blacklisted Words in NAME
-            flagged_blacklisted_words = []
-            # Check for blacklisted words in the NAME column
-            data['Blacklisted Words'] = data['NAME'].apply(
-                lambda name: [black_word for black_word in blacklisted_words if black_word.lower() in str(name).lower()] 
-                if pd.notna(name) else []
-            )
+            def check_blacklist(name):
+                if pd.isna(name):
+                    return False
+                return any(black_word.lower() in name.lower() for black_word in blacklisted_words)
 
-            # Collect products that have any blacklisted words
-            flagged_blacklisted = data[data['Blacklisted Words'].str.len() > 0]
-
+            flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
             if not flagged_blacklisted.empty:
                 st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
-                st.write(flagged_blacklisted[['NAME', 'Blacklisted Words']])  # Display names and the blacklisted words found
+                st.write(flagged_blacklisted)
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
@@ -113,7 +109,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row in flagged_perfumes:
+                if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                     reasons.append("Perfume price issue")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
@@ -124,8 +120,8 @@ if uploaded_file is not None:
 
                 # Append the row to the list
                 final_report_rows.append({
-                    'ProductSetSid': row['PRODUCT_SET_SID'],
-                    'ParentSKU': row['PARENTSKU'],
+                    'ProductSetSid': row['PRODUCT_SET_SID'],  # from CSV file
+                    'ParentSKU': row['PARENTSKU'],            # from CSV file
                     'Status': status,
                     'Reason': reason,
                     'Comment': comment
