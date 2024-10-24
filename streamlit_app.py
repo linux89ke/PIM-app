@@ -59,7 +59,7 @@ if uploaded_file is not None:
                 st.write(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
-            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+            single_word_name = data[data['NAME'].apply(lambda x: len(str(x).split()) == 1) & (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
                 st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
                 st.write(single_word_name)
