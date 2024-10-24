@@ -22,6 +22,9 @@ if uploaded_file is not None:
         # Load the uploaded CSV file
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
 
+        # Convert NAME column to string and fill NaNs
+        data['NAME'] = data['NAME'].astype(str).fillna('')
+
         if not data.empty:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
@@ -61,7 +64,6 @@ if uploaded_file is not None:
                 st.write(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
-            # Sort by price and drop duplicates based on BRAND and KEYWORD, keeping the highest price
             perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
 
             flagged_perfumes = []
@@ -97,7 +99,6 @@ if uploaded_file is not None:
 
             # Iterate over each product row to populate the final report
             for index, row in data.iterrows():
-                # Check if the row was flagged and set status accordingly
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
                     reasons.append("Missing COLOR")
@@ -118,7 +119,6 @@ if uploaded_file is not None:
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
                 comment = ', '.join(reasons) if reasons else 'No issues'
 
-                # Append the row to the list
                 final_report_rows.append({
                     'ProductSetSid': row['PRODUCT_SET_SID'],  # from CSV file
                     'ParentSKU': row['PARENTSKU'],            # from CSV file
@@ -127,22 +127,15 @@ if uploaded_file is not None:
                     'Comment': comment
                 })
 
-            # Convert the list of rows to a DataFrame
             final_report = pd.DataFrame(final_report_rows)
 
-            # Create an empty DataFrame for the RejectionReasons sheet
             rejection_reasons = pd.DataFrame()
 
-            # Save both sheets to an Excel file in memory
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Write the final report to the first sheet (ProductSets)
                 final_report.to_excel(writer, sheet_name='ProductSets', index=False)
-
-                # Write the empty RejectionReasons sheet
                 rejection_reasons.to_excel(writer, sheet_name='RejectionReasons', index=False)
 
-            # Allow users to download the final Excel file
             st.write("Here is a preview of the ProductSets sheet:")
             st.write(final_report)
 
