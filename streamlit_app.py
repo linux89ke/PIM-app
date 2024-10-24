@@ -70,7 +70,8 @@ if uploaded_file is not None:
                     keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                     for keyword in keywords:
                         if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                            price_difference = row['GLOBAL_PRICE'] - perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
+                            perfume_price = perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
+                            price_difference = row['GLOBAL_PRICE'] - perfume_price
                             if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
                                 flagged_perfumes.append(row)
                                 break  # Stop checking once we find a match
@@ -80,7 +81,12 @@ if uploaded_file is not None:
                 st.write(pd.DataFrame(flagged_perfumes))
 
             # Flag 7: Blacklisted Words in NAME
-            flagged_blacklisted = data[data['NAME'].apply(lambda x: any(black_word.lower() in str(x).lower() for black_word in blacklisted_words))]
+            def check_blacklist(name):
+                if pd.isna(name):
+                    return False
+                return any(black_word.lower() in name.lower() for black_word in blacklisted_words)
+
+            flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
             if not flagged_blacklisted.empty:
                 st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
                 st.write(flagged_blacklisted)
