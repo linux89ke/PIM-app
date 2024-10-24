@@ -9,7 +9,7 @@ uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
 try:
-    check_variation_data = pd.read_excel("pages/check_variation.xlsx")  # Check for category and variation issues
+    check_variation_data = pd.read_excel(check_variation.xlsx")  # Check for category and variation issues
     category_fas_data = pd.read_excel("pages/category_FAS.xlsx")  # Check for generic brand issues
     perfumes_data = pd.read_excel("perfumes.xlsx")  # Load perfumes data for keyword checks
     with open("blacklisted.txt", "r") as f:
