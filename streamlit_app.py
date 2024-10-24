@@ -3,7 +3,7 @@ import streamlit as st
 from io import BytesIO
 
 # Title and file uploader component
-st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
+st.title("Product Checks")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
