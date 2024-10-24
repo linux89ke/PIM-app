@@ -26,44 +26,46 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
+            # Initialize lists to collect flagged rows
+            flagged_rows = []
+
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             if not missing_color.empty:
                 st.error(f"Found {len(missing_color)} products with missing COLOR fields.")
-                st.write(missing_color)
+                flagged_rows.append(missing_color)
 
             # Flag 2: Missing BRAND or NAME
             missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
                                           (data['NAME'].isna()) | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
-                st.write(missing_brand_or_name)
+                flagged_rows.append(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
             single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
                                     (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
                 st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
-                st.write(single_word_name)
+                flagged_rows.append(single_word_name)
 
             # Flag 4: Category and Variation Check
             valid_category_codes = check_variation_data['ID'].tolist()
-            category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & 
+            category_variation_issues = data[data['CATEGORY_CODE'].isin(valid_category_codes) & 
                                               (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
             if not category_variation_issues.empty:
                 st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
-                st.write(category_variation_issues)
+                flagged_rows.append(category_variation_issues)
 
             # Flag 5: Generic Brand Check
             valid_category_codes_fas = category_fas_data['ID'].tolist()
-            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
+            generic_brand_issues = data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & 
                                          (data['BRAND'] == 'Generic')]
             if not generic_brand_issues.empty:
                 st.error(f"Found {len(generic_brand_issues)} products with GENERIC brand for valid CATEGORY_CODE.")
-                st.write(generic_brand_issues)
+                flagged_rows.append(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
-            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset="BRAND", keep="first")
             flagged_perfumes = []
             for index, row in data.iterrows():
                 brand = row['BRAND']
@@ -79,57 +81,54 @@ if uploaded_file is not None:
 
             if flagged_perfumes:
                 st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
-                st.write(pd.DataFrame(flagged_perfumes))
+                flagged_rows.append(pd.DataFrame(flagged_perfumes))
 
             # Flag 7: Blacklisted Words in NAME
-            flagged_blacklisted_words = []
-            # Check for blacklisted words in the NAME column
             data['Blacklisted Words'] = data['NAME'].apply(
                 lambda name: [black_word for black_word in blacklisted_words if black_word.lower() in str(name).lower()] 
                 if pd.notna(name) else []
             )
-
-            # Collect products that have any blacklisted words
             flagged_blacklisted = data[data['Blacklisted Words'].str.len() > 0]
 
             if not flagged_blacklisted.empty:
                 st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
-                st.write(flagged_blacklisted[['NAME', 'Blacklisted Words']])  # Display names and the blacklisted words found
+                flagged_rows.append(flagged_blacklisted[['NAME', 'Blacklisted Words']])
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
 
-            # Iterate over each product row to populate the final report
-            for index, row in data.iterrows():
-                # Check if the row was flagged and set status accordingly
-                reasons = []
-                if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing COLOR")
-                if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing BRAND or NAME")
-                if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Single-word NAME")
-                if row['PRODUCT_SET_SID'] in category_variation_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing VARIATION")
-                if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Generic BRAND")
-                if row in flagged_perfumes:
-                    reasons.append("Perfume price issue")
-                if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
-                    reasons.append("Blacklisted word in NAME")
+            # Combine all flagged rows for final reporting
+            for flagged_df in flagged_rows:
+                if not flagged_df.empty:
+                    for index, row in flagged_df.iterrows():
+                        reasons = []
+                        if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
+                            reasons.append("Missing COLOR")
+                        if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
+                            reasons.append("Missing BRAND or NAME")
+                        if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
+                            reasons.append("Single-word NAME")
+                        if row['PRODUCT_SET_SID'] in category_variation_issues['PRODUCT_SET_SID'].values:
+                            reasons.append("Missing VARIATION")
+                        if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
+                            reasons.append("Generic BRAND")
+                        if row in flagged_perfumes:
+                            reasons.append("Perfume price issue")
+                        if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
+                            reasons.append("Blacklisted word in NAME")
 
-                status = 'Rejected' if reasons else 'Approved'
-                reason = '1000007 - Other Reason' if status == 'Rejected' else ''
-                comment = ', '.join(reasons) if reasons else 'No issues'
+                        status = 'Rejected' if reasons else 'Approved'
+                        reason = '1000007 - Other Reason' if status == 'Rejected' else ''
+                        comment = ', '.join(reasons) if reasons else 'No issues'
 
-                # Append the row to the list
-                final_report_rows.append({
-                    'ProductSetSid': row['PRODUCT_SET_SID'],
-                    'ParentSKU': row['PARENTSKU'],
-                    'Status': status,
-                    'Reason': reason,
-                    'Comment': comment
-                })
+                        # Append the row to the list
+                        final_report_rows.append({
+                            'ProductSetSid': row['PRODUCT_SET_SID'],
+                            'ParentSKU': row['PARENTSKU'],
+                            'Status': status,
+                            'Reason': reason,
+                            'Comment': comment
+                        })
 
             # Convert the list of rows to a DataFrame
             final_report = pd.DataFrame(final_report_rows)
