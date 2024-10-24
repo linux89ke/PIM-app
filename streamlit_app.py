@@ -83,9 +83,9 @@ if uploaded_file is not None:
 
             # Flag 7: Blacklisted Words in NAME
             def check_blacklist(name):
-                if pd.isna(name):
-                    return False
-                return any(black_word.lower() in name.lower() for black_word in blacklisted_words)
+                if isinstance(name, str):  # Ensure the value is a string
+                    return any(black_word.lower() in name.lower() for black_word in blacklisted_words)
+                return False
 
             flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
             if not flagged_blacklisted.empty:
