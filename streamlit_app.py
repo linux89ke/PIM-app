@@ -22,8 +22,11 @@ if uploaded_file is not None:
         # Load the uploaded CSV file
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
 
-        # Convert NAME column to string and fill NaNs with empty strings
+        # Convert relevant columns to string and fill NaNs with empty strings
         data['NAME'] = data['NAME'].astype(str).fillna('')
+        data['BRAND'] = data['BRAND'].astype(str).fillna('')
+        data['COLOR'] = data['COLOR'].astype(str).fillna('')
+        data['VARIATION'] = data['VARIATION'].astype(str).fillna('')
 
         if not data.empty:
             st.write("CSV file loaded successfully. Preview of data:")
@@ -36,13 +39,15 @@ if uploaded_file is not None:
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
-            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
+                                          data['NAME'].isna() | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
-            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
+                                    (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
                 st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
                 st.write(single_word_name)
@@ -73,8 +78,12 @@ if uploaded_file is not None:
                     keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                     for keyword in keywords:
                         if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                            perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
-                            price_difference = row.get('GLOBAL_PRICE', float('inf')) - perfume_price  # Handle missing GLOBAL_PRICE gracefully
+                            perfume_price = perfumes_data.loc[
+                                (perfumes_data['BRAND'] == brand) & 
+                                (perfumes_data['KEYWORD'] == keyword), 'PRICE'
+                            ].values[0]
+                            global_price = row.get('GLOBAL_PRICE', float('inf'))  # Handle missing GLOBAL_PRICE gracefully
+                            price_difference = global_price - perfume_price
                             if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
                                 flagged_perfumes.append(row)
                                 break  # Stop checking once we find a match
