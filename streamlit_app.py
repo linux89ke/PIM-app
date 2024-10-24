@@ -4,7 +4,7 @@ from io import BytesIO
 from fuzzywuzzy import process
 
 # Title and file uploader component
-st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
+st.title("Product Checker")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
