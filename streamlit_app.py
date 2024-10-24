@@ -2,19 +2,22 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 
-# Title and file uploader component
-st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+# Function to load the blacklisted words from a file
+def load_blacklisted_words():
+    with open('blacklisted.txt', 'r') as f:
+        return [line.strip() for line in f.readlines()]
 
-# Load supporting Excel and text files
-try:
-    check_variation_data = pd.read_excel("check_variation.xlsx")  # Check for category and variation issues
-    category_fas_data = pd.read_excel("category_FAS.xlsx")  # Check for generic brand issues
-    perfumes_data = pd.read_excel("perfumes.xlsx")  # Load perfumes data for keyword checks
-    with open('blacklisted.txt', 'r') as file:
-        blacklisted_words = [line.strip() for line in file.readlines()]
-except Exception as e:
-    st.error(f"Error loading supporting files: {e}")
+# Load data for checks
+check_variation_data = pd.read_excel('check_variation.xlsx')
+category_fas_data = pd.read_excel('category_FAS.xlsx')
+perfumes_data = pd.read_excel('perfumes.xlsx')
+blacklisted_words = load_blacklisted_words()
+
+# Streamlit app layout
+st.title("Product Validation Tool")
+
+# File upload section
+uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Check if the file is uploaded
 if uploaded_file is not None:
@@ -25,22 +28,31 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
+            # Initialize counters for flagged products
+            total_flagged_products = 0
+
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             if not missing_color.empty:
-                st.error(f"Found {len(missing_color)} products with missing COLOR fields.")
+                flagged_count = len(missing_color)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products with missing COLOR fields.")
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
             missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
-                st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
+                flagged_count = len(missing_brand_or_name)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
             single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
-                st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
+                flagged_count = len(single_word_name)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products with a single-word NAME.")
                 st.write(single_word_name)
 
             # Flag 4: Category and Variation Check
@@ -48,7 +60,9 @@ if uploaded_file is not None:
             category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) &
                                              ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
             if not category_variation_issues.empty:
-                st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
+                flagged_count = len(category_variation_issues)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products with missing VARIATION for valid CATEGORY_CODE.")
                 st.write(category_variation_issues)
 
             # Flag 5: Generic Brand Check
@@ -56,7 +70,9 @@ if uploaded_file is not None:
             generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
                                         (data['BRAND'] == 'Generic')]
             if not generic_brand_issues.empty:
-                st.error(f"Found {len(generic_brand_issues)} products with GENERIC brand for valid CATEGORY_CODE.")
+                flagged_count = len(generic_brand_issues)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products with GENERIC brand for valid CATEGORY_CODE.")
                 st.write(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
@@ -75,7 +91,9 @@ if uploaded_file is not None:
                                 flagged_perfumes.append(row)
                                 break  # Stop checking once we find a match
             if flagged_perfumes:
-                st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
+                flagged_count = len(flagged_perfumes)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products flagged due to perfume price issues.")
                 st.write(pd.DataFrame(flagged_perfumes))
 
             # Flag 7: Blacklisted Words in NAME
@@ -86,15 +104,23 @@ if uploaded_file is not None:
 
             flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
             if not flagged_blacklisted.empty:
-                st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
+                flagged_count = len(flagged_blacklisted)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products flagged due to blacklisted words in NAME.")
                 st.write(flagged_blacklisted)
 
             # Flag 8: Brand name repeated in NAME (case-insensitive)
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-
             if not brand_in_name.empty:
-                st.error(f"Found {len(brand_in_name)} products where BRAND name is repeated in NAME.")
+                flagged_count = len(brand_in_name)
+                total_flagged_products += flagged_count
+                st.error(f"Found {flagged_count} products where BRAND name is repeated in NAME.")
                 st.write(brand_in_name)
+
+            # Show total number of rows and flagged products
+            total_rows = len(data)
+            st.write(f"Total number of rows: {total_rows}")
+            st.write(f"Total number of flagged products: {total_flagged_products}")
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
@@ -160,5 +186,3 @@ if uploaded_file is not None:
             st.error("Uploaded file is empty. Please upload a valid CSV file.")
     except Exception as e:
         st.error(f"An error occurred while processing the file: {e}")
-else:
-    st.info("Please upload a CSV file to continue.")
