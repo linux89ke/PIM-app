@@ -53,27 +53,34 @@ if uploaded_file is not None:
 
             # Flag 5: Generic Brand Check
             valid_category_codes_fas = category_fas_data['ID'].tolist()
-            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
+            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
                                         (data['BRAND'] == 'Generic')]
             if not generic_brand_issues.empty:
                 st.error(f"Found {len(generic_brand_issues)} products with GENERIC brand for valid CATEGORY_CODE.")
                 st.write(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
-            # Sort by price and drop duplicates based on BRAND and KEYWORD, keeping the highest price
             perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
+
+            # Helper function to check keywords in the NAME column
+            def check_keywords_in_name(name, keywords):
+                if isinstance(name, str):  # Ensure the name is a string
+                    return any(keyword.lower() in name.lower() for keyword in keywords)
+                return False
+
+            # Loop through the data to flag perfumes with price issues
             flagged_perfumes = []
             for index, row in data.iterrows():
                 brand = row['BRAND']
                 if brand in perfumes_data['BRAND'].values:
                     keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
-                    for keyword in keywords:
-                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                            perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
-                            price_difference = row['GLOBAL_PRICE'] - perfume_price
-                            if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
-                                flagged_perfumes.append(row)
-                                break  # Stop checking once we find a match
+                    if check_keywords_in_name(row['NAME'], keywords):
+                        perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) &
+                                                          (perfumes_data['KEYWORD'].apply(lambda x: x.lower() in row['NAME'].lower())), 'PRICE'].values[0]
+                        price_difference = row['GLOBAL_PRICE'] - perfume_price
+                        if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
+                            flagged_perfumes.append(row)
+                            break  # Stop checking once we find a match
             if flagged_perfumes:
                 st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
                 st.write(pd.DataFrame(flagged_perfumes))
@@ -94,7 +101,6 @@ if uploaded_file is not None:
 
             # Iterate over each product row to populate the final report
             for index, row in data.iterrows():
-                # Check if the row was flagged and set status accordingly
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
                     reasons.append("Missing COLOR")
@@ -114,7 +120,6 @@ if uploaded_file is not None:
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
                 comment = ', '.join(reasons) if reasons else 'No issues'
 
-                # Append the row to the list
                 final_report_rows.append({
                     'ProductSetSid': row['PRODUCT_SET_SID'],  # from CSV file
                     'ParentSKU': row['PARENTSKU'],            # from CSV file
@@ -132,9 +137,7 @@ if uploaded_file is not None:
             # Save both sheets to an Excel file in memory
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                # Write the final report to the first sheet (ProductSets)
                 final_report.to_excel(writer, sheet_name='ProductSets', index=False)
-                # Write the empty RejectionReasons sheet
                 rejection_reasons.to_excel(writer, sheet_name='RejectionReasons', index=False)
 
             # Allow users to download the final Excel file
