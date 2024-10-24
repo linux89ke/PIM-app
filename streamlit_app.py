@@ -4,7 +4,7 @@ from io import BytesIO
 from fuzzywuzzy import process
 
 # Title and file uploader component
-st.title("Product Checker")
+st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
@@ -47,8 +47,8 @@ if uploaded_file is not None:
 
             # Flag 4: Category and Variation Check
             valid_category_codes = check_variation_data['ID'].tolist()
-            category_variation_issues = data[data['CATEGORY_CODE'].isin(valid_category_codes) & 
-                                              (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
+            category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & 
+                                              ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
             if not category_variation_issues.empty:
                 st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
                 st.write(category_variation_issues)
@@ -102,7 +102,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row in flagged_perfumes:
+                if row['PRODUCT_SET_SID'] in flagged_perfumes:
                     reasons.append("Perfume price issue")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
