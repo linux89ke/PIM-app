@@ -28,10 +28,6 @@ try:
     # For each brand, keep the row with the highest PRICE
     perfumes_data = perfumes_data.loc[perfumes_data.groupby('BRAND')['PRICE'].idxmax()]
     
-    # Check if there are still duplicates after removing lower-priced duplicates
-    if perfumes_data.duplicated(subset=['BRAND', 'KEYWORD']).any():
-        st.warning("There are still duplicates in BRAND and KEYWORD even after removing lower-priced entries. Please review the file.")
-        
 except FileNotFoundError:
     st.warning("perfumes.xlsx not found. Skipping perfume keyword and price checks.")
     perfumes_data = None
@@ -47,13 +43,13 @@ if uploaded_file is not None:
             st.write(data.head())
 
             # Flag 1: Missing COLOR
-            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
+            missing_color = data[(data['COLOR'].isna()) | (data['COLOR'] == '')]
             if not missing_color.empty:
                 st.error(f"Found {len(missing_color)} products with missing COLOR fields.")
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
-            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
+            missing_brand_or_name = data[(data['BRAND'].isna()) | (data['BRAND'] == '') | (data['NAME'].isna()) | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
@@ -83,15 +79,16 @@ if uploaded_file is not None:
                     st.write(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check
+            flagged_perfumes = []
             if perfumes_data is not None:
-                flagged_perfumes = []
                 for index, row in data.iterrows():
                     brand = row['BRAND']
                     if brand in perfumes_data['BRAND'].values:
                         keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                         for keyword in keywords:
                             if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                                price_difference = row['GLOBAL_PRICE'] - perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
+                                perfume_price = perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
+                                price_difference = row['GLOBAL_PRICE'] - perfume_price
                                 if price_difference < 0:  # Flag if uploaded price is less than the perfume price
                                     flagged_perfumes.append(row)
                                     break  # Stop checking once we find a match
@@ -117,7 +114,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if category_fas_data is not None and row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row in flagged_perfumes:
+                if any((row == flagged_product).all() for flagged_product in flagged_perfumes):
                     reasons.append("Perfume price issue")
 
                 status = 'Rejected' if reasons else 'Approved'
