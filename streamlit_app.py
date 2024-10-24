@@ -4,16 +4,16 @@ from io import BytesIO
 from fuzzywuzzy import process
 
 # Title and file uploader component
-st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, Brand, and Blacklist Checks")
+st.title("Product Validation: COLOR, NAME, CATEGORY_CODE, Price, and Brand Checks")
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 # Load supporting Excel and text files
 try:
-    check_variation_data = pd.read_excel(check_variation.xlsx)  # Check for category and variation issues
-    category_fas_data = pd.read_excel("pages/category_FAS.xlsx")  # Check for generic brand issues
+    check_variation_data = pd.read_excel("check_variation.xlsx")  # Check for category and variation issues
+    category_fas_data = pd.read_excel("category_FAS.xlsx")  # Check for generic brand issues
     perfumes_data = pd.read_excel("perfumes.xlsx")  # Load perfumes data for keyword checks
-    with open("blacklisted.txt", "r") as f:
-        blacklisted_words = [line.strip().lower() for line in f.readlines()]  # Load blacklisted words
+    with open('blacklisted.txt', 'r') as file:
+        blacklisted_words = [line.strip() for line in file.readlines()]
 except Exception as e:
     st.error(f"Error loading supporting files: {e}")
 
@@ -61,8 +61,8 @@ if uploaded_file is not None:
                 st.error(f"Found {len(generic_brand_issues)} products with GENERIC brand for valid CATEGORY_CODE.")
                 st.write(generic_brand_issues)
 
-            # Flag 6: Price and Keyword Check for Perfumes
-            perfumes_data = perfumes_data.sort_values('PRICE', ascending=False).drop_duplicates('BRAND', keep='first')
+            # Flag 6: Price and Keyword Check (Perfume Check)
+            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset="BRAND", keep="first")
             flagged_perfumes = []
             for index, row in data.iterrows():
                 brand = row['BRAND']
@@ -71,27 +71,19 @@ if uploaded_file is not None:
                     for keyword in keywords:
                         if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
                             price_difference = row['GLOBAL_PRICE'] - perfumes_data.loc[perfumes_data['BRAND'] == brand, 'PRICE'].values[0]
-                            if price_difference < 0:  # Flag if uploaded price is less than the perfume price
+                            if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
                                 flagged_perfumes.append(row)
-                                break
+                                break  # Stop checking once we find a match
 
             if flagged_perfumes:
                 st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
                 st.write(pd.DataFrame(flagged_perfumes))
 
-            # Flag 7: Blacklisted Words Check in NAME
-            blacklisted_flag = []
-            for index, row in data.iterrows():
-                name = row['NAME']
-                if isinstance(name, str):
-                    for word in blacklisted_words:
-                        if word in name.lower():
-                            blacklisted_flag.append(row)
-                            break
-
-            if blacklisted_flag:
-                st.error(f"Found {len(blacklisted_flag)} products with blacklisted words in NAME.")
-                st.write(pd.DataFrame(blacklisted_flag))
+            # Flag 7: Blacklisted Words in NAME
+            flagged_blacklisted = data[data['NAME'].apply(lambda x: any(black_word.lower() in str(x).lower() for black_word in blacklisted_words))]
+            if not flagged_blacklisted.empty:
+                st.error(f"Found {len(flagged_blacklisted)} products flagged due to blacklisted words in NAME.")
+                st.write(flagged_blacklisted)
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
@@ -112,7 +104,7 @@ if uploaded_file is not None:
                     reasons.append("Generic BRAND")
                 if row in flagged_perfumes:
                     reasons.append("Perfume price issue")
-                if row in blacklisted_flag:
+                if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
 
                 status = 'Rejected' if reasons else 'Approved'
