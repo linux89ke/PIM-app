@@ -33,13 +33,15 @@ if uploaded_file is not None:
                 st.write(missing_color)
 
             # Flag 2: Missing BRAND or NAME
-            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
+                                          (data['NAME'].isna()) | (data['NAME'] == '')]
             if not missing_brand_or_name.empty:
                 st.error(f"Found {len(missing_brand_or_name)} products with missing BRAND or NAME.")
                 st.write(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
-            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
+                                    (data['BRAND'] != 'Jumia Book')]
             if not single_word_name.empty:
                 st.error(f"Found {len(single_word_name)} products with a single-word NAME.")
                 st.write(single_word_name)
@@ -47,7 +49,7 @@ if uploaded_file is not None:
             # Flag 4: Category and Variation Check
             valid_category_codes = check_variation_data['ID'].tolist()
             category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & 
-                                              ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
+                                              (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
             if not category_variation_issues.empty:
                 st.error(f"Found {len(category_variation_issues)} products with missing VARIATION for valid CATEGORY_CODE.")
                 st.write(category_variation_issues)
@@ -79,9 +81,13 @@ if uploaded_file is not None:
                 st.error(f"Found {len(flagged_perfumes)} products flagged due to perfume price issues.")
                 st.write(pd.DataFrame(flagged_perfumes))
 
-            # Flag 7: Blacklisted Words in NAME with specific matches
+            # Flag 7: Blacklisted Words in NAME
             flagged_blacklisted_words = []
-            data['Blacklisted Words'] = data['NAME'].apply(lambda name: [black_word for black_word in blacklisted_words if black_word.lower() in str(name).lower()] if pd.notna(name) else [])
+            # Check for blacklisted words in the NAME column
+            data['Blacklisted Words'] = data['NAME'].apply(
+                lambda name: [black_word for black_word in blacklisted_words if black_word.lower() in str(name).lower()] 
+                if pd.notna(name) else []
+            )
 
             # Collect products that have any blacklisted words
             flagged_blacklisted = data[data['Blacklisted Words'].str.len() > 0]
@@ -107,7 +113,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row['PRODUCT_SET_SID'] in flagged_perfumes:
+                if row in flagged_perfumes:
                     reasons.append("Perfume price issue")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
