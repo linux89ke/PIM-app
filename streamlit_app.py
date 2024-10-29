@@ -32,6 +32,7 @@ if uploaded_file is not None:
             final_report_rows = []
             for index, row in data.iterrows():
                 reasons = []  # Collect reasons for each flag
+                flagged_word = None  # Track blacklisted word found
 
                 # Flag 1: Missing COLOR
                 if pd.isna(row['COLOR']) or row['COLOR'] == '':
@@ -55,7 +56,6 @@ if uploaded_file is not None:
                     reasons.append('BRAND "Generic" for fashion category in category_FAS.xlsx')
 
                 # Flag 5: Blacklisted word appears in NAME
-                flagged_word = None
                 for word in blacklisted_words:
                     if f' {word} ' in f' {row["NAME"].lower()} ':
                         flagged_word = word
@@ -79,6 +79,10 @@ if uploaded_file is not None:
 
             # Create final combined report DataFrame
             combined_df = pd.DataFrame(final_report_rows)
+
+            # Display the combined DataFrame with flags to the user
+            st.write("Combined Report with Flags:")
+            st.write(combined_df)
 
             # Separate approved and rejected DataFrames for download
             approved_df = combined_df[combined_df['Status'] == 'Approved']
