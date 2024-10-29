@@ -28,20 +28,23 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Prepare the final report rows with status and reasons for each product
+            # Prepare the final report rows with separate flags for each issue
             final_report_rows = []
             for index, row in data.iterrows():
-                reasons = []  # Collect reasons for each flag
+                flag_missing_color = False
+                flag_missing_variation = False
+                flag_price_diff = False
+                flag_generic_brand = False
                 flagged_word = None  # Track blacklisted word found
 
                 # Flag 1: Missing COLOR
                 if pd.isna(row['COLOR']) or row['COLOR'] == '':
-                    reasons.append('Missing COLOR')
+                    flag_missing_color = True
 
                 # Flag 2: Check CATEGORY_CODE in check_variation.xlsx and verify VARIATION
                 if row['CATEGORY_CODE'] in check_variation_data['ID'].values:
                     if pd.isna(row['VARIATION']) or row['VARIATION'] == '':
-                        reasons.append('Missing VARIATION for specified CATEGORY_CODE')
+                        flag_missing_variation = True
 
                 # Flag 3: Price difference between GLOBAL_SALE_PRICE and PRICE in perfumes.xlsx
                 matched_perfume = perfumes_data[perfumes_data['PRODUCT_NAME'].str.lower() == row['NAME'].lower()]
@@ -49,38 +52,39 @@ if uploaded_file is not None:
                     original_price = matched_perfume.iloc[0]['PRICE']
                     sale_price = row['GLOBAL_SALE_PRICE']
                     if original_price and sale_price and ((sale_price - original_price) / original_price < 0.3):
-                        reasons.append('GLOBAL_SALE_PRICE difference less than 30% of PRICE in perfumes')
+                        flag_price_diff = True
 
                 # Flag 4: CATEGORY_CODE in category_FAS.xlsx and BRAND is 'Generic'
                 if row['CATEGORY_CODE'] in category_fas_data['ID'].values and row['BRAND'].lower() == 'generic':
-                    reasons.append('BRAND "Generic" for fashion category in category_FAS.xlsx')
+                    flag_generic_brand = True
 
                 # Flag 5: Blacklisted word appears in NAME
                 for word in blacklisted_words:
                     if f' {word} ' in f' {row["NAME"].lower()} ':
                         flagged_word = word
-                        reasons.append(f'Blacklisted word "{word}" in NAME')
                         break
 
-                # Set the status based on whether any reasons were flagged
-                status = 'Rejected' if reasons else 'Approved'
+                # Set the status based on whether any flags were triggered
+                status = 'Rejected' if (flag_missing_color or flag_missing_variation or flag_price_diff or flag_generic_brand or flagged_word) else 'Approved'
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
-                comment = ', '.join(reasons) if reasons else 'No issues'
 
-                # Add row to final report
+                # Add row to final report with columns for each flag status
                 final_report_rows.append({
                     'ProductSetSid': row['PRODUCT_SET_SID'],
                     'ParentSKU': row['PARENTSKU'],
                     'Status': status,
                     'Reason': reason,
-                    'Comment': comment,
+                    'Flag Missing Color': 'Yes' if flag_missing_color else '',
+                    'Flag Missing Variation': 'Yes' if flag_missing_variation else '',
+                    'Flag Price Difference': 'Yes' if flag_price_diff else '',
+                    'Flag Generic Brand': 'Yes' if flag_generic_brand else '',
                     'Blacklisted Word': flagged_word if flagged_word else ''
                 })
 
-            # Create final combined report DataFrame
+            # Create combined report DataFrame with columns for each flag
             combined_df = pd.DataFrame(final_report_rows)
 
-            # Display the combined DataFrame with flags to the user
+            # Display the combined DataFrame with all flags to the user
             st.write("Combined Report with Flags:")
             st.write(combined_df)
 
