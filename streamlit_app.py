@@ -1,4 +1,4 @@
-i want dataframes visible as they were import pandas as pd
+import pandas as pd
 import streamlit as st
 from io import BytesIO
 
