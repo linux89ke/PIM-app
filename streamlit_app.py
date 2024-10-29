@@ -119,7 +119,7 @@ if uploaded_file is not None:
                 st.error(f"Found {flagged_count} products where BRAND name is repeated in NAME.")
                 st.write(brand_in_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
 
-            # Prepare the final report with status and reasons for each product
+            # Prepare the final combined report with status and reasons for each product
             final_report_rows = []
             for index, row in data.iterrows():
                 reasons = []
@@ -152,20 +152,14 @@ if uploaded_file is not None:
                     'Comment': comment
                 })
 
-            # Create final report DataFrames for approved, rejected, and combined products
+            # Create final combined report DataFrame
             final_report_df = pd.DataFrame(final_report_rows)
-            approved_report_df = final_report_df[final_report_df['Status'] == 'Approved']
-            rejected_report_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Display previews
-            st.write("Approved Report:")
-            st.write(approved_report_df.head())
-            st.write("Rejected Report:")
-            st.write(rejected_report_df.head())
+            # Display preview
             st.write("Combined Report:")
             st.write(final_report_df.head())
             
-            # Generate downloadable Excel files
+            # Generate downloadable Combined Excel file
             def create_excel(dataframe, sheet_name):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -174,22 +168,7 @@ if uploaded_file is not None:
                 output.seek(0)
                 return output
 
-            approved_excel = create_excel(approved_report_df, 'ApprovedReport')
-            rejected_excel = create_excel(rejected_report_df, 'RejectedReport')
             combined_excel = create_excel(final_report_df, 'CombinedReport')
-
-            st.download_button(
-                label="Download Approved Report",
-                data=approved_excel,
-                file_name="approved_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            st.download_button(
-                label="Download Rejected Report",
-                data=rejected_excel,
-                file_name="rejected_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
             st.download_button(
                 label="Download Combined Report",
                 data=combined_excel,
