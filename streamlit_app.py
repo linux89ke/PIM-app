@@ -148,34 +148,31 @@ if uploaded_file is not None:
 
                 status = 'Rejected' if reasons else 'Approved'
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
-                comment = ', '.join(reasons) if reasons else 'No issues'
+                comment = ', '.join(reasons) if reasons else 'No issues found'
+                final_report_rows.append([row['PRODUCT_SET_SID'], row['PARENTSKU'], status, reason, comment])
 
-                final_report_rows.append({
-                    'ProductSetSid': row['PRODUCT_SET_SID'],
-                    'ParentSKU': row['PARENTSKU'],
-                    'Status': status,
-                    'Reason': reason,
-                    'Comment': comment
-                })
+            # Create DataFrame for final report
+            final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
+            st.write("Final Report Preview")
+            st.write(final_report_df)
 
-            # Create final report dataframe and show preview
-            final_report_df = pd.DataFrame(final_report_rows)
-            st.write("Final Report:")
-            st.write(final_report_df.head())
-            
-            # Generate downloadable Excel file
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                final_report_df.to_excel(writer, sheet_name='ProductSets', index=False)
-                pd.DataFrame().to_excel(writer, sheet_name='RejectionReasons', index=False)  # Empty sheet for RejectionReasons
-            output.seek(0)
+            # Separate approved and rejected reports
+            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            st.download_button(
-                label="Download Final Report",
-                data=output,
-                file_name="final_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Function to convert DataFrame to downloadable Excel file
+            def to_excel(dataframe):
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    dataframe.to_excel(writer, index=False, sheet_name='Sheet1')
+                return output.getvalue()
+
+            # Download buttons
+            st.download_button("Download Approved Report", data=to_excel(approved_df), file_name="approved_report.xlsx")
+            st.download_button("Download Rejected Report", data=to_excel(rejected_df), file_name="rejected_report.xlsx")
+            st.download_button("Download Combined Report", data=to_excel(final_report_df), file_name="combined_report.xlsx")
 
     except Exception as e:
-        st.error(f"An error occurred while processing the file: {e}")
+        st.error(f"Error loading file: {e}")
+else:
+    st.info("Please upload a CSV file to proceed.")
