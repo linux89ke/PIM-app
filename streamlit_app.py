@@ -119,14 +119,8 @@ if uploaded_file is not None:
                 st.error(f"Found {flagged_count} products where BRAND name is repeated in NAME.")
                 st.write(brand_in_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
 
-            # Show total number of rows and flagged products
-            total_rows = len(data)
-            st.write(f"Total number of rows: {total_rows}")
-            st.write(f"Total number of flagged products: {total_flagged_products}")
-
-            # Prepare a list to hold the final report rows
+            # Prepare the final report with status and reasons for each product
             final_report_rows = []
-
             for index, row in data.iterrows():
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
@@ -158,24 +152,5 @@ if uploaded_file is not None:
                     'Comment': comment
                 })
 
-            # Create final report dataframe and show preview
-            final_report_df = pd.DataFrame(final_report_rows)
-            st.write("Final Report:")
-            st.write(final_report_df.head())
-            
-            # Generate downloadable Excel file
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                final_report_df.to_excel(writer, sheet_name='ProductSets', index=False)
-                pd.DataFrame().to_excel(writer, sheet_name='RejectionReasons', index=False)  # Empty sheet for RejectionReasons
-            output.seek(0)
-
-            st.download_button(
-                label="Download Final Report",
-                data=output,
-                file_name="final_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    except Exception as e:
-        st.error(f"An error occurred while processing the file: {e}")
+            # Create final report DataFrames for approved, rejected, and combined products
+            final_report_df = pd.DataFrame(final
