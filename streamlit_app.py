@@ -136,8 +136,8 @@ if uploaded_file is not None:
                 st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
 
             flagged_perfumes = flag_perfume_price_issues(data, perfumes_data)
-            if flagged_perfumes:
-                flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
+            flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
+            if not flagged_perfumes_df.empty:
                 flagged_count = len(flagged_perfumes_df)
                 total_flagged_products += flagged_count
                 st.error(f"Found {flagged_count} products flagged due to perfume price issues.")
@@ -168,7 +168,7 @@ if uploaded_file is not None:
                 if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
                     reasons.append("Single-word NAME")
                 if row['PRODUCT_SET_SID'] in category_variation_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing VARIATION")
+                    reasons.append("Missing VARIATION for CATEGORY_CODE")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic brand")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
