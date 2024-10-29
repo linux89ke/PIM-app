@@ -43,6 +43,10 @@ if uploaded_file is not None:
                 'brand_in_name': pd.DataFrame()
             }
 
+            # Create DataFrames for approved and rejected products
+            approved_products = []
+            rejected_products = []
+
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             if not missing_color.empty:
@@ -147,7 +151,7 @@ if uploaded_file is not None:
                 if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
                     reasons.append("Single-word NAME")
                 if row['PRODUCT_SET_SID'] in category_variation_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing VARIATION")
+                    reasons.append("Category Variation Issue")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
                 if row['PRODUCT_SET_SID'] in flagged_reports['flagged_perfumes']['PRODUCT_SET_SID'].values:
@@ -159,7 +163,7 @@ if uploaded_file is not None:
 
                 # Determine status based on flagged reasons
                 if reasons:
-                    final_report_rows.append({
+                    rejected_products.append({
                         'ProductSetSid': row['PRODUCT_SET_SID'],
                         'ParentSKU': row['PARENTSKU'],
                         'Status': "Rejected",
@@ -167,7 +171,7 @@ if uploaded_file is not None:
                         'Comment': 'Review flagged reasons'
                     })
                 else:
-                    final_report_rows.append({
+                    approved_products.append({
                         'ProductSetSid': row['PRODUCT_SET_SID'],
                         'ParentSKU': row['PARENTSKU'],
                         'Status': "Approved",
@@ -175,15 +179,18 @@ if uploaded_file is not None:
                         'Comment': ''
                     })
 
-            # Create final report DataFrame
-            final_report_df = pd.DataFrame(final_report_rows)
+            # Create DataFrames for approved and rejected products
+            approved_df = pd.DataFrame(approved_products)
+            rejected_df = pd.DataFrame(rejected_products)
+
+            # Create a final report DataFrame
+            final_report_df = pd.concat([approved_df, rejected_df], ignore_index=True)
 
             # Create a BytesIO object for the final report download
             final_report_buffer = BytesIO()
             with pd.ExcelWriter(final_report_buffer, engine='xlsxwriter') as writer:
                 final_report_df.to_excel(writer, sheet_name='ProductSets', index=False)
-                pd.DataFrame(columns=[''])  # Empty DataFrame for RejectionReasons
-                pd.DataFrame().to_excel(writer, sheet_name='RejectionReasons', index=False)
+                pd.DataFrame(columns=['']).to_excel(writer, sheet_name='RejectionReasons', index=False)
             final_report_buffer.seek(0)
 
             # Download button for the final report
@@ -194,20 +201,33 @@ if uploaded_file is not None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-            # Download buttons for flagged product reports
-            for flag, df in flagged_reports.items():
-                if not df.empty:
-                    buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                        df.to_excel(writer, sheet_name='Flagged Products', index=False)
-                    buffer.seek(0)
+            # Download button for approved products
+            if not approved_df.empty:
+                approved_buffer = BytesIO()
+                with pd.ExcelWriter(approved_buffer, engine='xlsxwriter') as writer:
+                    approved_df.to_excel(writer, sheet_name='Approved Products', index=False)
+                approved_buffer.seek(0)
 
-                    st.download_button(
-                        label=f"Download Flagged Products Report: {flag.replace('_', ' ').title()}",
-                        data=buffer,
-                        file_name=f"{flag}_flagged_products.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                st.download_button(
+                    label="Download Approved Products Report",
+                    data=approved_buffer,
+                    file_name="approved_products.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            # Download button for rejected products
+            if not rejected_df.empty:
+                rejected_buffer = BytesIO()
+                with pd.ExcelWriter(rejected_buffer, engine='xlsxwriter') as writer:
+                    rejected_df.to_excel(writer, sheet_name='Rejected Products', index=False)
+                rejected_buffer.seek(0)
+
+                st.download_button(
+                    label="Download Rejected Products Report",
+                    data=rejected_buffer,
+                    file_name="rejected_products.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
