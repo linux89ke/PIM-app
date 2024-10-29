@@ -31,31 +31,87 @@ if uploaded_file is not None:
             # Initialize counters for flagged products
             total_flagged_products = 0
 
-            # Existing flagging logic for other flags (Flag 1 to Flag 6) would go here
-            # ...
+            # Flag 1: Missing COLOR
+            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
+            flagged_count = len(missing_color)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 1: Missing COLOR** - {flagged_count} products found.")
+            st.write(missing_color[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME', 'COLOR']])
+
+            # Flag 2: Missing BRAND or NAME
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
+            flagged_count = len(missing_brand_or_name)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 2: Missing BRAND or NAME** - {flagged_count} products found.")
+            st.write(missing_brand_or_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
+
+            # Flag 3: Single-word NAME (excluding "Jumia Book" BRAND)
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+            flagged_count = len(single_word_name)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 3: Single-word NAME** - {flagged_count} products found.")
+            st.write(single_word_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
+
+            # Flag 4: Category and Variation Check
+            valid_category_codes = check_variation_data['ID'].tolist()
+            category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) &
+                                             ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
+            flagged_count = len(category_variation_issues)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 4: Missing VARIATION for valid CATEGORY_CODE** - {flagged_count} products found.")
+            st.write(category_variation_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'CATEGORY_CODE', 'PARENTSKU', 'SELLER_NAME', 'VARIATION']])
+
+            # Flag 5: Generic Brand Check
+            valid_category_codes_fas = category_fas_data['ID'].tolist()
+            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
+            flagged_count = len(generic_brand_issues)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 5: Generic BRAND** - {flagged_count} products found.")
+            st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'CATEGORY_CODE', 'PARENTSKU', 'SELLER_NAME']])
+
+            # Flag 6: Price and Keyword Check (Perfume Check)
+            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
+            flagged_perfumes = []
+            for index, row in data.iterrows():
+                brand = row['BRAND']
+                if brand in perfumes_data['BRAND'].values:
+                    keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
+                    for keyword in keywords:
+                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
+                            perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
+                            price_difference = row['GLOBAL_PRICE'] - perfume_price
+                            if price_difference < 0:  # Assuming flagged if uploaded price is less than the perfume price
+                                flagged_perfumes.append(row)
+                                break
+            flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
+            flagged_count = len(flagged_perfumes_df)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 6: Perfume price issues** - {flagged_count} products found.")
+            st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME', 'GLOBAL_PRICE']])
 
             # Flag 7: Blacklisted Words in NAME
             def find_blacklisted_words(name):
                 found_words = [black_word for black_word in blacklisted_words if isinstance(name, str) and black_word.lower() in name.lower()]
                 return ", ".join(found_words) if found_words else None
 
-            # Apply the blacklisted word check and filter flagged entries
             data['Blacklisted Word'] = data['NAME'].apply(find_blacklisted_words)
             flagged_blacklisted = data[data['Blacklisted Word'].notna()]
-            
-            # Select the specified columns to display
-            flagged_blacklisted = flagged_blacklisted[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'Blacklisted Word', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']]
             flagged_count = len(flagged_blacklisted)
             total_flagged_products += flagged_count
             st.write(f"**Flag 7: Blacklisted words in NAME** - {flagged_count} products found.")
-            st.write(flagged_blacklisted)
+            st.write(flagged_blacklisted[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'Blacklisted Word', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
 
-            # Total flagged products and other summary info
+            # Flag 8: Brand name repeated in NAME (case-insensitive)
+            brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+            flagged_count = len(brand_in_name)
+            total_flagged_products += flagged_count
+            st.write(f"**Flag 8: BRAND name repeated in NAME** - {flagged_count} products found.")
+            st.write(brand_in_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
+
+            # Total flagged products and summary
             total_rows = len(data)
             st.write(f"Total number of rows: {total_rows}")
             st.write(f"Total number of flagged products: {total_flagged_products}")
 
-            # Final report and download section (rest of your code)
-            # ...
     except Exception as e:
         st.error(f"An error occurred while processing the file: {e}")
