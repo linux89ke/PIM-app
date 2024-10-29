@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 
-# Function to load the blacklisted words from a file
+# Function to load blacklisted words from a file
 def load_blacklisted_words():
     with open('blacklisted.txt', 'r') as f:
         return [line.strip() for line in f.readlines()]
@@ -28,38 +28,63 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Initialize counters for flagged products
-            total_flagged_products = 0
-
-            # Flag 1: Missing COLOR
-            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
-            # Other flags omitted for brevity but add them here as in previous code...
-
             # Prepare the final report rows with status and reasons for each product
             final_report_rows = []
             for index, row in data.iterrows():
-                reasons = []
-                # Add logic for all flag checks here and append relevant reasons
+                reasons = []  # Collect reasons for each flag
+
+                # Flag 1: Missing COLOR
+                if pd.isna(row['COLOR']) or row['COLOR'] == '':
+                    reasons.append('Missing COLOR')
+
+                # Flag 2: Check CATEGORY_CODE in check_variation.xlsx and verify VARIATION
+                if row['CATEGORY_CODE'] in check_variation_data['ID'].values:
+                    if pd.isna(row['VARIATION']) or row['VARIATION'] == '':
+                        reasons.append('Missing VARIATION for specified CATEGORY_CODE')
+
+                # Flag 3: Price difference between GLOBAL_SALE_PRICE and PRICE in perfumes.xlsx
+                matched_perfume = perfumes_data[perfumes_data['PRODUCT_NAME'].str.lower() == row['NAME'].lower()]
+                if not matched_perfume.empty:
+                    original_price = matched_perfume.iloc[0]['PRICE']
+                    sale_price = row['GLOBAL_SALE_PRICE']
+                    if original_price and sale_price and ((sale_price - original_price) / original_price < 0.3):
+                        reasons.append('GLOBAL_SALE_PRICE difference less than 30% of PRICE in perfumes')
+
+                # Flag 4: CATEGORY_CODE in category_FAS.xlsx and BRAND is 'Generic'
+                if row['CATEGORY_CODE'] in category_fas_data['ID'].values and row['BRAND'].lower() == 'generic':
+                    reasons.append('BRAND "Generic" for fashion category in category_FAS.xlsx')
+
+                # Flag 5: Blacklisted word appears in NAME
+                flagged_word = None
+                for word in blacklisted_words:
+                    if f' {word} ' in f' {row["NAME"].lower()} ':
+                        flagged_word = word
+                        reasons.append(f'Blacklisted word "{word}" in NAME')
+                        break
+
+                # Set the status based on whether any reasons were flagged
                 status = 'Rejected' if reasons else 'Approved'
                 reason = '1000007 - Other Reason' if status == 'Rejected' else ''
                 comment = ', '.join(reasons) if reasons else 'No issues'
 
+                # Add row to final report
                 final_report_rows.append({
                     'ProductSetSid': row['PRODUCT_SET_SID'],
                     'ParentSKU': row['PARENTSKU'],
                     'Status': status,
                     'Reason': reason,
-                    'Comment': comment
+                    'Comment': comment,
+                    'Blacklisted Word': flagged_word if flagged_word else ''
                 })
 
             # Create final combined report DataFrame
             combined_df = pd.DataFrame(final_report_rows)
 
-            # Separate approved and rejected dataframes for download
+            # Separate approved and rejected DataFrames for download
             approved_df = combined_df[combined_df['Status'] == 'Approved']
             rejected_df = combined_df[combined_df['Status'] == 'Rejected']
 
-            # Function to create Excel file from dataframe
+            # Function to create Excel file from DataFrame
             def create_excel(dataframe, sheet_name):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
