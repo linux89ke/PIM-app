@@ -153,4 +153,49 @@ if uploaded_file is not None:
                 })
 
             # Create final report DataFrames for approved, rejected, and combined products
-            final_report_df = pd.DataFrame(final
+            final_report_df = pd.DataFrame(final_report_rows)
+            approved_report_df = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_report_df = final_report_df[final_report_df['Status'] == 'Rejected']
+
+            # Display previews
+            st.write("Approved Report:")
+            st.write(approved_report_df.head())
+            st.write("Rejected Report:")
+            st.write(rejected_report_df.head())
+            st.write("Combined Report:")
+            st.write(final_report_df.head())
+            
+            # Generate downloadable Excel files
+            def create_excel(dataframe, sheet_name):
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
+                    pd.DataFrame().to_excel(writer, sheet_name='RejectionReasons', index=False)  # Empty sheet for RejectionReasons
+                output.seek(0)
+                return output
+
+            approved_excel = create_excel(approved_report_df, 'ApprovedReport')
+            rejected_excel = create_excel(rejected_report_df, 'RejectedReport')
+            combined_excel = create_excel(final_report_df, 'CombinedReport')
+
+            st.download_button(
+                label="Download Approved Report",
+                data=approved_excel,
+                file_name="approved_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.download_button(
+                label="Download Rejected Report",
+                data=rejected_excel,
+                file_name="rejected_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.download_button(
+                label="Download Combined Report",
+                data=combined_excel,
+                file_name="combined_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {e}")
