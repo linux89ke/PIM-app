@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 
-# Function to load blacklisted words from a file
+# Function to load the blacklisted words from a file
 def load_blacklisted_words():
     with open('blacklisted.txt', 'r') as f:
         return [line.strip() for line in f.readlines()]
@@ -28,103 +28,82 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Prepare the final report rows with separate flags for each issue
-            final_report_rows = []
+            # Initialize counters for flagged products
+            total_flagged_products = 0
+
+            # Initialize list to store each flagged dataframe and corresponding message
+            flagged_dataframes = []
+
+            # Flag 1: Missing COLOR
+            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
+            if not missing_color.empty:
+                flagged_dataframes.append(("Missing COLOR", missing_color))
+
+            # Flag 2: Missing BRAND or NAME
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
+            if not missing_brand_or_name.empty:
+                flagged_dataframes.append(("Missing BRAND or NAME", missing_brand_or_name))
+
+            # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+            if not single_word_name.empty:
+                flagged_dataframes.append(("Single-word NAME", single_word_name))
+
+            # Flag 4: Category and Variation Check
+            valid_category_codes = check_variation_data['ID'].tolist()
+            category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
+            if not category_variation_issues.empty:
+                flagged_dataframes.append(("Missing VARIATION for valid CATEGORY_CODE", category_variation_issues))
+
+            # Flag 5: Generic Brand Check
+            valid_category_codes_fas = category_fas_data['ID'].tolist()
+            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
+            if not generic_brand_issues.empty:
+                flagged_dataframes.append(("Generic BRAND for valid CATEGORY_CODE", generic_brand_issues))
+
+            # Flag 6: Price and Keyword Check (Perfume Check)
+            perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
+            flagged_perfumes = []
             for index, row in data.iterrows():
-                flag_missing_color = False
-                flag_missing_variation = False
-                flag_price_diff = False
-                flag_generic_brand = False
-                flagged_word = None  # Track blacklisted word found
+                brand = row['BRAND']
+                if brand in perfumes_data['BRAND'].values:
+                    keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
+                    for keyword in keywords:
+                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
+                            perfume_price = perfumes_data.loc[(perfumes_data['BRAND'] == brand) & (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
+                            price_difference = row['GLOBAL_PRICE'] - perfume_price
+                            if price_difference < 0:
+                                flagged_perfumes.append(row)
+                                break
+            if flagged_perfumes:
+                flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
+                flagged_dataframes.append(("Perfume price issue", flagged_perfumes_df))
 
-                # Flag 1: Missing COLOR
-                if pd.isna(row['COLOR']) or row['COLOR'] == '':
-                    flag_missing_color = True
+            # Flag 7: Blacklisted Words in NAME (word appears in full and on its own)
+            def check_blacklist(name):
+                if isinstance(name, str):
+                    name_words = name.lower().split()
+                    return any(black_word.lower() in name_words for black_word in blacklisted_words)
+                return False
 
-                # Flag 2: Check CATEGORY_CODE in check_variation.xlsx and verify VARIATION
-                if row['CATEGORY_CODE'] in check_variation_data['ID'].values:
-                    if pd.isna(row['VARIATION']) or row['VARIATION'] == '':
-                        flag_missing_variation = True
+            flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
+            if not flagged_blacklisted.empty:
+                flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(
+                    lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0]
+                )
+                flagged_dataframes.append(("Blacklisted word in NAME", flagged_blacklisted))
 
-                # Flag 3: Price difference between GLOBAL_SALE_PRICE and PRICE in perfumes.xlsx
-                matched_perfume = perfumes_data[perfumes_data['PRODUCT_NAME'].str.lower() == row['NAME'].lower()]
-                if not matched_perfume.empty:
-                    original_price = matched_perfume.iloc[0]['PRICE']
-                    sale_price = row['GLOBAL_SALE_PRICE']
-                    if original_price and sale_price and ((sale_price - original_price) / original_price < 0.3):
-                        flag_price_diff = True
+            # Flag 8: Brand name repeated in NAME (case-insensitive)
+            brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+            if not brand_in_name.empty:
+                flagged_dataframes.append(("BRAND name repeated in NAME", brand_in_name))
 
-                # Flag 4: CATEGORY_CODE in category_FAS.xlsx and BRAND is 'Generic'
-                if row['CATEGORY_CODE'] in category_fas_data['ID'].values and row['BRAND'].lower() == 'generic':
-                    flag_generic_brand = True
+            # Display each flagged dataframe with its message
+            for label, flagged_df in flagged_dataframes:
+                with st.expander(f"{label} - {len(flagged_df)} products flagged"):
+                    st.write(flagged_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
 
-                # Flag 5: Blacklisted word appears in NAME
-                for word in blacklisted_words:
-                    if f' {word} ' in f' {row["NAME"].lower()} ':
-                        flagged_word = word
-                        break
-
-                # Set the status based on whether any flags were triggered
-                status = 'Rejected' if (flag_missing_color or flag_missing_variation or flag_price_diff or flag_generic_brand or flagged_word) else 'Approved'
-                reason = '1000007 - Other Reason' if status == 'Rejected' else ''
-
-                # Add row to final report with columns for each flag status
-                final_report_rows.append({
-                    'ProductSetSid': row['PRODUCT_SET_SID'],
-                    'ParentSKU': row['PARENTSKU'],
-                    'Status': status,
-                    'Reason': reason,
-                    'Flag Missing Color': 'Yes' if flag_missing_color else '',
-                    'Flag Missing Variation': 'Yes' if flag_missing_variation else '',
-                    'Flag Price Difference': 'Yes' if flag_price_diff else '',
-                    'Flag Generic Brand': 'Yes' if flag_generic_brand else '',
-                    'Blacklisted Word': flagged_word if flagged_word else ''
-                })
-
-            # Create combined report DataFrame with columns for each flag
-            combined_df = pd.DataFrame(final_report_rows)
-
-            # Display the combined DataFrame with all flags to the user
-            st.write("Combined Report with Flags:")
-            st.write(combined_df)
-
-            # Separate approved and rejected DataFrames for download
-            approved_df = combined_df[combined_df['Status'] == 'Approved']
-            rejected_df = combined_df[combined_df['Status'] == 'Rejected']
-
-            # Function to create Excel file from DataFrame
-            def create_excel(dataframe, sheet_name):
-                output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
-                    pd.DataFrame().to_excel(writer, sheet_name='RejectionReasons', index=False)  # Empty sheet
-                output.seek(0)
-                return output
-
-            # Generate downloadable files for each report type
-            approved_excel = create_excel(approved_df, 'ApprovedReport')
-            rejected_excel = create_excel(rejected_df, 'RejectedReport')
-            combined_excel = create_excel(combined_df, 'CombinedReport')
-
-            # Download buttons for each report
-            st.download_button(
-                label="Download Approved Report",
-                data=approved_excel,
-                file_name="approved_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            st.download_button(
-                label="Download Rejected Report",
-                data=rejected_excel,
-                file_name="rejected_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            st.download_button(
-                label="Download Combined Report",
-                data=combined_excel,
-                file_name="combined_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+            # Additional code for final report generation and download...
+            
     except Exception as e:
         st.error(f"An error occurred while processing the file: {e}")
