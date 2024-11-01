@@ -33,25 +33,20 @@ if uploaded_file is not None:
 
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
-            missing_color_count = len(missing_color)
 
             # Flag 2: Missing BRAND or NAME
             missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
-            missing_brand_or_name_count = len(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
             single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
-            single_word_name_count = len(single_word_name)
 
             # Flag 4: Category and Variation Check
             valid_category_codes = check_variation_data['ID'].tolist()
             category_variation_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes)) & ((data['VARIATION'].isna()) | (data['VARIATION'] == ''))]
-            category_variation_count = len(category_variation_issues)
 
             # Flag 5: Generic Brand Check
             valid_category_codes_fas = category_fas_data['ID'].tolist()
             generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
-            generic_brand_count = len(generic_brand_issues)
 
             # Flag 6: Price and Keyword Check (Perfume Check)
             perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
@@ -67,7 +62,6 @@ if uploaded_file is not None:
                             if price_difference < 0:
                                 flagged_perfumes.append(row)
                                 break
-            flagged_perfumes_count = len(flagged_perfumes)
 
             # Flag 7: Blacklisted Words in NAME (word appears in full and on its own)
             def check_blacklist(name):
@@ -77,73 +71,12 @@ if uploaded_file is not None:
                 return False
 
             flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
-            flagged_blacklisted_count = len(flagged_blacklisted)
 
             # Flag 8: Brand name repeated in NAME (case-insensitive)
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-            brand_in_name_count = len(brand_in_name)
-
-            # Show total number of rows and flagged products
-            total_rows = len(data)
-            st.write(f"Total number of rows: {total_rows}")
 
             # Prepare a list to hold the final report rows
             final_report_rows = []
-
-            # Create containers for each flag result
-            with st.expander(f"Missing COLOR ({missing_color_count} products)"):
-                if missing_color_count > 0:
-                    st.write(missing_color[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Missing BRAND or NAME ({missing_brand_or_name_count} products)"):
-                if missing_brand_or_name_count > 0:
-                    st.write(missing_brand_or_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Single-word NAME ({single_word_name_count} products)"):
-                if single_word_name_count > 0:
-                    st.write(single_word_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Missing VARIATION for valid CATEGORY_CODE ({category_variation_count} products)"):
-                if category_variation_count > 0:
-                    st.write(category_variation_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({generic_brand_count} products)"):
-                if generic_brand_count > 0:
-                    st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Perfume price issue ({flagged_perfumes_count} products)"):
-                if flagged_perfumes_count > 0:
-                    flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME', 'GLOBAL_PRICE']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Blacklisted words in NAME ({flagged_blacklisted_count} products)"):
-                if flagged_blacklisted_count > 0:
-                    flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(
-                        lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0]
-                    )
-                    st.write(flagged_blacklisted[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'Blacklisted_Word', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"BRAND name repeated in NAME ({brand_in_name_count} products)"):
-                if brand_in_name_count > 0:
-                    st.write(brand_in_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            # Collect all flagged products for final report
             for index, row in data.iterrows():
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
@@ -178,25 +111,28 @@ if uploaded_file is not None:
             # Convert report rows to DataFrame
             final_report_df = pd.DataFrame(final_report_rows)
 
+            # Split into approved and rejected DataFrames
+            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
+
+            # Load reasons.xlsx for RejectionReasons sheet
+            reasons_data = pd.read_excel('reasons.xlsx')
+
             # Function to convert DataFrame to downloadable Excel file with ProductSets and RejectionReasons sheets
-            def to_excel(dataframe):
+            def to_excel(dataframe, filename):
                 output = BytesIO()
-                reasons_data = pd.read_excel('reasons.xlsx')  # Load the reasons file
-
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    dataframe.to_excel(writer, index=False, sheet_name='ProductSets')  # Rename main sheet to ProductSets
-                    reasons_data.to_excel(writer, index=False, sheet_name='RejectionReasons')  # Add reasons as RejectionReasons sheet
-
+                    dataframe.to_excel(writer, index=False, sheet_name='ProductSets')  # Main sheet
+                    reasons_data.to_excel(writer, index=False, sheet_name='RejectionReasons')  # Add reasons sheet
                 return output.getvalue()
 
-            # Provide downloadable link
-            st.write("Download the final report:")
-            st.download_button(
-                label="Download Excel file",
-                data=to_excel(final_report_df),
-                file_name="product_validation_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            # Download buttons for all reports
+            st.write("Download the final reports:")
+            st.download_button("Download Approved Report", data=to_excel(approved_df, "approved_report.xlsx"), file_name="approved_report.xlsx")
+            st.download_button("Download Rejected Report", data=to_excel(rejected_df, "rejected_report.xlsx"), file_name="rejected_report.xlsx")
+            st.download_button("Download Combined Report", data=to_excel(final_report_df, "combined_report.xlsx"), file_name="combined_report.xlsx")
 
     except Exception as e:
         st.error(f"Error loading the file: {e}")
+else:
+    st.info("Please upload a CSV file to proceed.")
