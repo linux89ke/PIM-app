@@ -170,10 +170,16 @@ if uploaded_file is not None:
                     dataframe.to_excel(writer, index=False, sheet_name='ProductSets')
                     reasons_df = pd.read_excel('reasons.xlsx')
                     reasons_df.to_excel(writer, index=False, sheet_name='RejectionReasons')
-                return output.getvalue()
+                output.seek(0)
+                return output
 
-            # Downloadable links for approved and rejected reports
-            st.download_button("Download Approved Products Report", data=to_excel(approved_df), file_name="approved_products_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            st.download_button("Download Rejected Products Report", data=to_excel(rejected_df), file_name="rejected_products_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            # Download buttons for approved and rejected reports
+            st.download_button(label='Download Approved Products', data=to_excel(approved_df), file_name='approved_products.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            st.download_button(label='Download Rejected Products', data=to_excel(rejected_df), file_name='rejected_products.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+            # Combined report button
+            st.download_button(label='Download Combined Report', data=to_excel(final_report_df), file_name='combined_report.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
     except Exception as e:
-        st.error(f"Error processing the file: {e}")
+        st.error(f"An error occurred: {e}")
+
