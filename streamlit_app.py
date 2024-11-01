@@ -28,9 +28,6 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Initialize counters for flagged products
-            total_flagged_products = 0
-
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
 
@@ -62,6 +59,7 @@ if uploaded_file is not None:
                             if price_difference < 0:
                                 flagged_perfumes.append(row)
                                 break
+            flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
 
             # Flag 7: Blacklisted Words in NAME (word appears in full and on its own)
             def check_blacklist(name):
@@ -75,7 +73,33 @@ if uploaded_file is not None:
             # Flag 8: Brand name repeated in NAME (case-insensitive)
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
 
-            # Prepare a list to hold the final report rows
+            # Display and download each flagged DataFrame
+            flagged_dataframes = {
+                "Missing Color": missing_color,
+                "Missing Brand or Name": missing_brand_or_name,
+                "Single-word Name": single_word_name,
+                "Category Variation Issues": category_variation_issues,
+                "Generic Brand Issues": generic_brand_issues,
+                "Perfume Price Issues": flagged_perfumes_df,
+                "Blacklisted Words in Name": flagged_blacklisted,
+                "Brand Name Repeated in Name": brand_in_name
+            }
+
+            for flag_name, df in flagged_dataframes.items():
+                if not df.empty:
+                    st.write(f"{flag_name} - {len(df)} products flagged")
+                    st.write(df)
+                    # Download button for each flag
+                    buffer = BytesIO()
+                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                        df.to_excel(writer, index=False, sheet_name=flag_name.replace(" ", "_"))
+                    st.download_button(
+                        label=f"Download {flag_name} Report",
+                        data=buffer.getvalue(),
+                        file_name=f"{flag_name.replace(' ', '_').lower()}_report.xlsx"
+                    )
+
+            # Prepare final combined report with all flags
             final_report_rows = []
             for index, row in data.iterrows():
                 reasons = []
@@ -89,7 +113,7 @@ if uploaded_file is not None:
                     reasons.append("Missing VARIATION")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
-                if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
+                if row['PRODUCT_SET_SID'] in flagged_perfumes_df['PRODUCT_SET_SID'].values:
                     reasons.append("Perfume price issue")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
