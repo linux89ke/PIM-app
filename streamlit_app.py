@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
+from datetime import datetime  # Import datetime module for date formatting
 
 # Function to load the blacklisted words from a file
 def load_blacklisted_words():
@@ -163,18 +164,21 @@ if uploaded_file is not None:
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Generate downloadable Excel files
+            # Function to generate Excel report
             def generate_excel(dataframe, sheet_name):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
                 return output.getvalue()
 
+            # Get current date
+            current_date = datetime.now().strftime("%Y-%m-%d")
+
             if st.button("Download Approved Products Report"):
                 st.download_button(
                     label="Download Approved Products",
                     data=generate_excel(approved_df, 'Approved Products'),
-                    file_name="approved_products.xlsx",
+                    file_name=f"approved_products_{current_date}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
@@ -182,7 +186,7 @@ if uploaded_file is not None:
                 st.download_button(
                     label="Download Rejected Products",
                     data=generate_excel(rejected_df, 'Rejected Products'),
-                    file_name="rejected_products.xlsx",
+                    file_name=f"rejected_products_{current_date}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
@@ -190,7 +194,7 @@ if uploaded_file is not None:
                 st.download_button(
                     label="Download Combined Report",
                     data=generate_excel(final_report_df, 'Combined Report'),
-                    file_name="combined_report.xlsx",
+                    file_name=f"combined_report_{current_date}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
