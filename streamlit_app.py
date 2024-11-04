@@ -136,19 +136,19 @@ if uploaded_file is not None:
             for index, row in data.iterrows():
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing COLOR - 1000005 - Kindly confirm the actual product colour")
+                    reasons.append("1000005 - Kindly confirm the actual product colour")
                 if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing brand or name - 1000007 - Other Reason")
+                    reasons.append("1000007 - Other Reason")
                 if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Single-word names - 1000008 - Kindly Improve Product Name Description")
+                    reasons.append("1000008 - Kindly Improve Product Name Description")
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Generic brands - 1000007 - Other Reason")
+                    reasons.append("1000007 - Other Reason")
                 if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                    reasons.append("Perfume price issues - 1000030 - Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)")
+                    reasons.append("1000030 - Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)")
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
-                    reasons.append("Blacklisted words in names - 1000033 - Keywords in your content/ Product name / description has been blacklisted")
+                    reasons.append("1000033 - Keywords in your content/ Product name / description has been blacklisted")
                 if row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Brand name repetition in the product name - 1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name")
+                    reasons.append("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name")
 
                 status = 'Rejected' if reasons else 'Approved'
                 reason = ' | '.join(reasons) if reasons else ''
