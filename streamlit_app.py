@@ -63,19 +63,29 @@ if uploaded_file is not None:
             # Brand name repeated in NAME
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
 
-            # Display each flag dataframe in Streamlit
+            # Display each flag dataframe in collapsible sections
             st.write("Flagged DataFrames:")
-            st.write("Missing COLOR", missing_color)
-            st.write("Missing BRAND or NAME", missing_brand_or_name)
-            st.write("Single-word NAME", single_word_name)
-            st.write("Generic BRAND for valid CATEGORY_CODE", generic_brand_issues)
-            st.write("Perfume price issue", flagged_perfumes_df)
-            st.write("Blacklisted words in NAME", flagged_blacklisted)
-            st.write("BRAND name repeated in NAME", brand_in_name)
 
-            # Example usage: Each flagged DataFrame can now be accessed independently
-            # Further processing on flagged DataFrames can be added as needed
-            # e.g., save as Excel, export to CSV, or apply additional transformations
+            with st.expander("Missing COLOR"):
+                st.write(missing_color)
+
+            with st.expander("Missing BRAND or NAME"):
+                st.write(missing_brand_or_name)
+
+            with st.expander("Single-word NAME"):
+                st.write(single_word_name)
+
+            with st.expander("Generic BRAND for valid CATEGORY_CODE"):
+                st.write(generic_brand_issues)
+
+            with st.expander("Perfume price issue"):
+                st.write(flagged_perfumes_df)
+
+            with st.expander("Blacklisted words in NAME"):
+                st.write(flagged_blacklisted)
+
+            with st.expander("BRAND name repeated in NAME"):
+                st.write(brand_in_name)
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
