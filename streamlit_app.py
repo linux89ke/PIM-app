@@ -38,24 +38,29 @@ if uploaded_file is not None:
         data["Comment"] = ""
         data["Status"] = "Approved"
 
-        # Define flagging rules and reason messages
-        flags = [
-            ("Missing color", data["COLOR"].isnull(), "1000005 - Kindly confirm the actual product colour"),
-            ("Missing brand or name", data["BRAND"].isnull() | data["NAME"].isnull(), "1000007 - Other Reason"),
-            ("Single-word names", data["NAME"].str.split().str.len() == 1, "1000008 - Kindly Improve Product Name Description"),
-            ("Generic brands", data["BRAND"].str.lower() == "generic", "1000007 - Other Reason"),
-            ("Perfume price issues", 
-             (data["GLOBAL_SALE_PRICE"] - data["PRICE"]).abs() < 0.3 * data["PRICE"], 
-             "1000030 - Suspected Counterfeit/Fake Product"),
-            ("Blacklisted words in names", data["NAME"].str.contains(r'\b(?:blacklisted_words_here)\b', case=False), 
-             "1000033 - Keywords in your content/ Product name / description has been blacklisted"),
-            ("Brand name repetition in the product name", data["NAME"].str.contains(data["BRAND"], case=False), 
-             "1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name"),
-            # Refurb check if "refurb" in product name and seller not in refurb seller list
-            ("Refurbished check", 
-             data["NAME"].str.contains(r'\b(refurb|refurbished)\b', case=False) & ~data["SELLER_NAME"].isin(refurb_sellers),
-             "1000040 - Unauthorized Refurbished Product"),
-        ]
+        # Define flagging rules and reason messages, with checks for column existence
+        flags = []
+        
+        if "COLOR" in data.columns:
+            flags.append(("Missing color", data["COLOR"].isnull(), "1000005 - Kindly confirm the actual product colour"))
+        
+        if "BRAND" in data.columns and "NAME" in data.columns:
+            flags.append(("Missing brand or name", data["BRAND"].isnull() | data["NAME"].isnull(), "1000007 - Other Reason"))
+            flags.append(("Single-word names", data["NAME"].str.split().str.len() == 1, "1000008 - Kindly Improve Product Name Description"))
+            flags.append(("Generic brands", data["BRAND"].str.lower() == "generic", "1000007 - Other Reason"))
+            flags.append(("Brand name repetition in the product name", data["NAME"].str.contains(data["BRAND"], case=False), "1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name"))
+        
+        if "GLOBAL_SALE_PRICE" in data.columns and "PRICE" in data.columns:
+            flags.append(("Perfume price issues", 
+                          (data["GLOBAL_SALE_PRICE"] - data["PRICE"]).abs() < 0.3 * data["PRICE"], 
+                          "1000030 - Suspected Counterfeit/Fake Product"))
+        
+        if "NAME" in data.columns:
+            flags.append(("Blacklisted words in names", data["NAME"].str.contains(r'\b(?:blacklisted_words_here)\b', case=False), 
+                          "1000033 - Keywords in your content/ Product name / description has been blacklisted"))
+            flags.append(("Refurbished check", 
+                          data["NAME"].str.contains(r'\b(refurb|refurbished)\b', case=False) & ~data["SELLER_NAME"].isin(refurb_sellers),
+                          "1000040 - Unauthorized Refurbished Product"))
 
         # Apply flags and update `Reason`, `Comment`, and `Status` columns
         for flag_name, condition, reason_message in flags:
