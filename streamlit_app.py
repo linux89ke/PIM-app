@@ -48,7 +48,10 @@ if uploaded_file is not None:
             flags.append(("Missing brand or name", data["BRAND"].isnull() | data["NAME"].isnull(), "1000007 - Other Reason"))
             flags.append(("Single-word names", data["NAME"].str.split().str.len() == 1, "1000008 - Kindly Improve Product Name Description"))
             flags.append(("Generic brands", data["BRAND"].str.lower() == "generic", "1000007 - Other Reason"))
-            flags.append(("Brand name repetition in the product name", data["NAME"].str.contains(data["BRAND"], case=False), "1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name"))
+            
+            # Row-wise check for "Brand name repetition in the product name"
+            brand_name_repetition = data.apply(lambda row: row["BRAND"].lower() in row["NAME"].lower(), axis=1)
+            flags.append(("Brand name repetition in the product name", brand_name_repetition, "1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name"))
         
         if "GLOBAL_SALE_PRICE" in data.columns and "PRICE" in data.columns:
             flags.append(("Perfume price issues", 
