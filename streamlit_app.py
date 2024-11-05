@@ -37,13 +37,16 @@ if uploaded_file is not None:
     try:
         # Load the uploaded CSV file
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
-        
+
+        # Clean column names by stripping whitespace
+        data.columns = data.columns.str.strip()
+
         # Display column names for debugging
         st.write("Columns in the uploaded CSV file:")
         st.write(data.columns.tolist())
 
         # Check for necessary columns
-        required_columns = ['PRODUCT_SET_SID', 'COLOR', 'BRAND', 'NAME', 'CATEGORY_CODE', 'GLOBAL_PRICE', 'PARENTSKU', 'SELLER_NAME']
+        required_columns = ['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'COLOR', 'BRAND', 'NAME', 'CATEGORY_CODE', 'GLOBAL_PRICE', 'PARENTSKU', 'SELLER_NAME']
         missing_columns = [col for col in required_columns if col not in data.columns]
         
         if missing_columns:
