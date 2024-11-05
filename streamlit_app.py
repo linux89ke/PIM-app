@@ -95,13 +95,13 @@ if uploaded_file is not None:
                 final_report_rows.append((row['PRODUCT_SET_SID'], row['PARENTSKU'], 'Rejected', "1000007 - Other Reason", "Product is duplicated"))
                 flagged_products.append((row['PRODUCT_SET_SID'], row['PARENTSKU'], "Duplicate product"))
 
-            # Display flagged products on the front end
-            if flagged_products:
-                st.subheader("Flagged Products:")
-                flagged_df = pd.DataFrame(flagged_products, columns=['ProductSetSid', 'ParentSKU', 'Flag Reason'])
-                st.write(flagged_df)
-            else:
-                st.write("No products were flagged.")
+            # Display flagged products in an expander section
+            with st.expander("View Flagged Products", expanded=True):
+                if flagged_products:
+                    flagged_df = pd.DataFrame(flagged_products, columns=['ProductSetSid', 'ParentSKU', 'Flag Reason'])
+                    st.write(flagged_df)
+                else:
+                    st.write("No products were flagged.")
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
