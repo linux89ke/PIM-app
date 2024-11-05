@@ -11,6 +11,7 @@ def load_blacklisted_words():
 check_variation_data = pd.read_excel('check_variation.xlsx')
 category_fas_data = pd.read_excel('category_FAS.xlsx')
 perfumes_data = pd.read_excel('perfumes.xlsx')
+reasons_data = pd.read_excel('reasons.xlsx')  # Load the reasons data
 blacklisted_words = load_blacklisted_words()
 
 # Streamlit app layout
@@ -164,25 +165,24 @@ if uploaded_file is not None:
                 else:
                     st.write("No products flagged.")
 
-            with st.expander(f"Duplicate Products ({duplicate_products_count} products)"):
+            with st.expander(f"Duplicate products ({duplicate_products_count} products)"):
                 if duplicate_products_count > 0:
                     st.write(duplicate_products[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
                 else:
                     st.write("No products flagged.")
 
             # Download buttons for the reports
-            def to_excel(df):
+            def to_excel(df, rejection_reasons_df):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False, sheet_name='Final Report')
-                    approved_df.to_excel(writer, index=False, sheet_name='Approved Products')
-                    rejected_df.to_excel(writer, index=False, sheet_name='Rejected Products')
+                    df.to_excel(writer, index=False, sheet_name='ProductSets')
+                    rejection_reasons_df.to_excel(writer, index=False, sheet_name='RejectionReasons')
                 output.seek(0)
                 return output
 
-            st.download_button("Download Final Report", to_excel(final_report_df), "final_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            st.download_button("Download Approved Products", to_excel(approved_df), "approved_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            st.download_button("Download Rejected Products", to_excel(rejected_df), "rejected_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Final Report", to_excel(final_report_df, reasons_data), "final_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Approved Products", to_excel(approved_df, reasons_data), "approved_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Rejected Products", to_excel(rejected_df, reasons_data), "rejected_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Error loading the CSV file: {e}")
