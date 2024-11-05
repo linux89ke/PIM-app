@@ -1,9 +1,10 @@
+# Import necessary libraries
 import pandas as pd
 import streamlit as st
 from io import BytesIO
 import datetime
 
-# Function to load the blacklisted words from a file
+# Function to load blacklisted words
 def load_blacklisted_words():
     with open('blacklisted.txt', 'r') as f:
         return [line.strip() for line in f.readlines()]
@@ -52,6 +53,12 @@ if uploaded_file is not None:
                 data[column] = pd.to_numeric(data[column], errors='coerce')
             except Exception as e:
                 st.warning(f"Could not convert column {column} to numeric: {e}")
+
+        # Convert specific columns to string to avoid str accessor errors
+        string_columns = ['NAME', 'BRAND', 'COLOR']
+        for column in string_columns:
+            if column in data.columns:
+                data[column] = data[column].astype(str)
 
         # Display data types of the columns after conversion
         st.write("Data Types of the columns after conversion:")
