@@ -102,8 +102,10 @@ if uploaded_file:
 
         # Create final report DataFrame
         final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
-        st.write("Final Report Preview")
-        st.write(final_report_df)
+        
+        # Split into Approved and Rejected DataFrames
+        approved_df = final_report_df[final_report_df['Status'] == 'Approved']
+        rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
         today_date = datetime.now().strftime("%Y-%m-%d")
 
@@ -116,6 +118,7 @@ if uploaded_file:
             output.seek(0)
             return output
 
+        # Download buttons for each report
         st.download_button(
             "Download Final Report",
             to_excel(final_report_df, reasons_data),
@@ -124,13 +127,13 @@ if uploaded_file:
         )
         st.download_button(
             "Download Approved Products",
-            to_excel(final_report_df[final_report_df['Status'] == 'Approved'], reasons_data),
+            to_excel(approved_df, reasons_data),
             f"approved_products_{today_date}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         st.download_button(
             "Download Rejected Products",
-            to_excel(final_report_df[final_report_df['Status'] == 'Rejected'], reasons_data),
+            to_excel(rejected_df, reasons_data),
             f"rejected_products_{today_date}.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
