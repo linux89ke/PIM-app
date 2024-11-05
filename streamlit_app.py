@@ -15,36 +15,38 @@ def to_excel(df):
 
 # Example function to process data and return the flagged reports
 def process_data(data):
-    # Placeholder DataFrames for demonstration. Replace with actual logic for flagging products.
-    # Assume the returned structure is a dictionary of DataFrames.
-    
-    # Sample data for ProductSets and RejectionReasons
-    product_sets_data = {
-        'ProductSetSid': ['sid1', 'sid2'],
-        'ParentSKU': ['sku1', 'sku2'],
-        'Status': ['Rejected', 'Approved'],
-        'Reason': ['Missing COLOR', 'None'],
-        'Comment': ['Kindly include color of the product', '']
-    }
+    # Initialize lists to hold flagged products
+    flagged_products = []
+    rejection_reasons = []
 
-    rejection_reasons_data = {
-        'Reason': ['1000005 - Kindly confirm the actual product colour'],
-        'Comment': ['Kindly include color of the product']
-    }
+    # Example flagging logic (you will replace this with your actual logic)
+    for index, row in data.iterrows():
+        if row['COLOR'] == '':  # Placeholder condition for missing color
+            flagged_products.append({
+                'ProductSetSid': row['PRODUCT_SET_SID'],
+                'ParentSKU': row['PARENTSKU'],
+                'Status': 'Rejected',
+                'Reason': 'Missing COLOR',
+                'Comment': 'Kindly include color of the product'
+            })
+            rejection_reasons.append({
+                'Reason': '1000005 - Kindly confirm the actual product colour',
+                'Comment': 'Kindly include color of the product'
+            })
 
-    # Convert dictionaries to DataFrames
-    product_sets_df = pd.DataFrame(product_sets_data)
-    rejection_reasons_df = pd.DataFrame(rejection_reasons_data)
-    
+    # Create DataFrames for flagged products and rejection reasons
+    product_sets_df = pd.DataFrame(flagged_products)
+    rejection_reasons_df = pd.DataFrame(rejection_reasons)
+
+    # Separate approved and rejected DataFrames
+    approved_df = data[data['STATUS'] == 'Approved']  # Assuming there's a STATUS column
+    rejected_df = product_sets_df
+
     # Create the final report dictionary with two sheets
     final_report_df = {
         'ProductSets': product_sets_df,
         'RejectionReasons': rejection_reasons_df
     }
-    
-    # Assume approved and rejected are subsets of the main data for demonstration
-    approved_df = product_sets_df[product_sets_df['Status'] == 'Approved']
-    rejected_df = product_sets_df[product_sets_df['Status'] == 'Rejected']
     
     return approved_df, rejected_df, final_report_df
 
@@ -67,6 +69,14 @@ if uploaded_file is not None:
 
             # Process data to get approved, rejected, and combined reports
             approved_df, rejected_df, final_report_df = process_data(data)
+
+            # Display the flagged products and reasons
+            st.subheader("Flagged Products (Rejected)")
+            st.write(rejected_df)  # Display the DataFrame of rejected products
+            
+            if not approved_df.empty:
+                st.subheader("Approved Products")
+                st.write(approved_df)  # Display the DataFrame of approved products
 
             # Generate current timestamp for file names
             current_time = datetime.now().strftime("%m-%d_%H")
