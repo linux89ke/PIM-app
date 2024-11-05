@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-import datetime
 
 # Function to load the blacklisted words from a file
 def load_blacklisted_words():
@@ -131,26 +130,23 @@ if uploaded_file is not None:
                     reasons_df.to_excel(writer, index=False, sheet_name='RejectionReasons')
                 return output.getvalue()
 
-            # Generate current date in YYYY-MM-DD format
-            current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-
-            # Download buttons for reports with date included in filenames
+            # Download buttons for reports
             st.download_button(
                 label="Download Approved Products Report",
                 data=to_excel(approved_df),
-                file_name=f'approved_products_{current_date}.xlsx'
+                file_name='approved_products.xlsx'
             )
 
             st.download_button(
                 label="Download Rejected Products Report",
                 data=to_excel(rejected_df),
-                file_name=f'rejected_products_{current_date}.xlsx'
+                file_name='rejected_products.xlsx'
             )
 
             st.download_button(
                 label="Download Combined Report",
                 data=to_excel(final_report_df),
-                file_name=f'combined_report_{current_date}.xlsx'
+                file_name='combined_report.xlsx'
             )
 
     except Exception as e:
