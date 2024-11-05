@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
+from datetime import datetime
 
 # Function to load the blacklisted words from a file
 def load_blacklisted_words():
@@ -30,24 +31,32 @@ if uploaded_file is not None:
             st.write(data.head())
 
             # Initialize a list for flagged products
-            flagged_products = []
+            final_report_rows = []
+
+            # Define specific reasons, comments, and display names for each flag
+            flag_definitions = {
+                "Missing COLOR": {"Reason": "1000005 - Kindly confirm the actual product colour", "Comment": "Kindly include color of the product", "Display": "Missing COLOR"},
+                "Missing BRAND or NAME": {"Reason": "1000007 - Other Reason", "Comment": "Missing BRAND or NAME", "Display": "Missing BRAND or NAME"},
+                "Single-word NAME": {"Reason": "1000008 - Kindly Improve Product Name Description", "Comment": "Kindly Improve Product Name", "Display": "Name too short"},
+                "Generic BRAND": {"Reason": "1000007 - Other Reason", "Comment": "Kindly use Fashion as brand name for Fashion products", "Display": "Brand is Generic instead of Fashion"},
+                "Perfume price issue": {"Reason": "1000030 - Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", "Display": "Perfume price too low"},
+                "Blacklisted word in NAME": {"Reason": "1000033 - Keywords in your content/ Product name / description has been blacklisted", "Comment": "Keywords in your content/ Product name / description has been blacklisted", "Display": "Blacklisted word in NAME"},
+                "BRAND name repeated in NAME": {"Reason": "1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Comment": "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Display": "BRAND name repeated in NAME"},
+                "Duplicate product": {"Reason": "1000007 - Other Reason", "Comment": "Product is duplicated", "Display": "Duplicate product"}
+            }
 
             # Flag 1: Missing COLOR
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
-            missing_color_count = len(missing_color)
 
             # Flag 2: Missing BRAND or NAME
             missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
-            missing_brand_or_name_count = len(missing_brand_or_name)
 
             # Flag 3: Single-word NAME (but not for "Jumia Book" BRAND)
             single_word_name = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
-            single_word_name_count = len(single_word_name)
 
             # Flag 4: Generic Brand Check
             valid_category_codes_fas = category_fas_data['ID'].tolist()
             generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
-            generic_brand_count = len(generic_brand_issues)
 
             # Flag 5: Price and Keyword Check (Perfume Check)
             flagged_perfumes = []
@@ -62,7 +71,6 @@ if uploaded_file is not None:
                             if price_difference < 0:
                                 flagged_perfumes.append(row)
                                 break
-            flagged_perfumes_count = len(flagged_perfumes)
 
             # Flag 6: Blacklisted Words in NAME
             def check_blacklist(name):
@@ -72,106 +80,47 @@ if uploaded_file is not None:
                 return False
 
             flagged_blacklisted = data[data['NAME'].apply(check_blacklist)]
-            flagged_blacklisted_count = len(flagged_blacklisted)
 
             # Flag 7: Brand name repeated in NAME
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-            brand_in_name_count = len(brand_in_name)
 
             # Flag 8: Duplicate products based on NAME, BRAND, and SELLER_NAME
             duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
-            duplicate_products_count = len(duplicate_products)
 
-            # Prepare the final report rows
-            final_report_rows = []
-
-            # Collect all flagged products for final report
+            # Collect all flagged products with reasons for the final report
             for index, row in data.iterrows():
                 reasons = []
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing COLOR")
+                    reasons.append(flag_definitions["Missing COLOR"])
                 if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing BRAND or NAME")
+                    reasons.append(flag_definitions["Missing BRAND or NAME"])
                 if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Single-word NAME")
+                    reasons.append(flag_definitions["Single-word NAME"])
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Generic BRAND")
+                    reasons.append(flag_definitions["Generic BRAND"])
                 if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                    reasons.append("Perfume price issue")
+                    reasons.append(flag_definitions["Perfume price issue"])
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
-                    reasons.append("Blacklisted word in NAME")
+                    reasons.append(flag_definitions["Blacklisted word in NAME"])
                 if row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
-                    reasons.append("BRAND name repeated in NAME")
+                    reasons.append(flag_definitions["BRAND name repeated in NAME"])
                 if row['PRODUCT_SET_SID'] in duplicate_products['PRODUCT_SET_SID'].values:
-                    reasons.append("Duplicate product")
+                    reasons.append(flag_definitions["Duplicate product"])
 
                 status = 'Rejected' if reasons else 'Approved'
-                reason = ' | '.join(reasons) if reasons else ''
-                final_report_rows.append((row['PRODUCT_SET_SID'], row['PARENTSKU'], status, reason, reason))
+                reason_text = ' | '.join([r["Display"] for r in reasons]) if reasons else ''
+                comment_text = ' | '.join([r.get("Comment", "") for r in reasons]) if reasons else ''
+                final_report_rows.append((row['PRODUCT_SET_SID'], row['PARENTSKU'], status, reason_text, comment_text))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
             st.write("Final Report Preview")
             st.write(final_report_df)
 
-            # Separate approved and rejected reports
-            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
-            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
+            # Get today's date for file naming
+            today_date = datetime.now().strftime("%Y-%m-%d")
 
-            # Create containers for each flag result
-            with st.expander(f"Missing COLOR ({missing_color_count} products)"):
-                if missing_color_count > 0:
-                    st.write(missing_color[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Missing BRAND or NAME ({missing_brand_or_name_count} products)"):
-                if missing_brand_or_name_count > 0:
-                    st.write(missing_brand_or_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Single-word NAME ({single_word_name_count} products)"):
-                if single_word_name_count > 0:
-                    st.write(single_word_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({generic_brand_count} products)"):
-                if generic_brand_count > 0:
-                    st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Perfume price issue ({flagged_perfumes_count} products)"):
-                if flagged_perfumes_count > 0:
-                    flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME', 'GLOBAL_PRICE']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Blacklisted words in NAME ({flagged_blacklisted_count} products)"):
-                if flagged_blacklisted_count > 0:
-                    flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(
-                        lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0]
-                    )
-                    st.write(flagged_blacklisted[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'Blacklisted_Word', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"BRAND name repeated in NAME ({brand_in_name_count} products)"):
-                if brand_in_name_count > 0:
-                    st.write(brand_in_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            with st.expander(f"Duplicate products ({duplicate_products_count} products)"):
-                if duplicate_products_count > 0:
-                    st.write(duplicate_products[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']])
-                else:
-                    st.write("No products flagged.")
-
-            # Download buttons for the reports
+            # Create download buttons for each report
             def to_excel(df, rejection_reasons_df):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -180,9 +129,9 @@ if uploaded_file is not None:
                 output.seek(0)
                 return output
 
-            st.download_button("Download Final Report", to_excel(final_report_df, reasons_data), "final_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            st.download_button("Download Approved Products", to_excel(approved_df, reasons_data), "approved_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-            st.download_button("Download Rejected Products", to_excel(rejected_df, reasons_data), "rejected_products.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Final Report", to_excel(final_report_df, reasons_data), f"final_report_{today_date}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Approved Products", to_excel(final_report_df[final_report_df['Status'] == 'Approved'], reasons_data), f"approved_products_{today_date}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button("Download Rejected Products", to_excel(final_report_df[final_report_df['Status'] == 'Rejected'], reasons_data), f"rejected_products_{today_date}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"Error loading the CSV file: {e}")
