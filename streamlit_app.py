@@ -78,22 +78,15 @@ if uploaded_file is not None:
                         reasons.append("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name")
 
                     # Append flagged row
-                    if reasons:
-                        flagged_rows.append({
-                            'ProductSetSid': row['PRODUCT_SET_SID'],
-                            'ParentSKU': row['PARENTSKU'],
-                            'Status': 'Rejected',
-                            'Reason': ', '.join(set(reasons)),
-                            'Comment': ' | '.join(set(reasons))
-                        })
-                    else:
-                        flagged_rows.append({
-                            'ProductSetSid': row['PRODUCT_SET_SID'],
-                            'ParentSKU': row['PARENTSKU'],
-                            'Status': 'Approved',
-                            'Reason': 'Approved',
-                            'Comment': ''
-                        })
+                    status = 'Rejected' if reasons else 'Approved'
+                    comment = ' | '.join(set(reasons)) if reasons else 'No issues found'
+                    flagged_rows.append({
+                        'ProductSetSid': row['PRODUCT_SET_SID'],
+                        'ParentSKU': row['PARENTSKU'],
+                        'Status': status,
+                        'Reason': ', '.join(set(reasons)) if reasons else 'Approved',
+                        'Comment': comment
+                    })
 
                 # Duplicate Flag (with CATEGORY_CODE exception)
                 duplicate_groups = data.groupby(['NAME', 'BRAND', 'SELLER_NAME'])
@@ -127,7 +120,7 @@ if uploaded_file is not None:
 
                 # Prepare the final report DataFrame
                 final_report_df = pd.DataFrame(flagged_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
-                st.write("Final Report Preview")
+                st.write("Final Report Preview with Flags")
                 st.write(final_report_df)
 
                 # Separate approved and rejected reports
