@@ -44,6 +44,16 @@ if uploaded_file is not None:
         # Display column names for debugging
         st.write("Columns in the uploaded CSV file:")
         st.write(data.columns.tolist())
+        
+        # Check for the presence of 'PRODUCT_SET_SID'
+        if 'PRODUCT_SET_SID' not in data.columns:
+            st.error("'PRODUCT_SET_SID' column is missing. Please check your CSV file.")
+        else:
+            st.write("'PRODUCT_SET_SID' column is present.")
+
+        # Check data types of columns
+        st.write("Data Types of the columns:")
+        st.write(data.dtypes)
 
         # Check for necessary columns
         required_columns = ['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'COLOR', 'BRAND', 'NAME', 'CATEGORY_CODE', 'GLOBAL_PRICE', 'PARENTSKU', 'SELLER_NAME']
@@ -141,28 +151,28 @@ if uploaded_file is not None:
                 def to_excel(dataframe):
                     output = BytesIO()
                     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                        dataframe.to_excel(writer, index=False, sheet_name='ProductSets')
-                        reasons_df = pd.read_excel('reasons.xlsx')
-                        reasons_df.to_excel(writer, index=False, sheet_name='RejectionReasons')
-                    return output.getvalue()
+                        dataframe.to_excel(writer, sheet_name='Final Report', index=False)
+                        writer.save()
+                    output.seek(0)
+                    return output
 
-                # Generate current date in YYYY-MM-DD format
+                # Provide download links for reports
                 current_date = datetime.datetime.now().strftime("%Y-%m-%d")
+                if not rejected_df.empty:
+                    st.download_button(
+                        label="Download Rejected Products Report",
+                        data=to_excel(rejected_df),
+                        file_name=f'rejected_products_{current_date}.xlsx',
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
-                # Download buttons for reports with date included in filenames
-                st.download_button(
-                    label="Download Approved Products Report",
-                    data=to_excel(approved_df),
-                    file_name=f'approved_products_{current_date}.xlsx',
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
-                st.download_button(
-                    label="Download Rejected Products Report",
-                    data=to_excel(rejected_df),
-                    file_name=f'rejected_products_{current_date}.xlsx',
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+                if not approved_df.empty:
+                    st.download_button(
+                        label="Download Approved Products Report",
+                        data=to_excel(approved_df),
+                        file_name=f'approved_products_{current_date}.xlsx',
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
