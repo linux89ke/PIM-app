@@ -46,19 +46,17 @@ if uploaded_file is not None:
         st.write("Columns in the uploaded CSV file:")
         st.write(data.columns.tolist())
 
-        # Convert columns to appropriate types
-        for column in data.columns:
-            # Attempt to convert numeric columns and handle errors
-            try:
-                data[column] = pd.to_numeric(data[column], errors='coerce')
-            except Exception as e:
-                st.warning(f"Could not convert column {column} to numeric: {e}")
-
         # Convert specific columns to string to avoid str accessor errors
         string_columns = ['NAME', 'BRAND', 'COLOR']
         for column in string_columns:
             if column in data.columns:
-                data[column] = data[column].astype(str)
+                data[column] = data[column].astype(str).fillna('')  # Convert to string and fill NaNs with empty strings
+
+        # Convert numeric columns, catching errors
+        numeric_columns = ['GLOBAL_PRICE', 'GLOBAL_SALE_PRICE']
+        for column in numeric_columns:
+            if column in data.columns:
+                data[column] = pd.to_numeric(data[column], errors='coerce')
 
         # Display data types of the columns after conversion
         st.write("Data Types of the columns after conversion:")
@@ -154,25 +152,27 @@ if uploaded_file is not None:
                         'ParentSKU': row['PARENTSKU'],
                         'Status': status,
                         'Reason': reason,
-                        'Comment': comment if first_flag else ''
+                        'Comment': comment
                     })
 
+                # Create DataFrame for the final report
                 final_report_df = pd.DataFrame(final_report_rows)
+
+                # Output the report
                 output = BytesIO()
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    final_report_df.to_excel(writer, sheet_name='Final Report', index=False)
-                    writer.save()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    final_report_df.to_excel(writer, sheet_name='ProductSets', index=False)
+                    # Include additional sheets as required
                 output.seek(0)
 
                 # Provide download links for reports
                 current_date = datetime.datetime.now().strftime("%Y-%m-%d")
-                if not flags_data:
-                    st.download_button(
-                        label="Download Rejected Products Report",
-                        data=output,
-                        file_name=f'rejected_products_{current_date}.xlsx',
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+                st.download_button(
+                    label="Download Final Report",
+                    data=output,
+                    file_name=f'final_report_{current_date}.xlsx',
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
     except Exception as e:
         st.error(f"An error occurred: {e}")
