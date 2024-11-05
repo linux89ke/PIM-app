@@ -1,50 +1,38 @@
 import pandas as pd
 import streamlit as st
 
+# Load the category_FAS.xlsx file
+category_fas_data = pd.read_excel('path/to/category_FAS.xlsx')  # Update with the correct path to your file
+
 # Load the uploaded CSV file
 uploaded_file = st.file_uploader("Upload CSV file", type='csv')
 if uploaded_file is not None:
     data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
-    
     if not data.empty:
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
-        # Define flagging criteria with reasons and comments
-        flagging_criteria = {
-            "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly include color of the product"),
-            "Missing BRAND or NAME": ("1000007 - Other Reason", "Missing BRAND or NAME"),
-            "Name too short": ("1000008 - Kindly Improve Product Name Description", "Kindly Improve Product Name"),
-            "Brand is Generic instead of Fashion": ("1000007 - Other Reason", "Kindly use Fashion as brand name for Fashion products"),
-            "Perfume price too low": ("1000030 - Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", ""),
-            "Blacklisted word in NAME": ("1000033 - Keywords in your content/ Product name / description has been blacklisted", "Keywords in your content/ Product name / description has been blacklisted"),
-            "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
-            "Duplicate product": ("1000007 - Other Reason", "Product is duplicated"),
-        }
-
         # Initialize lists to collect flagged rows for each flag category
         flags_data = {flag: pd.DataFrame() for flag in flagging_criteria.keys()}
 
-        # Set to keep track of flagged products to avoid re-flagging
+        # Apply flagging rules in order of importance, stopping at the first match per product
         flagged_products = set()
-
-        # Apply flagging rules
         for flag, (reason, comment) in flagging_criteria.items():
             if flag == "Missing COLOR":
                 flags_data[flag] = data[(data['COLOR'].isna() | (data['COLOR'] == '')) & (~data['PRODUCT_SET_SID'].isin(flagged_products))]
             elif flag == "Missing BRAND or NAME":
                 flags_data[flag] = data[(data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')) & (~data['PRODUCT_SET_SID'].isin(flagged_products))]
             elif flag == "Name too short":
-                flags_data[flag] = data[(data['NAME'].str.split().str.len() == 1) & (~data['PRODUCT_SET_SID'].isin(flagged_products))]
+                flags_data[flag] = data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book') & (~data['PRODUCT_SET_SID'].isin(flagged_products))]
             elif flag == "Brand is Generic instead of Fashion":
-                valid_category_codes_fas = category_fas_data['ID'].tolist()  # Assume this is pre-loaded
+                valid_category_codes_fas = category_fas_data['ID'].tolist()  # Ensure this column exists in your file
                 flags_data[flag] = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic') & (~data['PRODUCT_SET_SID'].isin(flagged_products))]
             elif flag == "Perfume price too low":
+                perfumes_data = perfumes_data.sort_values(by="PRICE", ascending=False).drop_duplicates(subset=["BRAND", "KEYWORD"], keep="first")
                 flagged_perfumes = []
                 for _, row in data.iterrows():
                     if row['PRODUCT_SET_SID'] not in flagged_products:
                         brand = row['BRAND']
-                        # Assuming perfumes_data is pre-loaded
                         if brand in perfumes_data['BRAND'].values:
                             keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
                             for keyword in keywords:
@@ -57,7 +45,6 @@ if uploaded_file is not None:
                                         break
                 flags_data[flag] = pd.DataFrame(flagged_perfumes)
             elif flag == "Blacklisted word in NAME":
-                blacklisted_words = ["example", "test"]  # Load your actual blacklist here
                 def check_blacklist(name):
                     if isinstance(name, str):
                         name_words = name.lower().split()
@@ -83,17 +70,3 @@ if uploaded_file is not None:
 
         # Prepare final report
         final_report_rows = []
-        for flag, df in flags_data.items():
-            for _, row in df.iterrows():
-                final_report_rows.append({
-                    "ProductSetSid": row['PRODUCT_SET_SID'],
-                    "ParentSKU": row['PARENTSKU'],
-                    "Status": "Rejected",
-                    "Reason": flagging_criteria[flag][0],
-                    "Comment": flagging_criteria[flag][1]
-                })
-
-        # Convert final report to DataFrame and display or save as needed
-        final_report_df = pd.DataFrame(final_report_rows)
-        st.write("Final Report:")
-        st.write(final_report_df)
