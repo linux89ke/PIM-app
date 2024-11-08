@@ -168,8 +168,8 @@ if uploaded_file is not None:
             with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
                 if len(flagged_perfumes) > 0:
                     flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 
-                                                    'BRAND', 'CATEGORY', 
+                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 
+                                                    'NAME','BRAND','CATEGORY',
                                                     'PARENTSKU','SELLER_NAME',
                                                     'GLOBAL_PRICE']])
                 else:
@@ -228,7 +228,7 @@ if uploaded_file is not None:
             # Adding some space before download buttons using markdown
             st.markdown("<br><br>", unsafe_allow_html=True)
 
-            # Download buttons for the reports with two sheets each and custom styles
+            # Adding custom CSS styles for buttons
             button_style = """
                         <style>
                         .download-button {
@@ -249,15 +249,40 @@ if uploaded_file is not None:
             # Injecting CSS styles into Streamlit app
             st.markdown(button_style, unsafe_allow_html=True)
 
-            # Creating download buttons using HTML to apply styles
-            download_buttons_html = f"""
-                                    <button class="download-button" onclick="window.open('{to_excel(final_report_df, reasons_data, sheet1_name='Final Report', sheet2_name='Rejection Reasons')}')">Download Final Report ({current_date})</button>
-                                    <button class="download-button" onclick="window.open('{to_excel(approved_df, reasons_data, sheet1_name='Approved Products', sheet2_name='Rejection Reasons')}')">Download Approved Products ({current_date})</button>
-                                    <button class="download-button" onclick="window.open('{to_excel(rejected_df, reasons_data, sheet1_name='Rejected Products', sheet2_name='Rejection Reasons')}')">Download Rejected Products ({current_date})</button>
-                                    """
+            # Creating download buttons using Streamlit's built-in functionality.
             
-            # Displaying download buttons using markdown to allow HTML rendering
-            st.markdown(download_buttons_html, unsafe_allow_html=True)
+            # Download buttons for the reports using Streamlit's built-in functionality.
+            
+            # Final Report Download Button
+            final_report_button = to_excel(final_report_df, reasons_data)
+            
+            st.download_button(
+                label=f"Download Final Report ({current_date})",
+                data=final_report_button,
+                file_name=f"final_report_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="final_report"
+            )
+
+            approved_products_button = to_excel(approved_df, reasons_data)
+            
+            st.download_button(
+                label=f"Download Approved Products ({current_date})",
+                data=approved_products_button,
+                file_name=f"approved_products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="approved_products"
+             )
+
+             rejected_products_button = to_excel(rejected_df, reasons_data)
+
+             st.download_button(
+                 label=f"Download Rejected Products ({current_date})",
+                 data=rejected_products_button,
+                 file_name=f"rejected_products_{current_date}.xlsx",
+                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                 key="rejected_products"
+             )
 
     except Exception as e:
         st.error(f"Error loading the CSV file: {e}")
