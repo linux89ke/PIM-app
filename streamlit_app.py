@@ -130,35 +130,54 @@ if uploaded_file is not None:
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
 
-            st.write("Final Report Preview")
-            st.write(final_report_df)
-
             # Separate approved and rejected reports
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Function to create Excel files with two sheets each
-            def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+            # Prepare flag counts for each issue
+            missing_color_count = len(missing_color)
+            missing_brand_or_name_count = len(missing_brand_or_name)
+            single_word_name_count = len(single_word_name)
+            generic_brand_issues_count = len(generic_brand_issues)
+            flagged_perfumes_count = len(flagged_perfumes)
+            flagged_blacklisted_count = len(flagged_blacklisted)
+            brand_in_name_count = len(brand_in_name)
+            duplicate_products_count = len(duplicate_products)
+
+            # Display flag counts
+            st.write(f"Flags and Counts:")
+            st.write(f"Missing COLOR: {missing_color_count} products")
+            st.write(f"Missing BRAND or NAME: {missing_brand_or_name_count} products")
+            st.write(f"Single-word NAME: {single_word_name_count} products")
+            st.write(f"Generic BRAND: {generic_brand_issues_count} products")
+            st.write(f"Perfume price issue: {flagged_perfumes_count} products")
+            st.write(f"Blacklisted word in NAME: {flagged_blacklisted_count} products")
+            st.write(f"BRAND name repeated in NAME: {brand_in_name_count} products")
+            st.write(f"Duplicate product: {duplicate_products_count} products")
+
+            # Function to create Excel files with three sheets
+            def to_excel(df1, df2, df3, sheet1_name="ProductSets", sheet2_name="RejectionReasons", sheet3_name="ApprovedProducts"):
                 # Create a BytesIO buffer
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df1.to_excel(writer, sheet_name=sheet1_name, index=False)
                     df2.to_excel(writer, sheet_name=sheet2_name, index=False)
+                    df3.to_excel(writer, sheet_name=sheet3_name, index=False)
                 # Move to the beginning of the BytesIO buffer
                 output.seek(0)
                 return output.read()
-            
-            # Generate the Excel download button
-            file_bytes = to_excel(approved_df, rejected_df)
+
+            # Generate the Excel file with the reports
+            final_report_file = to_excel(final_report_df, reasons_data, approved_df)
+
+            # Download the file as an Excel
             st.download_button(
-                label="Download Final Report",
-                data=file_bytes,
-                file_name=f"final_report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx",
+                label="Download Final Report (Excel)",
+                data=final_report_file,
+                file_name=f"product_validation_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
-            st.write("The file is empty. Please upload a valid CSV file.")
+            st.warning("The uploaded file is empty.")
     except Exception as e:
-        st.write(f"Error processing file: {e}")
-else:
-    st.write("Please upload a CSV file to proceed.")
+        st.error(f"Error occurred: {e}")
