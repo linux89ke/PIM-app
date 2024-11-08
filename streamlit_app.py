@@ -32,16 +32,17 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Define reason codes and messages with updated comments for rejections
+            # Define reason codes and messages based on provided input
             reasons_dict = {
-                "Missing COLOR": ("1000005", "Kindly Add product color", ""),
-                "Missing BRAND or NAME": ("1000007", "Kindly Use correct brand", ""),
-                "Single-word NAME": ("1000008", "Kindly improve product name", ""),
-                "Generic BRAND": ("1000007", "Kindly use Fashion as brand name for Fashion items", ""),
-                "Perfume price issue": ("1000030", "Product is suspected counterfeit", ""),
-                "Blacklisted word in NAME": ("1000033", "Item is blacklisted as blacklisted word detected", ""),
-                "BRAND name repeated in NAME": ("1000002", "Kindly ensure brand is not repeated in name", ""),
-                "Duplicate product": ("1000007", "Product is duplicated", "")
+                "Missing COLOR": ("1000005", "Kindly confirm the actual product colour"),
+                "Missing BRAND or NAME": ("1000007", "Kindly Use correct brand"),
+                "Single-word NAME": ("1000008", "Kindly improve product name"),
+                "Generic BRAND": ("1000007", "Kindly use Fashion as brand name for Fashion items"),
+                "Perfume price issue": ("1000030", "Product is suspected counterfeit"),
+                "Blacklisted word in NAME": ("1000033", "Item is blacklisted as blacklisted word detected"),
+                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
+                "Duplicate product": ("1000007", "Product is duplicated"),
+                # Additional reasons can be added here as needed
             }
 
             # Flagging logic
@@ -113,17 +114,12 @@ if uploaded_file is not None:
 
                 # Prepare detailed reason string with codes and messages
                 detailed_reasons = []
-                for code, message, _ in reason_codes_and_messages:
+                for code, message in reason_codes_and_messages:
                     detailed_reasons.append(f"{code} - {message}")
                 
                 reason_str = ' | '.join(detailed_reasons) if detailed_reasons else ''
                 
-                # Set comment based on rejection reasons
-                comment_str = ''
-                if status == 'Rejected':
-                    comment_str = ' | '.join([msg for _, msg, _ in reason_codes_and_messages])
-
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment_str))
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, reason_str))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
