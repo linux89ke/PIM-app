@@ -30,7 +30,10 @@ def load_config_files():
     data = {}
     for key, filename in config_files.items():
         try:
-            data[key] = pd.read_excel(filename)
+            df = pd.read_excel(filename)
+            if key == 'flags':
+                st.write("Available columns in flags.xlsx:", df.columns.tolist())
+            data[key] = df
             st.sidebar.success(f"✔️ {filename} loaded successfully")
         except Exception as e:
             st.sidebar.error(f"❌ Error loading {filename}: {e}")
@@ -49,10 +52,19 @@ config_data = load_config_files()
 flags_data = config_data['flags']
 reasons_dict = {}
 try:
+    # Find the correct column names (case-insensitive)
+    flag_col = next((col for col in flags_data.columns if col.lower() == 'flag'), None)
+    reason_col = next((col for col in flags_data.columns if col.lower() == 'reason'), None)
+    comment_col = next((col for col in flags_data.columns if col.lower() == 'comment'), None)
+
+    if not all([flag_col, reason_col, comment_col]):
+        st.error(f"Missing required columns in flags.xlsx. Required: Flag, Reason, Comment. Found: {flags_data.columns.tolist()}")
+        st.stop()
+
     for _, row in flags_data.iterrows():
-        flag = str(row['Flag']).strip()
-        reason = str(row['Reason']).strip()
-        comment = str(row['Comment']).strip()
+        flag = str(row[flag_col]).strip()
+        reason = str(row[reason_col]).strip()
+        comment = str(row[comment_col]).strip()
         reason_parts = reason.split(' - ', 1)
         code = reason_parts[0]
         message = reason_parts[1] if len(reason_parts) > 1 else ''
@@ -137,12 +149,14 @@ if uploaded_file is not None:
             for validation_df, flag in validations:
                 if row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                     reasons.append(flag)
-                    reason_codes_and_messages.append(reasons_dict[flag])
+                    if flag in reasons_dict:
+                        reason_codes_and_messages.append(reasons_dict[flag])
             
             # Check perfume price issues separately
             if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                 reasons.append("Perfume price issue")
-                reason_codes_and_messages.append(reasons_dict["Perfume price issue"])
+                if "Perfume price issue" in reasons_dict:
+                    reason_codes_and_messages.append(reasons_dict["Perfume price issue"])
 
             # Prepare report row
             status = 'Rejected' if reasons else 'Approved'
