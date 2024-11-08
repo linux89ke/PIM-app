@@ -32,17 +32,16 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Define reason codes and messages based on provided input
+            # Define reason codes and messages
             reasons_dict = {
-                "Missing COLOR": ("1000005", "Kindly confirm the actual product colour"),
+                "Missing COLOR": ("1000005", "Kindly Add product color"),
                 "Missing BRAND or NAME": ("1000007", "Kindly Use correct brand"),
                 "Single-word NAME": ("1000008", "Kindly improve product name"),
                 "Generic BRAND": ("1000007", "Kindly use Fashion as brand name for Fashion items"),
                 "Perfume price issue": ("1000030", "Product is suspected counterfeit"),
                 "Blacklisted word in NAME": ("1000033", "Item is blacklisted as blacklisted word detected"),
-                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
-                "Duplicate product": ("1000007", "Product is duplicated"),
-                # Additional reasons can be added here as needed
+                "BRAND name repeated in NAME": ("1000002", "Kindly ensure brand is not repeated in name"),
+                "Duplicate product": ("1000007", "Product is duplicated")
             }
 
             # Flagging logic
@@ -73,53 +72,37 @@ if uploaded_file is not None:
             # Prepare the final report rows
             final_report_rows = []
 
-            # Collect all flagged products for final report
+            # Collect all flagged products for final report with only one reason per product
             for index, row in data.iterrows():
-                reasons = []
-                reason_codes_and_messages = []
+                reason_code, comment = "", ""
                 
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing COLOR")
-                    reason_codes_and_messages.append(reasons_dict["Missing COLOR"])
+                    reason_code, comment = reasons_dict["Missing COLOR"]
                 
-                if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Missing BRAND or NAME")
-                    reason_codes_and_messages.append(reasons_dict["Missing BRAND or NAME"])
+                elif row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["Missing BRAND or NAME"]
                 
-                if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
-                    reasons.append("Single-word NAME")
-                    reason_codes_and_messages.append(reasons_dict["Single-word NAME"])
+                elif row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["Single-word NAME"]
                 
-                if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
-                    reasons.append("Generic BRAND")
-                    reason_codes_and_messages.append(reasons_dict["Generic BRAND"])
+                elif row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["Generic BRAND"]
                 
-                if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                    reasons.append("Perfume price issue")
-                    reason_codes_and_messages.append(reasons_dict["Perfume price issue"])
+                elif row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
+                    reason_code, comment = reasons_dict["Perfume price issue"]
                 
-                if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
-                    reasons.append("Blacklisted word in NAME")
-                    reason_codes_and_messages.append(reasons_dict["Blacklisted word in NAME"])
+                elif row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["Blacklisted word in NAME"]
                 
-                if row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
-                    reasons.append("BRAND name repeated in NAME")
-                    reason_codes_and_messages.append(reasons_dict["BRAND name repeated in NAME"])
+                elif row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["BRAND name repeated in NAME"]
                 
-                if row['PRODUCT_SET_SID'] in duplicate_products['PRODUCT_SET_SID'].values:
-                    reasons.append("Duplicate product")
-                    reason_codes_and_messages.append(reasons_dict["Duplicate product"])
+                elif row['PRODUCT_SET_SID'] in duplicate_products['PRODUCT_SET_SID'].values:
+                    reason_code, comment = reasons_dict["Duplicate product"]
 
-                status = 'Rejected' if reasons else 'Approved'
-
-                # Prepare detailed reason string with codes and messages
-                detailed_reasons = []
-                for code, message in reason_codes_and_messages:
-                    detailed_reasons.append(f"{code} - {message}")
+                status = 'Rejected' if reason_code else 'Approved'
                 
-                reason_str = ' | '.join(detailed_reasons) if detailed_reasons else ''
-                
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, reason_str))
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, f"{reason_code} - {comment}", comment))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
