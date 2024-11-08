@@ -6,7 +6,7 @@ from datetime import datetime
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="wide")
 
-# Function to load the blacklisted words from a file
+# Function to load blacklisted words from a file
 def load_blacklisted_words():
     try:
         with open('blacklisted.txt', 'r') as f:
@@ -31,8 +31,6 @@ def load_config_files():
     for key, filename in config_files.items():
         try:
             df = pd.read_excel(filename).rename(columns=lambda x: x.strip())  # Strip spaces from column names
-            if key == 'flags':
-                st.write("Available columns in flags.xlsx:", df.columns.tolist())
             data[key] = df
             st.sidebar.success(f"✔️ {filename} loaded successfully")
         except Exception as e:
@@ -129,13 +127,13 @@ if uploaded_file is not None:
         
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
-        # Generate report
+        # Generate report with a single reason per rejection
         final_report_rows = []
         for _, row in data.iterrows():
-            reasons = []
-            reason_codes_and_messages = []
-            
-            # Check all validation conditions
+            reason = None
+            reason_details = None
+
+            # Check all validation conditions in a specific order and take the first applicable one
             validations = [
                 (missing_color, "Missing COLOR"),
                 (missing_brand_or_name, "Missing BRAND or NAME"),
@@ -148,27 +146,26 @@ if uploaded_file is not None:
             
             for validation_df, flag in validations:
                 if row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                    reasons.append(flag)
-                    if flag in reasons_dict:
-                        reason_codes_and_messages.append(reasons_dict[flag])
-            
+                    reason = flag
+                    reason_details = reasons_dict.get(flag, ("", "", ""))
+                    break  # Stop after finding the first applicable reason
+
             # Check perfume price issues separately
-            if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                reasons.append("Perfume price issue")
-                if "Perfume price issue" in reasons_dict:
-                    reason_codes_and_messages.append(reasons_dict["Perfume price issue"])
+            if not reason and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
+                reason = "Perfume price issue"
+                reason_details = reasons_dict.get("Perfume price issue", ("", "", ""))
 
             # Prepare report row
-            status = 'Rejected' if reasons else 'Approved'
-            detailed_reasons = [f"{code} - {message}" for code, message, _ in reason_codes_and_messages]
-            comments = [comment for _, _, comment in reason_codes_and_messages]
+            status = 'Rejected' if reason else 'Approved'
+            reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
+            detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else ""
             
             final_report_rows.append({
                 'ProductSetSid': row['PRODUCT_SET_SID'],
                 'ParentSKU': row.get('PARENTSKU', ''),
                 'Status': status,
-                'Reason': ' | '.join(detailed_reasons) if detailed_reasons else '',
-                'Comment': ' | '.join(comments) if comments else ''
+                'Reason': detailed_reason,
+                'Comment': comment
             })
 
         # Create final report DataFrame
@@ -224,27 +221,25 @@ if uploaded_file is not None:
             st.download_button(
                 label="Download Full Report",
                 data=final_report_excel,
-                file_name=f"Full_Report_{current_date}.xlsx",
+                file_name=f"Product_Validation_Full_Report_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        
         with col2:
             approved_excel = to_excel(approved_df, flags_data)
             st.download_button(
-                label="Download Approved Products",
+                label="Download Approved Only",
                 data=approved_excel,
-                file_name=f"Approved_Products_{current_date}.xlsx",
+                file_name=f"Product_Validation_Approved_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        
         with col3:
             rejected_excel = to_excel(rejected_df, flags_data)
             st.download_button(
-                label="Download Rejected Products",
+                label="Download Rejected Only",
                 data=rejected_excel,
-                file_name=f"Rejected_Products_{current_date}.xlsx",
+                file_name=f"Product_Validation_Rejected_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     except Exception as e:
-        st.error(f"Error processing file: {e}")
+        st.error(f"Error processing uploaded file: {e}")
