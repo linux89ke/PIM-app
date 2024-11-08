@@ -30,7 +30,7 @@ def load_config_files():
     data = {}
     for key, filename in config_files.items():
         try:
-            df = pd.read_excel(filename)
+            df = pd.read_excel(filename).rename(columns=lambda x: x.strip())  # Strip spaces from column names
             if key == 'flags':
                 st.write("Available columns in flags.xlsx:", df.columns.tolist())
             data[key] = df
@@ -222,30 +222,29 @@ if uploaded_file is not None:
         with col1:
             final_report_excel = to_excel(final_report_df, flags_data)
             st.download_button(
-                "📊 Download Full Report",
+                label="Download Full Report",
                 data=final_report_excel,
-                file_name=f"final_report_{current_date}.xlsx",
+                file_name=f"Full_Report_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         
         with col2:
             approved_excel = to_excel(approved_df, flags_data)
             st.download_button(
-                "✅ Download Approved Products",
+                label="Download Approved Products",
                 data=approved_excel,
-                file_name=f"approved_products_{current_date}.xlsx",
+                file_name=f"Approved_Products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         
         with col3:
             rejected_excel = to_excel(rejected_df, flags_data)
             st.download_button(
-                "❌ Download Rejected Products",
+                label="Download Rejected Products",
                 data=rejected_excel,
-                file_name=f"rejected_products_{current_date}.xlsx",
+                file_name=f"Rejected_Products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
     except Exception as e:
         st.error(f"Error processing file: {e}")
-        st.exception(e)
