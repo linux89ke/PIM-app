@@ -33,15 +33,15 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Define reason codes and messages
+            # Define reason codes and messages with corresponding comments
             reasons_dict = {
                 "Missing COLOR": ("1000005", "Kindly confirm the actual product colour", "Kindly include color of the product"),
                 "Missing BRAND or NAME": ("1000007", "Other Reason", "Missing BRAND or NAME"),
-                "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Name too short"),
+                "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Kindly Improve Product Name"),
                 "Generic BRAND": ("1000007", "Other Reason", "Kindly use Fashion as brand name for Fashion products"),
-                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", ""),
-                "Blacklisted word in NAME": ("1000033", "Keywords in your content/Product name/description has been blacklisted", "Blacklisted word in NAME"),
-                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "BRAND name repeated in NAME"),
+                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", "Perfume price too low"),
+                "Blacklisted word in NAME": ("1000033", "Keywords in your content/Product name/description has been blacklisted", "Keywords in your content/ Product name / description has been blacklisted"),
+                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
                 "Duplicate product": ("1000007", "Other Reason", "Product is duplicated")
             }
 
@@ -125,7 +125,15 @@ if uploaded_file is not None:
                 
                 reason_str = ' | '.join(detailed_reasons) if detailed_reasons else ''
                 
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, reason_str))
+                # Assign the appropriate comment for each rejection reason
+                comments = []
+                for reason in reasons:
+                    comment = reasons_dict[reason][2]  # The comment for the reason
+                    comments.append(comment)
+                
+                comment_str = ' | '.join(comments) if comments else ''
+                
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment_str))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
@@ -137,33 +145,6 @@ if uploaded_file is not None:
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Create containers for each flag result with counts using expanders
-            with st.expander(f"Missing COLOR ({len(missing_color)} products)"):
-                st.write(missing_color if len(missing_color) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Missing BRAND or NAME ({len(missing_brand_or_name)} products)"):
-                st.write(missing_brand_or_name if len(missing_brand_or_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Single-word NAME ({len(single_word_name)} products)"):
-                st.write(single_word_name if len(single_word_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({len(generic_brand_issues)} products)"):
-                st.write(generic_brand_issues if len(generic_brand_issues) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
-                flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                st.write(flagged_perfumes_df if len(flagged_perfumes) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Blacklisted words in NAME ({len(flagged_blacklisted)} products)"):
-                flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0])
-                st.write(flagged_blacklisted if len(flagged_blacklisted) > 0 else "No products flagged.")
-                    
-            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name)} products)"):
-                st.write(brand_in_name if len(brand_in_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
-                st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
-            
             # Excel report function
             def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
                 with BytesIO() as buffer:
