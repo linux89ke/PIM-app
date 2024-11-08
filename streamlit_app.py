@@ -48,7 +48,7 @@ if uploaded_file is not None:
                 "Duplicate product": ("1000007", "Other Reason", "Product is duplicated")
             }
 
-            # Flagging logic
+            # Flagging logic (as previously defined)
             missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
             missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
                                           data['NAME'].isna() | (data['NAME'] == '')]
@@ -168,9 +168,10 @@ if uploaded_file is not None:
             with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
                 if len(flagged_perfumes) > 0:
                     flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 
-                                                    'CATEGORY', 'PARENTSKU', 
-                                                    'SELLER_NAME', 'GLOBAL_PRICE']])
+                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 
+                                                    'BRAND', 'CATEGORY', 
+                                                    'PARENTSKU','SELLER_NAME',
+                                                    'GLOBAL_PRICE']])
                 else:
                     st.write("No products flagged.")
                     
@@ -183,10 +184,8 @@ if uploaded_file is not None:
                                                    'PRODUCT_SET_SID',
                                                    'NAME',
                                                    'Blacklisted_Word',
-                                                   'BRAND',
-                                                   'CATEGORY',
-                                                   'PARENTSKU',
-                                                   'SELLER_NAME']])
+                                                   'BRAND','CATEGORY',
+                                                   'PARENTSKU','SELLER_NAME']] )
                 else:
                     st.write("No products flagged.")
                     
@@ -226,21 +225,39 @@ if uploaded_file is not None:
             # Get current date for naming files
             current_date = datetime.now().strftime("%Y-%m-%d")
 
-            # Download buttons for the reports with two sheets each
-            st.download_button(f"Download Final Report ({current_date})", to_excel(final_report_df, reasons_data, 
-                               sheet1_name='Final Report', sheet2_name='Rejection Reasons'), 
-                               f"final_report_{current_date}.xlsx", 
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            # Adding some space before download buttons using markdown
+            st.markdown("<br><br>", unsafe_allow_html=True)
+
+            # Download buttons for the reports with two sheets each and custom styles
+            button_style = """
+                        <style>
+                        .download-button {
+                            background-color: blue;
+                            color: white;
+                            border: none;
+                            padding: 10px;
+                            font-size: 16px;
+                            cursor: pointer;
+                        }
+                        .download-button:hover {
+                            background-color: red;
+                            font-weight: bold;
+                        }
+                        </style>
+                        """
             
-            st.download_button(f"Download Approved Products ({current_date})", to_excel(approved_df, reasons_data,
-                               sheet1_name='Approved Products', sheet2_name='Rejection Reasons'), 
-                               f"approved_products_{current_date}.xlsx", 
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            # Injecting CSS styles into Streamlit app
+            st.markdown(button_style, unsafe_allow_html=True)
+
+            # Creating download buttons using HTML to apply styles
+            download_buttons_html = f"""
+                                    <button class="download-button" onclick="window.open('{to_excel(final_report_df, reasons_data, sheet1_name='Final Report', sheet2_name='Rejection Reasons')}')">Download Final Report ({current_date})</button>
+                                    <button class="download-button" onclick="window.open('{to_excel(approved_df, reasons_data, sheet1_name='Approved Products', sheet2_name='Rejection Reasons')}')">Download Approved Products ({current_date})</button>
+                                    <button class="download-button" onclick="window.open('{to_excel(rejected_df, reasons_data, sheet1_name='Rejected Products', sheet2_name='Rejection Reasons')}')">Download Rejected Products ({current_date})</button>
+                                    """
             
-            st.download_button(f"Download Rejected Products ({current_date})", to_excel(rejected_df, reasons_data,
-                               sheet1_name='Rejected Products', sheet2_name='Rejection Reasons'), 
-                               f"rejected_products_{current_date}.xlsx", 
-                               "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            # Displaying download buttons using markdown to allow HTML rendering
+            st.markdown(download_buttons_html, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Error loading the CSV file: {e}")
