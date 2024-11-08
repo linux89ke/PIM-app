@@ -66,10 +66,14 @@ if uploaded_file is not None:
                 elif any(black_word.lower() in row['NAME'].lower() for black_word in blacklisted_words):
                     reason_code, comment = flags_dict.get('Blacklisted word in NAME', ("", ""))
                 
-                elif row['BRAND'] in brand_in_name['BRAND'].values:
+                # Check for brand name repetition (ensure this logic matches your needs)
+                brand_in_name_check = data[data.apply(lambda r: r['BRAND'].lower() in r['NAME'].lower(), axis=1)]
+                if row['BRAND'] in brand_in_name_check['BRAND'].values:
                     reason_code, comment = flags_dict.get('BRAND name repeated in NAME', ("", ""))
                 
-                elif row['NAME'] in duplicate_products['NAME'].values:
+                # Check for duplicates (ensure this logic matches your needs)
+                duplicate_products_check = data[data.duplicated(subset=['NAME', 'BRAND'], keep=False)]
+                if row['NAME'] in duplicate_products_check['NAME'].values:
                     reason_code, comment = flags_dict.get('Duplicate product', ("", ""))
 
                 status = 'Rejected' if reason_code else 'Approved'
@@ -106,11 +110,11 @@ if uploaded_file is not None:
                 flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0])
                 st.write(flagged_blacklisted if len(flagged_blacklisted) > 0 else "No products flagged.")
             
-            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name)} products)"):
-                st.write(brand_in_name if len(brand_in_name) > 0 else "No products flagged.")
+            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name_check)} products)"):
+                st.write(brand_in_name_check if len(brand_in_name_check) > 0 else "No products flagged.")
             
-            with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
-                st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
+            with st.expander(f"Duplicate products ({len(duplicate_products_check)} products)"):
+                st.write(duplicate_products_check if len(duplicate_products_check) > 0 else "No products flagged.")
 
             # Function to create Excel files with three sheets each
             def to_excel(df1, df2, df3, sheet1_name="ApprovedProducts", sheet2_name="RejectedProducts", sheet3_name="FinalReport"):
