@@ -3,8 +3,7 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 
-# Set page config
-st.set_page_config(page_title="Product Validation Tool", layout="wide")
+
 
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
