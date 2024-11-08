@@ -141,60 +141,56 @@ if uploaded_file is not None:
             st.write("Final Report Preview")
             st.write(final_report_df)
 
-            # Display expandable sections for flagged products
-            with st.expander("Flagged Products with Missing Color"):
-                st.write(missing_color)
+            # Count flagged rows for each issue
+            flag_summary = {
+                "Missing COLOR": len(missing_color),
+                "Missing BRAND or NAME": len(missing_brand_or_name),
+                "Single-word NAME": len(single_word_name),
+                "Generic BRAND": len(generic_brand_issues),
+                "Perfume price issue": len(flagged_perfumes),
+                "Blacklisted word in NAME": len(flagged_blacklisted),
+                "BRAND name repeated in NAME": len(brand_in_name),
+                "Duplicate product": len(duplicate_products)
+            }
 
-            with st.expander("Flagged Products with Missing Brand or Name"):
-                st.write(missing_brand_or_name)
+            # Display Flag Summary Report
+            flag_summary_df = pd.DataFrame(list(flag_summary.items()), columns=["Flag", "Number of Rows"])
+            st.write("Flag Summary Report")
+            st.write(flag_summary_df)
 
-            with st.expander("Flagged Products with Single-Word Name"):
-                st.write(single_word_name)
-
-            with st.expander("Flagged Products with Generic Brand"):
-                st.write(generic_brand_issues)
-
-            with st.expander("Flagged Products with Perfume Price Issues"):
-                st.write(flagged_perfumes)
-
-            with st.expander("Flagged Products with Blacklisted Words"):
-                st.write(flagged_blacklisted)
-
-            with st.expander("Flagged Products with Brand Repeated in Name"):
-                st.write(brand_in_name)
-
-            with st.expander("Flagged Duplicate Products"):
-                st.write(duplicate_products)
-
-            # Separate approved and rejected reports
-            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
-            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
-
-            # Excel report function
-            def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+            # Generate final three reports
+            def to_excel(df1, df2, df3, sheet1_name="ProductSets", sheet2_name="RejectionReasons", sheet3_name="FlagSummary"):
                 with BytesIO() as buffer:
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                         df1.to_excel(writer, index=False, sheet_name=sheet1_name)
                         df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+                        df3.to_excel(writer, index=False, sheet_name=sheet3_name)
                     return buffer.getvalue()
 
             # Create download buttons for each report
             st.download_button(
                 label="Download Approved Products Report",
-                data=to_excel(approved_df, reasons_data),
+                data=to_excel(final_report_df[final_report_df['Status'] == 'Approved'], reasons_data, flag_summary_df),
                 file_name=f"approved_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
             st.download_button(
                 label="Download Rejected Products Report",
-                data=to_excel(rejected_df, reasons_data),
+                data=to_excel(final_report_df[final_report_df['Status'] == 'Rejected'], reasons_data, flag_summary_df),
                 file_name=f"rejected_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            st.download_button(
+                label="Download Flag Summary Report",
+                data=to_excel(final_report_df, reasons_data, flag_summary_df),
+                file_name=f"flag_summary_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
         else:
             st.write("The uploaded CSV file is empty.")
-    
+
     except Exception as e:
         st.write(f"Error: {e}")
