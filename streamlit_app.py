@@ -251,7 +251,7 @@ if uploaded_file is not None:
                 key="approved_products"
              )
 
-             rejected_products_button_data = to_excel(rejected_df, reasons_data)
+        rejected_products_button_data = to_excel(rejected_df, reasons_data)
 
              st.download_button(
                  label=f"Download Rejected Products ({current_date})",
