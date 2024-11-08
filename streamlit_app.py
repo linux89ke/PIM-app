@@ -20,6 +20,12 @@ blacklisted_words = load_blacklisted_words()
 # Load flags from flags.xlsx
 try:
     flags_df = pd.read_excel('flags.xlsx')
+    
+    # Check if required columns exist
+    if not all(col in flags_df.columns for col in ['Flag', 'Reason', 'Comment']):
+        raise ValueError("The flags.xlsx file must contain 'Flag', 'Reason', and 'Comment' columns.")
+
+    # Create a dictionary for flags
     flags_dict = {row['Flag']: (row['Reason'], row['Comment']) for index, row in flags_df.iterrows()}
 except Exception as e:
     st.error(f"Error loading flags: {e}")
@@ -40,57 +46,67 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
+            # Flagging logic
+            missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
+            missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
+                                          data['NAME'].isna() | (data['NAME'] == '')]
+            single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
+                                    (data['BRAND'] != 'Jumia Book')]
+            valid_category_codes_fas = category_fas_data['ID'].tolist()
+            generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
+                                         (data['BRAND'] == 'Generic')]
+            
+            flagged_perfumes = []
+            for index, row in data.iterrows():
+                brand = row['BRAND']
+                if brand in perfumes_data['BRAND'].values:
+                    keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
+                    for keyword in keywords:
+                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
+                            perfume_price = perfumes_data.loc[
+                                (perfumes_data['BRAND'] == brand) & 
+                                (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
+                            price_difference = row['GLOBAL_PRICE'] - perfume_price
+                            if price_difference < 0:
+                                flagged_perfumes.append(row)
+                                break
+            
+            flagged_blacklisted = data[data['NAME'].apply(lambda name: any(black_word.lower() in name.lower().split() for black_word in blacklisted_words))]
+            brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and 
+                                              isinstance(row['NAME'], str) and 
+                                              row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+            duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
+
             # Prepare the final report rows
             final_report_rows = []
 
-            # Initialize lists to track flagged products
-            missing_color = []
-            missing_brand_or_name = []
-            single_word_name = []
-            generic_brand_issues = []
-            flagged_perfumes = []
-            flagged_blacklisted = []
-            brand_in_name_check = []
-            duplicate_products_check = []
-
-            # Flagging logic
+            # Collect all flagged products for final report with only one reason per product
             for index, row in data.iterrows():
                 reason_code, comment = "", ""
 
-                # Example validation checks (customize these as needed)
-                if row['COLOR'] is None or row['COLOR'] == '':
+                if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Missing COLOR', ("", ""))
-                    missing_color.append(row)
-
-                elif row['BRAND'] is None or row['BRAND'] == '':
+                
+                elif row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Missing BRAND or NAME', ("", ""))
-                    missing_brand_or_name.append(row)
-
-                elif len(row['NAME'].split()) == 1:
+                
+                elif row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Single-word NAME', ("", ""))
-                    single_word_name.append(row)
-
-                elif row['BRAND'] == 'Generic':
+                
+                elif row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Generic BRAND', ("", ""))
-                    generic_brand_issues.append(row)
-
-                elif row['GLOBAL_PRICE'] < 0:  # Example condition for perfume price issue
+                
+                elif row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                     reason_code, comment = flags_dict.get('Perfume price issue', ("", ""))
-                    flagged_perfumes.append(row)
-
-                elif any(black_word.lower() in row['NAME'].lower() for black_word in blacklisted_words):
+                
+                elif row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Blacklisted word in NAME', ("", ""))
-                    flagged_blacklisted.append(row)
-
-                # Check for brand name repetition (ensure this logic matches your needs)
-                if row['BRAND'] in data[data.apply(lambda r: r['BRAND'].lower() in r['NAME'].lower(), axis=1)]['BRAND'].values:
+                
+                elif row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('BRAND name repeated in NAME', ("", ""))
-                    brand_in_name_check.append(row)
-
-                # Check for duplicates (ensure this logic matches your needs)
-                if row['NAME'] in data[data.duplicated(subset=['NAME', 'BRAND'], keep=False)]['NAME'].values:
+                
+                elif row['PRODUCT_SET_SID'] in duplicate_products['PRODUCT_SET_SID'].values:
                     reason_code, comment = flags_dict.get('Duplicate product', ("", ""))
-                    duplicate_products_check.append(row)
 
                 status = 'Rejected' if reason_code else 'Approved'
                 
@@ -126,19 +142,19 @@ if uploaded_file is not None:
                 flagged_blacklisted_df = pd.DataFrame(flagged_blacklisted)
                 st.write(flagged_blacklisted_df if len(flagged_blacklisted) > 0 else "No products flagged.")
             
-            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name_check)} products)"):
-                st.write(brand_in_name_check if len(brand_in_name_check) > 0 else "No products flagged.")
+            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name)} products)"):
+                st.write(brand_in_name if len(brand_in_name) > 0 else "No products flagged.")
             
-            with st.expander(f"Duplicate products ({len(duplicate_products_check)} products)"):
-                st.write(duplicate_products_check if len(duplicate_products_check) > 0 else "No products flagged.")
+            with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
+                st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
 
             # Function to create Excel files with three sheets each
-            def to_excel(df1, df2, df3, sheet1_name="ApprovedProducts", sheet2_name="RejectedProducts", sheet3_name="FinalReport"):
+            def to_excel(df1, df2, df3):
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                    df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-                    df3.to_excel(writer, index=False, sheet_name=sheet3_name)
+                    df1.to_excel(writer, index=False, sheet_name="ApprovedProducts")
+                    df2.to_excel(writer, index=False, sheet_name="RejectedProducts")
+                    df3.to_excel(writer, index=False, sheet_name="FinalReport")
                 output.seek(0)
                 return output.getvalue()
 
