@@ -168,7 +168,7 @@ if uploaded_file is not None:
             with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
                 if len(flagged_perfumes) > 0:
                     flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 
+                    st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID',
                                                     'NAME','BRAND','CATEGORY',
                                                     'PARENTSKU','SELLER_NAME',
                                                     'GLOBAL_PRICE']])
@@ -228,57 +228,34 @@ if uploaded_file is not None:
             # Adding some space before download buttons using markdown
             st.markdown("<br><br>", unsafe_allow_html=True)
 
-            # Adding custom CSS styles for buttons
-            button_style = """
-                        <style>
-                        .download-button {
-                            background-color: blue;
-                            color: white;
-                            border: none;
-                            padding: 10px;
-                            font-size: 16px;
-                            cursor: pointer;
-                        }
-                        .download-button:hover {
-                            background-color: red;
-                            font-weight: bold;
-                        }
-                        </style>
-                        """
-            
-            # Injecting CSS styles into Streamlit app
-            st.markdown(button_style, unsafe_allow_html=True)
-
-            # Creating download buttons using Streamlit's built-in functionality.
-            
             # Download buttons for the reports using Streamlit's built-in functionality.
             
             # Final Report Download Button
-            final_report_button = to_excel(final_report_df, reasons_data)
+            final_report_button_data = to_excel(final_report_df, reasons_data)
             
             st.download_button(
                 label=f"Download Final Report ({current_date})",
-                data=final_report_button,
+                data=final_report_button_data,
                 file_name=f"final_report_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="final_report"
             )
 
-            approved_products_button = to_excel(approved_df, reasons_data)
+            approved_products_button_data = to_excel(approved_df, reasons_data)
             
             st.download_button(
                 label=f"Download Approved Products ({current_date})",
-                data=approved_products_button,
+                data=approved_products_button_data,
                 file_name=f"approved_products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="approved_products"
              )
 
-             rejected_products_button = to_excel(rejected_df, reasons_data)
+             rejected_products_button_data = to_excel(rejected_df, reasons_data)
 
              st.download_button(
                  label=f"Download Rejected Products ({current_date})",
-                 data=rejected_products_button,
+                 data=rejected_products_button_data,
                  file_name=f"rejected_products_{current_date}.xlsx",
                  mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                  key="rejected_products"
