@@ -141,6 +141,31 @@ if uploaded_file is not None:
             st.write("Final Report Preview")
             st.write(final_report_df)
 
+            # Display expandable sections for flagged products
+            with st.expander("Flagged Products with Missing Color"):
+                st.write(missing_color)
+
+            with st.expander("Flagged Products with Missing Brand or Name"):
+                st.write(missing_brand_or_name)
+
+            with st.expander("Flagged Products with Single-Word Name"):
+                st.write(single_word_name)
+
+            with st.expander("Flagged Products with Generic Brand"):
+                st.write(generic_brand_issues)
+
+            with st.expander("Flagged Products with Perfume Price Issues"):
+                st.write(flagged_perfumes)
+
+            with st.expander("Flagged Products with Blacklisted Words"):
+                st.write(flagged_blacklisted)
+
+            with st.expander("Flagged Products with Brand Repeated in Name"):
+                st.write(brand_in_name)
+
+            with st.expander("Flagged Duplicate Products"):
+                st.write(duplicate_products)
+
             # Separate approved and rejected reports
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
@@ -168,12 +193,8 @@ if uploaded_file is not None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-            st.download_button(
-                label="Download Full Report",
-                data=to_excel(final_report_df, reasons_data),
-                file_name=f"product_validation_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+        else:
+            st.write("The uploaded CSV file is empty.")
+    
     except Exception as e:
-        st.error(f"Error loading or processing the file: {e}")
+        st.write(f"Error: {e}")
