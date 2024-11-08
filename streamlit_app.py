@@ -32,16 +32,14 @@ def load_config_files():
         try:
             df = pd.read_excel(filename).rename(columns=lambda x: x.strip())  # Strip spaces from column names
             data[key] = df
-            st.sidebar.success(f"✔️ {filename} loaded successfully")
         except Exception as e:
-            st.sidebar.error(f"❌ Error loading {filename}: {e}")
+            st.error(f"❌ Error loading {filename}: {e}")
             if key == 'flags':  # flags.xlsx is critical
                 st.stop()
     return data
 
 # Initialize the app
 st.title("Product Validation Tool")
-st.sidebar.title("Configuration Status")
 
 # Load configuration files
 config_data = load_config_files()
