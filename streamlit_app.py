@@ -4,7 +4,7 @@ from io import BytesIO
 from datetime import datetime
 
 # Set page config
-st.set_page_config(page_title="Product Validation Tool", layout="wide")
+st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
