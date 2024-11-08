@@ -43,6 +43,16 @@ if uploaded_file is not None:
             # Prepare the final report rows
             final_report_rows = []
 
+            # Initialize lists to track flagged products
+            missing_color = []
+            missing_brand_or_name = []
+            single_word_name = []
+            generic_brand_issues = []
+            flagged_perfumes = []
+            flagged_blacklisted = []
+            brand_in_name_check = []
+            duplicate_products_check = []
+
             # Flagging logic
             for index, row in data.iterrows():
                 reason_code, comment = "", ""
@@ -50,31 +60,37 @@ if uploaded_file is not None:
                 # Example validation checks (customize these as needed)
                 if row['COLOR'] is None or row['COLOR'] == '':
                     reason_code, comment = flags_dict.get('Missing COLOR', ("", ""))
-                
+                    missing_color.append(row)
+
                 elif row['BRAND'] is None or row['BRAND'] == '':
                     reason_code, comment = flags_dict.get('Missing BRAND or NAME', ("", ""))
-                
+                    missing_brand_or_name.append(row)
+
                 elif len(row['NAME'].split()) == 1:
                     reason_code, comment = flags_dict.get('Single-word NAME', ("", ""))
-                
+                    single_word_name.append(row)
+
                 elif row['BRAND'] == 'Generic':
                     reason_code, comment = flags_dict.get('Generic BRAND', ("", ""))
-                
+                    generic_brand_issues.append(row)
+
                 elif row['GLOBAL_PRICE'] < 0:  # Example condition for perfume price issue
                     reason_code, comment = flags_dict.get('Perfume price issue', ("", ""))
-                
+                    flagged_perfumes.append(row)
+
                 elif any(black_word.lower() in row['NAME'].lower() for black_word in blacklisted_words):
                     reason_code, comment = flags_dict.get('Blacklisted word in NAME', ("", ""))
-                
+                    flagged_blacklisted.append(row)
+
                 # Check for brand name repetition (ensure this logic matches your needs)
-                brand_in_name_check = data[data.apply(lambda r: r['BRAND'].lower() in r['NAME'].lower(), axis=1)]
-                if row['BRAND'] in brand_in_name_check['BRAND'].values:
+                if row['BRAND'] in data[data.apply(lambda r: r['BRAND'].lower() in r['NAME'].lower(), axis=1)]['BRAND'].values:
                     reason_code, comment = flags_dict.get('BRAND name repeated in NAME', ("", ""))
-                
+                    brand_in_name_check.append(row)
+
                 # Check for duplicates (ensure this logic matches your needs)
-                duplicate_products_check = data[data.duplicated(subset=['NAME', 'BRAND'], keep=False)]
-                if row['NAME'] in duplicate_products_check['NAME'].values:
+                if row['NAME'] in data[data.duplicated(subset=['NAME', 'BRAND'], keep=False)]['NAME'].values:
                     reason_code, comment = flags_dict.get('Duplicate product', ("", ""))
+                    duplicate_products_check.append(row)
 
                 status = 'Rejected' if reason_code else 'Approved'
                 
@@ -107,8 +123,8 @@ if uploaded_file is not None:
                 st.write(flagged_perfumes_df if len(flagged_perfumes) > 0 else "No products flagged.")
             
             with st.expander(f"Blacklisted words in NAME ({len(flagged_blacklisted)} products)"):
-                flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0])
-                st.write(flagged_blacklisted if len(flagged_blacklisted) > 0 else "No products flagged.")
+                flagged_blacklisted_df = pd.DataFrame(flagged_blacklisted)
+                st.write(flagged_blacklisted_df if len(flagged_blacklisted) > 0 else "No products flagged.")
             
             with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name_check)} products)"):
                 st.write(brand_in_name_check if len(brand_in_name_check) > 0 else "No products flagged.")
