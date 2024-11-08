@@ -6,7 +6,7 @@ from datetime import datetime
 # Function to load the blacklisted words from a file
 def load_blacklisted_words():
     with open('blacklisted.txt', 'r') as f:
-        return [line.strip() for line in f.readlines()]
+    return [line.strip() for line in f.readlines()]
 
 # Load data for checks
 check_variation_data = pd.read_excel('check_variation.xlsx')
@@ -33,15 +33,15 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Define reason codes and messages with corresponding comments
+            # Define reason codes and messages
             reasons_dict = {
                 "Missing COLOR": ("1000005", "Kindly confirm the actual product colour", "Kindly include color of the product"),
                 "Missing BRAND or NAME": ("1000007", "Other Reason", "Missing BRAND or NAME"),
-                "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Kindly Improve Product Name"),
+                "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Name too short"),
                 "Generic BRAND": ("1000007", "Other Reason", "Kindly use Fashion as brand name for Fashion products"),
-                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", "Perfume price too low"),
-                "Blacklisted word in NAME": ("1000033", "Keywords in your content/Product name/description has been blacklisted", "Keywords in your content/ Product name / description has been blacklisted"),
-                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
+                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", ""),
+                "Blacklisted word in NAME": ("1000033", "Keywords in your content/Product name/description has been blacklisted", "Blacklisted word in NAME"),
+                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "BRAND name repeated in NAME"),
                 "Duplicate product": ("1000007", "Other Reason", "Product is duplicated")
             }
 
@@ -54,7 +54,7 @@ if uploaded_file is not None:
             valid_category_codes_fas = category_fas_data['ID'].tolist()
             generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
                                          (data['BRAND'] == 'Generic')]
-            
+
             flagged_perfumes = []
             for index, row in data.iterrows():
                 brand = row['BRAND']
@@ -69,7 +69,7 @@ if uploaded_file is not None:
                             if price_difference < 0:
                                 flagged_perfumes.append(row)
                                 break
-            
+
             flagged_blacklisted = data[data['NAME'].apply(lambda name: any(black_word.lower() in name.lower().split() for black_word in blacklisted_words))]
             brand_in_name = data[data.apply(lambda row: isinstance(row['BRAND'], str) and 
                                               isinstance(row['NAME'], str) and 
@@ -87,53 +87,45 @@ if uploaded_file is not None:
                 if row['PRODUCT_SET_SID'] in missing_color['PRODUCT_SET_SID'].values:
                     reasons.append("Missing COLOR")
                     reason_codes_and_messages.append(reasons_dict["Missing COLOR"])
-                
+
                 if row['PRODUCT_SET_SID'] in missing_brand_or_name['PRODUCT_SET_SID'].values:
                     reasons.append("Missing BRAND or NAME")
                     reason_codes_and_messages.append(reasons_dict["Missing BRAND or NAME"])
-                
+
                 if row['PRODUCT_SET_SID'] in single_word_name['PRODUCT_SET_SID'].values:
                     reasons.append("Single-word NAME")
                     reason_codes_and_messages.append(reasons_dict["Single-word NAME"])
-                
+
                 if row['PRODUCT_SET_SID'] in generic_brand_issues['PRODUCT_SET_SID'].values:
                     reasons.append("Generic BRAND")
                     reason_codes_and_messages.append(reasons_dict["Generic BRAND"])
-                
+
                 if row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                     reasons.append("Perfume price issue")
                     reason_codes_and_messages.append(reasons_dict["Perfume price issue"])
-                
+
                 if row['PRODUCT_SET_SID'] in flagged_blacklisted['PRODUCT_SET_SID'].values:
                     reasons.append("Blacklisted word in NAME")
                     reason_codes_and_messages.append(reasons_dict["Blacklisted word in NAME"])
-                
+
                 if row['PRODUCT_SET_SID'] in brand_in_name['PRODUCT_SET_SID'].values:
                     reasons.append("BRAND name repeated in NAME")
                     reason_codes_and_messages.append(reasons_dict["BRAND name repeated in NAME"])
-                
+
                 if row['PRODUCT_SET_SID'] in duplicate_products['PRODUCT_SET_SID'].values:
                     reasons.append("Duplicate product")
                     reason_codes_and_messages.append(reasons_dict["Duplicate product"])
 
                 status = 'Rejected' if reasons else 'Approved'
-                
+
                 # Prepare detailed reason string with codes and messages
                 detailed_reasons = []
                 for code, message, _ in reason_codes_and_messages:
                     detailed_reasons.append(f"{code} - {message}")
-                
+
                 reason_str = ' | '.join(detailed_reasons) if detailed_reasons else ''
-                
-                # Assign the appropriate comment for each rejection reason
-                comments = []
-                for reason in reasons:
-                    comment = reasons_dict[reason][2]  # The comment for the reason
-                    comments.append(comment)
-                
-                comment_str = ' | '.join(comments) if comments else ''
-                
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment_str))
+
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, reason_str))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
@@ -141,43 +133,46 @@ if uploaded_file is not None:
             st.write("Final Report Preview")
             st.write(final_report_df)
 
-            # Split the final report into Approved and Rejected reports
-            approved_report = final_report_df[final_report_df['Status'] == 'Approved']
-            rejected_report = final_report_df[final_report_df['Status'] == 'Rejected']
+            # Separate approved and rejected reports
+            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Generate final three reports
-            def to_excel(approved_df, rejected_df, combined_df):
-                with BytesIO() as buffer:
-                    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                        approved_df.to_excel(writer, index=False, sheet_name="Approved")
-                        rejected_df.to_excel(writer, index=False, sheet_name="Rejected")
-                        combined_df.to_excel(writer, index=False, sheet_name="Combined")
-                    buffer.seek(0)
-                    return buffer.read()
+            # Create containers for each flag result with counts using expanders
+            with st.expander(f"Missing COLOR ({len(missing_color)} products)"):
+                st.write(f"{len(missing_color)} products flagged for missing COLOR.") if len(missing_color) > 0 else st.write("No products flagged.")
 
-            # Provide download buttons for the reports
-            st.download_button(
-                label="Download Approved Report",
-                data=to_excel(approved_report, rejected_report, final_report_df),
-                file_name=f"approved_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            with st.expander(f"Missing BRAND or NAME ({len(missing_brand_or_name)} products)"):
+                st.write(f"{len(missing_brand_or_name)} products flagged for missing BRAND or NAME.") if len(missing_brand_or_name) > 0 else st.write("No products flagged.")
 
-            st.download_button(
-                label="Download Rejected Report",
-                data=to_excel(approved_report, rejected_report, final_report_df),
-                file_name=f"rejected_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            with st.expander(f"Single-word NAME ({len(single_word_name)} products)"):
+                st.write(f"{len(single_word_name)} products flagged for Single-word NAME.") if len(single_word_name) > 0 else st.write("No products flagged.")
 
-            st.download_button(
-                label="Download Combined Report",
-                data=to_excel(approved_report, rejected_report, final_report_df),
-                file_name=f"combined_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({len(generic_brand_issues)} products)"):
+                st.write(f"{len(generic_brand_issues)} products flagged for Generic BRAND.") if len(generic_brand_issues) > 0 else st.write("No products flagged.")
 
-        else:
-            st.write("The uploaded CSV file is empty.")
+            with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
+                st.write(f"{len(flagged_perfumes)} products flagged for perfume price issues.") if len(flagged_perfumes) > 0 else st.write("No products flagged.")
+
+            with st.expander(f"Blacklisted words in NAME ({len(flagged_blacklisted)} products)"):
+                st.write(f"{len(flagged_blacklisted)} products flagged for blacklisted words.") if len(flagged_blacklisted) > 0 else st.write("No products flagged.")
+
+            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name)} products)"):
+                st.write(f"{len(brand_in_name)} products flagged for BRAND name repeated.") if len(brand_in_name) > 0 else st.write("No products flagged.")
+
+            with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
+                st.write(f"{len(duplicate_products)} products flagged for duplication.") if len(duplicate_products) > 0 else st.write("No products flagged.")
+
+            # Saving the results in Excel
+            @st.cache
+            def save_to_excel():
+                with pd.ExcelWriter("final_report.xlsx") as writer:
+                    final_report_df.to_excel(writer, sheet_name="ProductSets", index=False)
+                    reasons_data.to_excel(writer, sheet_name="RejectionReasons", index=False)
+
+                return "final_report.xlsx"
+
+            # Provide download link
+            st.download_button("Download Final Report", save_to_excel(), "final_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
     except Exception as e:
-        st.write(f"Error: {e}")
+        st.error(f"Error processing the file: {e}")
