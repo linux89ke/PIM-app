@@ -163,8 +163,8 @@ if uploaded_file is not None:
                     
             with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
                 st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
-
-            # Function to create Excel files with two sheets each
+            
+            # Excel report function
             def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
                 with BytesIO() as buffer:
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -172,11 +172,24 @@ if uploaded_file is not None:
                         df2.to_excel(writer, index=False, sheet_name=sheet2_name)
                     return buffer.getvalue()
 
-            # Generate downloadable Excel file with ProductSets and RejectionReasons sheets
-            final_report_file = to_excel(final_report_df, reasons_data)
+            # Create download buttons for each report
+            st.download_button(
+                label="Download Approved Products Report",
+                data=to_excel(approved_df, reasons_data),
+                file_name=f"approved_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+            st.download_button(
+                label="Download Rejected Products Report",
+                data=to_excel(rejected_df, reasons_data),
+                file_name=f"rejected_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
             st.download_button(
                 label="Download Full Report",
-                data=final_report_file,
+                data=to_excel(final_report_df, reasons_data),
                 file_name=f"product_validation_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
