@@ -141,56 +141,43 @@ if uploaded_file is not None:
             st.write("Final Report Preview")
             st.write(final_report_df)
 
-            # Count flagged rows for each issue
-            flag_summary = {
-                "Missing COLOR": len(missing_color),
-                "Missing BRAND or NAME": len(missing_brand_or_name),
-                "Single-word NAME": len(single_word_name),
-                "Generic BRAND": len(generic_brand_issues),
-                "Perfume price issue": len(flagged_perfumes),
-                "Blacklisted word in NAME": len(flagged_blacklisted),
-                "BRAND name repeated in NAME": len(brand_in_name),
-                "Duplicate product": len(duplicate_products)
-            }
-
-            # Display Flag Summary Report
-            flag_summary_df = pd.DataFrame(list(flag_summary.items()), columns=["Flag", "Number of Rows"])
-            st.write("Flag Summary Report")
-            st.write(flag_summary_df)
+            # Split the final report into Approved and Rejected reports
+            approved_report = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_report = final_report_df[final_report_df['Status'] == 'Rejected']
 
             # Generate final three reports
-            def to_excel(df1, df2, df3, sheet1_name="ProductSets", sheet2_name="RejectionReasons", sheet3_name="FlagSummary"):
+            def to_excel(approved_df, rejected_df, combined_df):
                 with BytesIO() as buffer:
                     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                        df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                        df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-                        df3.to_excel(writer, index=False, sheet_name=sheet3_name)
-                    return buffer.getvalue()
+                        approved_df.to_excel(writer, index=False, sheet_name="Approved")
+                        rejected_df.to_excel(writer, index=False, sheet_name="Rejected")
+                        combined_df.to_excel(writer, index=False, sheet_name="Combined")
+                    buffer.seek(0)
+                    return buffer.read()
 
-            # Create download buttons for each report
+            # Provide download buttons for the reports
             st.download_button(
-                label="Download Approved Products Report",
-                data=to_excel(final_report_df[final_report_df['Status'] == 'Approved'], reasons_data, flag_summary_df),
+                label="Download Approved Report",
+                data=to_excel(approved_report, rejected_report, final_report_df),
                 file_name=f"approved_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
             st.download_button(
-                label="Download Rejected Products Report",
-                data=to_excel(final_report_df[final_report_df['Status'] == 'Rejected'], reasons_data, flag_summary_df),
+                label="Download Rejected Report",
+                data=to_excel(approved_report, rejected_report, final_report_df),
                 file_name=f"rejected_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
             st.download_button(
-                label="Download Flag Summary Report",
-                data=to_excel(final_report_df, reasons_data, flag_summary_df),
-                file_name=f"flag_summary_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                label="Download Combined Report",
+                data=to_excel(approved_report, rejected_report, final_report_df),
+                file_name=f"combined_report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
         else:
             st.write("The uploaded CSV file is empty.")
-
     except Exception as e:
         st.write(f"Error: {e}")
