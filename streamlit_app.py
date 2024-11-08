@@ -32,16 +32,16 @@ if uploaded_file is not None:
             st.write("CSV file loaded successfully. Preview of data:")
             st.write(data.head())
 
-            # Define reason codes and messages
+            # Define reason codes and messages with updated comments for rejections
             reasons_dict = {
-                "Missing COLOR": ("1000005", "Kindly confirm the actual product colour", "Kindly include color of the product"),
-                "Missing BRAND or NAME": ("1000007", "Other Reason", "Missing BRAND or NAME"),
-                "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Name too short"),
-                "Generic BRAND": ("1000007", "Other Reason", "Kindly use Fashion as brand name for Fashion products"),
-                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", ""),
-                "Blacklisted word in NAME": ("1000033", "Keywords in your content/Product name/description has been blacklisted", "Blacklisted word in NAME"),
-                "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "BRAND name repeated in NAME"),
-                "Duplicate product": ("1000007", "Other Reason", "Product is duplicated")
+                "Missing COLOR": ("1000005", "Kindly Add product color", ""),
+                "Missing BRAND or NAME": ("1000007", "Kindly Use correct brand", ""),
+                "Single-word NAME": ("1000008", "Kindly improve product name", ""),
+                "Generic BRAND": ("1000007", "Kindly use Fashion as brand name for Fashion items", ""),
+                "Perfume price issue": ("1000030", "Product is suspected counterfeit", ""),
+                "Blacklisted word in NAME": ("1000033", "Item is blacklisted as blacklisted word detected", ""),
+                "BRAND name repeated in NAME": ("1000002", "Kindly ensure brand is not repeated in name", ""),
+                "Duplicate product": ("1000007", "Product is duplicated", "")
             }
 
             # Flagging logic
@@ -117,7 +117,13 @@ if uploaded_file is not None:
                     detailed_reasons.append(f"{code} - {message}")
                 
                 reason_str = ' | '.join(detailed_reasons) if detailed_reasons else ''
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, reason_str))
+                
+                # Set comment based on rejection reasons
+                comment_str = ''
+                if status == 'Rejected':
+                    comment_str = ' | '.join([msg for _, msg, _ in reason_codes_and_messages])
+
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment_str))
 
             # Prepare the final report DataFrame
             final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
