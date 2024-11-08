@@ -18,8 +18,12 @@ reasons_data = pd.read_excel('reasons.xlsx')
 blacklisted_words = load_blacklisted_words()
 
 # Load flags from flags.xlsx
-flags_df = pd.read_excel('flags.xlsx')
-flags_dict = {row['Flag']: (row['Reason'], row['Comment']) for index, row in flags_df.iterrows()}
+try:
+    flags_df = pd.read_excel('flags.xlsx')
+    flags_dict = {row['Flag']: (row['Reason'], row['Comment']) for index, row in flags_df.iterrows()}
+except Exception as e:
+    st.error(f"Error loading flags: {e}")
+    flags_dict = {}
 
 # Streamlit app layout
 st.title("Product Validation Tool")
@@ -133,6 +137,6 @@ if uploaded_file is not None:
         else:
             st.write("The file is empty. Please upload a valid CSV file.")
     except Exception as e:
-        st.write(f"Error processing file: {e}")
+        st.error(f"Error processing file: {e}")
 else:
     st.write("Please upload a CSV file to proceed.")
