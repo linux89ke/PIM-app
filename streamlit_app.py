@@ -155,25 +155,43 @@ if uploaded_file is not None:
             with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
                 st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
 
-            # Function to create Excel files with three sheets each
-            def to_excel(approved_df, rejected_df, combined_df):
-                output = BytesIO()  # Create a BytesIO object
+            # Function to create Excel files with two sheets each
+            def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+                output = BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    approved_df.to_excel(writer, sheet_name="ApprovedProducts", index=False)
-                    rejected_df.to_excel(writer, sheet_name="RejectedProducts", index=False)
-                    combined_df.to_excel(writer, sheet_name="CombinedReport", index=False)
-                output.seek(0)  # Move to the beginning of the BytesIO buffer
-                return output.getvalue()  # Return the bytes of the Excel file
+                    df1.to_excel(writer, index=False, sheet_name=sheet1_name)
+                    df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+                output.seek(0)
+                return output.getvalue()
 
-            # Generate the Excel download button with three sheets
-            combined_df = pd.concat([approved_df, rejected_df])
-            file_bytes = to_excel(approved_df, rejected_df, combined_df)
-            
+            current_date = datetime.now().strftime("%Y-%m-%d")
+
+            # Download buttons for the reports
+            final_report_button_data = to_excel(final_report_df, reasons_data, 'ProductSets', 'RejectionReasons')
             st.download_button(
-                label="Download Final Reports",
-                data=file_bytes,
-                file_name=f"final_reports_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                label=f"Download Final Report ({current_date})",
+                data=final_report_button_data,
+                file_name=f"final_report_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="final_report"
+            )
+
+            approved_products_button_data = to_excel(approved_df, reasons_data, 'ApprovedProducts', 'RejectionReasons')
+            st.download_button(
+                label=f"Download Approved Products ({current_date})",
+                data=approved_products_button_data,
+                file_name=f"approved_products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="approved_products"
+            )
+
+            rejected_products_button_data = to_excel(rejected_df, reasons_data, 'RejectedProducts', 'RejectionReasons')
+            st.download_button(
+                label=f"Download Rejected Products ({current_date})",
+                data=rejected_products_button_data,
+                file_name=f"rejected_products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="rejected_products"
             )
         else:
             st.write("The file is empty. Please upload a valid CSV file.")
