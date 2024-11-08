@@ -137,39 +137,16 @@ if uploaded_file is not None:
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # Create containers for each flag result with counts using expanders
-            with st.expander(f"Missing COLOR ({len(missing_color)} products)"):
-                st.write(missing_color if len(missing_color) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Missing BRAND or NAME ({len(missing_brand_or_name)} products)"):
-                st.write(missing_brand_or_name if len(missing_brand_or_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Single-word NAME ({len(single_word_name)} products)"):
-                st.write(single_word_name if len(single_word_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({len(generic_brand_issues)} products)"):
-                st.write(generic_brand_issues if len(generic_brand_issues) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Perfume price issue ({len(flagged_perfumes)} products)"):
-                flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                st.write(flagged_perfumes_df if len(flagged_perfumes) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Blacklisted words in NAME ({len(flagged_blacklisted)} products)"):
-                flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0])
-                st.write(flagged_blacklisted if len(flagged_blacklisted) > 0 else "No products flagged.")
-                    
-            with st.expander(f"BRAND name repeated in NAME ({len(brand_in_name)} products)"):
-                st.write(brand_in_name if len(brand_in_name) > 0 else "No products flagged.")
-                    
-            with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
-                st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
-
             # Function to create Excel files with two sheets each
             def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
-                with pd.ExcelWriter(BytesIO()) as writer:
+                # Create a BytesIO buffer
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     df1.to_excel(writer, sheet_name=sheet1_name, index=False)
                     df2.to_excel(writer, sheet_name=sheet2_name, index=False)
-                    return writer.getvalue()
+                # Move to the beginning of the BytesIO buffer
+                output.seek(0)
+                return output.read()
             
             # Generate the Excel download button
             file_bytes = to_excel(approved_df, rejected_df)
