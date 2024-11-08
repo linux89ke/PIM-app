@@ -38,7 +38,7 @@ if uploaded_file is not None:
                 "Missing BRAND or NAME": ("1000007", "Kindly Use correct brand"),
                 "Single-word NAME": ("1000008", "Kindly improve product name"),
                 "Generic BRAND": ("1000007", "Kindly use Fashion as brand name for Fashion items"),
-                "Perfume price issue": ("1000030", "Product is suspected counterfeit"),
+                "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)"),
                 "Blacklisted word in NAME": ("1000033", "Item is blacklisted as blacklisted word detected"),
                 "BRAND name repeated in NAME": ("1000002", "Kindly ensure brand is not repeated in name"),
                 "Duplicate product": ("1000007", "Product is duplicated")
