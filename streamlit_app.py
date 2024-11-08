@@ -155,21 +155,24 @@ if uploaded_file is not None:
             with st.expander(f"Duplicate products ({len(duplicate_products)} products)"):
                 st.write(duplicate_products if len(duplicate_products) > 0 else "No products flagged.")
 
-            # Function to create Excel files with two sheets each
-            def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+            # Function to create Excel files with three sheets each
+            def to_excel(approved_df, rejected_df, combined_df):
                 output = BytesIO()  # Create a BytesIO object
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df1.to_excel(writer, sheet_name=sheet1_name, index=False)
-                    df2.to_excel(writer, sheet_name=sheet2_name, index=False)
+                    approved_df.to_excel(writer, sheet_name="ApprovedProducts", index=False)
+                    rejected_df.to_excel(writer, sheet_name="RejectedProducts", index=False)
+                    combined_df.to_excel(writer, sheet_name="CombinedReport", index=False)
                 output.seek(0)  # Move to the beginning of the BytesIO buffer
                 return output.getvalue()  # Return the bytes of the Excel file
 
-            # Generate the Excel download button
-            file_bytes = to_excel(approved_df, rejected_df)
+            # Generate the Excel download button with three sheets
+            combined_df = pd.concat([approved_df, rejected_df])
+            file_bytes = to_excel(approved_df, rejected_df, combined_df)
+            
             st.download_button(
-                label="Download Final Report",
+                label="Download Final Reports",
                 data=file_bytes,
-                file_name=f"final_report_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx",
+                file_name=f"final_reports_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         else:
