@@ -1,6 +1,3 @@
-To modify the existing product validation tool to include specific error codes and messages for each validation issue, you can adjust the code to incorporate the specified reasons and their corresponding codes. Below is the revised code that implements this functionality:
-
-```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -170,30 +167,46 @@ if uploaded_file is not None:
 
             # Create containers for each flag result with counts
             with st.expander(f"Missing COLOR ({missing_color_count} products)"):
-                st.write(missing_color[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']] if missing_color_count > 0 else "No products flagged.")
+                st.write(missing_color[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 
+                                         'CATEGORY', 'PARENTSKU', 'SELLER_NAME']] if missing_color_count > 0 else "No products flagged.")
                     
             with st.expander(f"Missing BRAND or NAME ({missing_brand_or_name_count} products)"):
-                st.write(missing_brand_or_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']] if missing_brand_or_name_count > 0 else "No products flagged.")
+                st.write(missing_brand_or_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 
+                                                  'BRAND', 'CATEGORY', 'PARENTSKU', 
+                                                  'SELLER_NAME']] if missing_brand_or_name_count > 0 else "No products flagged.")
                     
             with st.expander(f"Single-word NAME ({single_word_name_count} products)"):
-                st.write(single_word_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']] if single_word_name_count > 0 else "No products flagged.")
+                st.write(single_word_name[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 
+                                            'BRAND', 'CATEGORY', 'PARENTSKU', 
+                                            'SELLER_NAME']] if single_word_name_count > 0 else "No products flagged.")
                     
             with st.expander(f"Generic BRAND for valid CATEGORY_CODE ({generic_brand_count} products)"):
-                st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME']] if generic_brand_count > 0 else "No products flagged.")
+                st.write(generic_brand_issues[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 
+                                                 'NAME', 'BRAND', 
+                                                 'CATEGORY', 'PARENTSKU', 
+                                                 'SELLER_NAME']] if generic_brand_count > 0 else "No products flagged.")
                     
             with st.expander(f"Perfume price issue ({flagged_perfumes_count} products)"):
                 flagged_perfumes_df = pd.DataFrame(flagged_perfumes)
-                st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'PARENTSKU', 'SELLER_NAME', 'GLOBAL_PRICE']] if flagged_perfumes_count > 0 else "No products flagged.")
+                st.write(flagged_perfumes_df[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 
+                                                'NAME', 'BRAND',
+                                                'CATEGORY', 'PARENTSKU',
+                                                'SELLER_NAME',
+                                                'GLOBAL_PRICE']] if flagged_perfumes_count > 0 else "No products flagged.")
                     
             with st.expander(f"Blacklisted words in NAME ({flagged_blacklisted_count} products)"):
                 if flagged_blacklisted_count > 0:
                     flagged_blacklisted['Blacklisted_Word'] = flagged_blacklisted['NAME'].apply(
                         lambda x: [word for word in blacklisted_words if word.lower() in x.lower().split()][0]
                     )
-                    st.write(flagged_blacklisted[['PRODUCT_SET_ID', 'PRODUCT_SET_SID', 'NAME', 
-                                                   'Blacklisted_Word', 'BRAND', 
-                                                   'CATEGORY', 'PARENTSKU', 
-                                                   'SELLER_NAME']])
+                    st.write(flagged_blacklisted[['PRODUCT_SET_ID', 
+                                                   'PRODUCT_SET_SID',
+                                                   'NAME',
+                                                   'Blacklisted_Word',
+                                                   'BRAND',
+                                                   'CATEGORY',
+                                                   'PARENTSKU',
+                                                   'SELLER_NAME']] )
                 else:
                     st.write("No products flagged.")
                     
@@ -228,15 +241,3 @@ if uploaded_file is not None:
             
     except Exception as e:
         st.error(f"Error loading the CSV file: {e}")
-```
-
-### Key Changes Made:
-
-1. **Reason Codes and Messages**: A dictionary `reasons_dict` was added to map each validation issue to its corresponding code and message.
-2. **Detailed Reason Strings**: The final report now includes detailed strings that show both the code and message associated with each validation issue.
-3. **Streamlined Reporting**: The reporting structure has been simplified to ensure clarity when displaying issues.
-
-This implementation ensures that when a product fails validation checks, it provides clear feedback including specific codes and messages related to each issue. This makes it easier for users to understand what actions are required to correct their product listings.
-
-Citations:
-[1] https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/19723107/fe826529-873f-44e2-928b-9b5b66f7c0cb/paste.txt
