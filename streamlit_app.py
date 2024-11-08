@@ -66,6 +66,7 @@ if uploaded_file is not None:
                 status = 'Approved'
                 reason_str = ''
                 comment = ''
+                reason_detail = {}
 
                 for reason_name, condition in check_order:
                     if condition.iloc[index]:  # Check if the product matches the current reason
@@ -73,15 +74,28 @@ if uploaded_file is not None:
                         reason_str = f"{reason_code} - {message}"
                         comment = comment_text
                         status = 'Rejected'
+                        reason_detail = {
+                            "Reason": reason_name,
+                            "Message": message,
+                            "Comment": comment_text
+                        }
                         break  # Assign only the first applicable reason
 
-                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment))
+                final_report_rows.append((row['PRODUCT_SET_SID'], row.get('PARENTSKU', ''), status, reason_str, comment, reason_detail))
 
             # Prepare the final report DataFrame
-            final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment'])
+            final_report_df = pd.DataFrame(final_report_rows, columns=['ProductSetSid', 'ParentSKU', 'Status', 'Reason', 'Comment', 'ReasonDetail'])
 
             st.write("Final Report Preview")
             st.write(final_report_df)
+
+            # Expandable flags for each rejected product
+            for idx, row in final_report_df.iterrows():
+                if row['Status'] == 'Rejected':
+                    with st.expander(f"Flagged Reason for Product {row['ProductSetSid']} - {row['Reason']}"):
+                        st.write(f"**Reason**: {row['Reason']}")
+                        st.write(f"**Comment**: {row['Comment']}")
+                        st.write(f"**Detailed Explanation**: {row['ReasonDetail']}")
 
             # Separate approved and rejected reports
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
