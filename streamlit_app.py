@@ -58,6 +58,16 @@ for _, row in flags_data.iterrows():
     message = reason_parts[1] if len(reason_parts) > 1 else ''
     reasons_dict[flag] = (code, message, comment)
 
+# Display flag definitions in an expander
+with st.expander("View Flag Definitions"):
+    st.write("Here are the validation flags used in the product validation process:")
+    for flag, (code, message, comment) in reasons_dict.items():
+        st.markdown(f"**{flag}**")
+        st.write(f"- **Reason Code:** {code}")
+        st.write(f"- **Message:** {message}")
+        st.write(f"- **Comment:** {comment}")
+        st.write("---")
+
 # Load blacklisted words
 blacklisted_words = load_blacklisted_words()
 
@@ -73,7 +83,7 @@ if uploaded_file is not None:
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
-        # Validation checks
+        # Validation checks (unchanged from previous functionality)
         missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
         missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
                                      data['NAME'].isna() | (data['NAME'] == '')]
