@@ -219,7 +219,7 @@ if uploaded_file is not None:
         with col1:
             final_report_excel = to_excel(final_report_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
-                label="Download Final Report",
+                label="Final Export",
                 data=final_report_excel,
                 file_name=f"Final_Report_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -228,7 +228,7 @@ if uploaded_file is not None:
         with col2:
             rejected_excel = to_excel(rejected_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
-                label="Download Rejected Products",
+                label="Rejected Export",
                 data=rejected_excel,
                 file_name=f"Rejected_Products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -237,7 +237,7 @@ if uploaded_file is not None:
         with col3:
             approved_excel = to_excel(approved_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
-                label="Download Approved Products",
+                label="Approved Export",
                 data=approved_excel,
                 file_name=f"Approved_Products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
