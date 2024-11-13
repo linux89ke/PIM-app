@@ -24,7 +24,8 @@ def load_config_files():
         'flags': 'flags.xlsx',
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
-        'perfumes': 'perfumes.xlsx'
+        'perfumes': 'perfumes.xlsx',
+        'reasons': 'reasons.xlsx'  # Adding reasons.xlsx
     }
     
     data = {}
@@ -214,26 +215,27 @@ if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
         
         col1, col2, col3 = st.columns(3)
+        
         with col1:
-            final_report_excel = to_excel(final_report_df, flags_data)
+            final_report_excel = to_excel(final_report_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
-                label="Download Full Report",
+                label="Download Final Report",
                 data=final_report_excel,
-                file_name=f"Product_Validation_Full_Report_{current_date}.xlsx",
+                file_name=f"Final_Report_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        
+
         with col2:
-            rejected_excel = to_excel(rejected_df, flags_data)
+            rejected_excel = to_excel(rejected_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
                 label="Download Rejected Products",
                 data=rejected_excel,
                 file_name=f"Rejected_Products_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
+        
         with col3:
-            approved_excel = to_excel(approved_df, flags_data)
+            approved_excel = to_excel(approved_df, config_data['reasons'], "ProductSets", "RejectionReasons")
             st.download_button(
                 label="Download Approved Products",
                 data=approved_excel,
