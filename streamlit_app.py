@@ -177,50 +177,18 @@ if uploaded_file is not None:
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-        # Display results
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Products", len(data))
-            st.metric("Approved Products", len(approved_df))
-        with col2:
-            st.metric("Rejected Products", len(rejected_df))
-            st.metric("Rejection Rate", f"{(len(rejected_df)/len(data)*100):.1f}%")
-
-        # Show detailed results in expanders
-        validation_results = [
-            ("Missing COLOR", missing_color),
-            ("Missing BRAND or NAME", missing_brand_or_name),
-            ("Single-word NAME", single_word_name),
-            ("Generic BRAND Issues", generic_brand_issues),
-            ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
-            ("Blacklisted Words", flagged_blacklisted),
-            ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products)
-        ]
-
-        for title, df in validation_results:
-            with st.expander(f"{title} ({len(df)} products)"):
-                if not df.empty:
-                    st.dataframe(df)
-                else:
-                    st.write("No issues found")
-
         # Export functions
-        def to_excel(df1, df2, df3, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+        def to_excel(df1, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                df2.to_excel(writer, index=False, sheet_name="Approved")
-                df3.to_excel(writer, index=False, sheet_name="Rejected")
-                
-                # Add RejectionReasons sheet
                 reasons_data.to_excel(writer, index=False, sheet_name=sheet2_name)
-                
             return output.getvalue()
 
-        # Downloadable report
-        report_xlsx = to_excel(final_report_df, approved_df, rejected_df)
-        st.download_button(label="Download Full Report", data=report_xlsx, file_name="validation_report.xlsx", mime="application/vnd.ms-excel")
+        # Generate downloadable reports
+        st.download_button(label="Download Combined Report", data=to_excel(final_report_df), file_name="combined_report.xlsx", mime="application/vnd.ms-excel")
+        st.download_button(label="Download Approved Report", data=to_excel(approved_df), file_name="approved_report.xlsx", mime="application/vnd.ms-excel")
+        st.download_button(label="Download Rejected Report", data=to_excel(rejected_df), file_name="rejected_report.xlsx", mime="application/vnd.ms-excel")
 
     except Exception as e:
         st.error(f"Error processing the file: {e}")
