@@ -24,7 +24,8 @@ def load_config_files():
         'flags': 'flags.xlsx',
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
-        'perfumes': 'perfumes.xlsx'
+        'perfumes': 'perfumes.xlsx',
+        'reasons': 'reasons.xlsx'  # Add reasons.xlsx to config files
     }
     
     data = {}
@@ -46,6 +47,9 @@ config_data = load_config_files()
 
 # Load and process flags data
 flags_data = config_data['flags']
+reasons_data = config_data['reasons']  # Load reasons.xlsx data
+
+# Create a dictionary for reasons
 reasons_dict = {}
 try:
     # Find the correct column names (case-insensitive)
@@ -202,42 +206,21 @@ if uploaded_file is not None:
                     st.write("No issues found")
 
         # Export functions
-        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="Flags"):
+        def to_excel(df1, df2, df3, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-            output.seek(0)
-            return output
+                df2.to_excel(writer, index=False, sheet_name="Approved")
+                df3.to_excel(writer, index=False, sheet_name="Rejected")
+                
+                # Add RejectionReasons sheet
+                reasons_data.to_excel(writer, index=False, sheet_name=sheet2_name)
+                
+            return output.getvalue()
 
-        # Download buttons
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            final_report_excel = to_excel(final_report_df, flags_data)
-            st.download_button(
-                label="Download Full Report",
-                data=final_report_excel,
-                file_name=f"Product_Validation_Full_Report_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with col2:
-            approved_excel = to_excel(approved_df, flags_data)
-            st.download_button(
-                label="Download Approved Only",
-                data=approved_excel,
-                file_name=f"Product_Validation_Approved_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with col3:
-            rejected_excel = to_excel(rejected_df, flags_data)
-            st.download_button(
-                label="Download Rejected Only",
-                data=rejected_excel,
-                file_name=f"Product_Validation_Rejected_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        # Downloadable report
+        report_xlsx = to_excel(final_report_df, approved_df, rejected_df)
+        st.download_button(label="Download Full Report", data=report_xlsx, file_name="validation_report.xlsx", mime="application/vnd.ms-excel")
 
     except Exception as e:
-        st.error(f"Error processing uploaded file: {e}")
+        st.error(f"Error processing the file: {e}")
