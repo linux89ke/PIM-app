@@ -42,7 +42,7 @@ def load_config_files():
 st.title("Product Validation Tool")
 
 # Tabs for organizing content
-tab1, tab2, tab3 = st.tabs(["Upload File", "Validation Results", "Export Data"])
+tab1, tab2, tab3 = st.tabs(["Upload File", "Images", "Export Data"])  # Renamed second tab to "Images"
 
 # Load configuration files
 config_data = load_config_files()
@@ -71,13 +71,8 @@ if uploaded_file is not None:
 
         # Save validation results for the next tab
         with tab2:
-            st.write("### Validation Results")
-            for key, df in results.items():
-                with st.expander(f"{key} ({len(df)})"):
-                    if not df.empty:
-                        st.dataframe(df)
-                    else:
-                        st.write("No issues found.")
+            st.write("### Images")  # Content for "Images" tab
+            st.write("This tab is reserved for images.")  # Placeholder content
 
         # Export data
         with tab3:
