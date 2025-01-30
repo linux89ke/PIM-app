@@ -22,7 +22,7 @@ def load_blacklisted_words():
 def load_sensitive_brands():
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['Brand'].tolist()  # Assuming the file has a 'Brand' column
+        return sensitive_brands_df['BRAND'].tolist()  # Assuming the file has a 'Brand' column
     except FileNotFoundError:
         st.error("sensitive_brands.xlsx file not found!")
         return []
