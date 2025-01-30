@@ -73,6 +73,9 @@ config_data = load_config_files()
 category_FAS_codes = load_category_FAS()
 sensitive_brands = load_sensitive_brands()
 
+# Load blacklisted words
+blacklisted_words = load_blacklisted_words()
+
 # Load and process flags data
 flags_data = config_data['flags']
 reasons_dict = {}
@@ -233,31 +236,21 @@ if uploaded_file is not None:
         ]
 
         for title, df in validation_results:
-            with st.expander(f"{title} ({len(df)} products)"):
+            with st.expander(title):
                 if not df.empty:
-                    st.dataframe(df)
-                else:
-                    st.write("No issues found")
+                    st.write(df)
 
-        # Export functions
-        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
+        # Download options for the report
+        @st.cache_data
+        def to_excel(df):
             output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Final Report")
             output.seek(0)
             return output
 
-        # Prepare the downloadable report
-        rejection_reasons_df = config_data['reasons']
-        excel_data = to_excel(final_report_df, rejection_reasons_df)
-
-        st.download_button(
-            label="Download Final Report",
-            data=excel_data,
-            file_name=f"validation_report_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        excel_data = to_excel(final_report_df)
+        st.download_button(label="Download Final Report", data=excel_data, file_name="validation_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"❌ Error processing the uploaded file: {e}")
