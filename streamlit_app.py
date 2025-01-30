@@ -94,7 +94,14 @@ if uploaded_file is not None:
                                    data['NAME'].isna() | (data['NAME'] == '')]
         single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
                               (data['BRAND'] != 'Jumia Book')]
+
+        # Load check_variation data for variation validation
+        check_variation_data = config_data['check_variation']
         
+        # Check for missing variation in products where the category code is in check_variation
+        missing_variation = data[data['CATEGORY_CODE'].isin(check_variation_data['ID'].tolist()) & 
+                                 (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
+
         # Category validation
         valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
         generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
@@ -140,7 +147,8 @@ if uploaded_file is not None:
                 (generic_brand_issues, "Generic BRAND"),
                 (flagged_blacklisted, "Blacklisted word in NAME"),
                 (brand_in_name, "BRAND name repeated in NAME"),
-                (duplicate_products, "Duplicate product")
+                (duplicate_products, "Duplicate product"),
+                (missing_variation, "Missing VARIATION for category code")
             ]
             
             for validation_df, flag in validations:
@@ -192,7 +200,8 @@ if uploaded_file is not None:
             ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
             ("Blacklisted Words", flagged_blacklisted),
             ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products)
+            ("Duplicate Products", duplicate_products),
+            ("Missing VARIATION for Category Code", missing_variation)
         ]
 
         for title, df in validation_results:
@@ -245,3 +254,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
+
