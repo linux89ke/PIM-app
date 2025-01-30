@@ -232,19 +232,19 @@ if uploaded_file is not None:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df1.to_excel(writer, index=False, sheet_name=sheet1_name)
                 df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-                output.seek(0)
+            output.seek(0)
             return output
 
-        # Prepare rejection reasons sheet
-        reasons_df = config_data['reasons']
+        # Prepare the downloadable report
+        rejection_reasons_df = config_data['reasons']
+        excel_data = to_excel(final_report_df, rejection_reasons_df)
 
-        # Generate downloadable report
-        excel_data = to_excel(approved_df.append(rejected_df), reasons_df)
         st.download_button(
             label="Download Final Report",
             data=excel_data,
             file_name=f"validation_report_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
     except Exception as e:
         st.error(f"❌ Error processing the uploaded file: {e}")
