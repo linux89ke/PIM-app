@@ -18,10 +18,17 @@ def load_blacklisted_words():
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
-# Function to load sensitive brands
+# Function to load sensitive brands from the sensitive_brands.xlsx file
 def load_sensitive_brands():
-    # Define sensitive brands here
-    return ["SensitiveBrand1", "SensitiveBrand2", "SensitiveBrand3"]  # Example list
+    try:
+        sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
+        return sensitive_brands_df['Brand'].tolist()  # Assuming the file has a 'Brand' column
+    except FileNotFoundError:
+        st.error("sensitive_brands.xlsx file not found!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading sensitive brands: {e}")
+        return []
 
 # Load and validate configuration files
 def load_config_files():
