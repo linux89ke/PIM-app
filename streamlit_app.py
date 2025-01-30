@@ -232,40 +232,19 @@ if uploaded_file is not None:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df1.to_excel(writer, index=False, sheet_name=sheet1_name)
                 df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-            output.seek(0)
+                output.seek(0)
             return output
 
-        # Download buttons
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            final_report_excel = to_excel(final_report_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Final Export",
-                data=final_report_excel,
-                file_name=f"Final_Report_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        # Prepare rejection reasons sheet
+        reasons_df = config_data['reasons']
 
-        with col2:
-            rejected_excel = to_excel(rejected_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Rejected Export",
-                data=rejected_excel,
-                file_name=f"Rejected_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        
-        with col3:
-            approved_excel = to_excel(approved_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Approved Export",
-                data=approved_excel,
-                file_name=f"Approved_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
+        # Generate downloadable report
+        excel_data = to_excel(approved_df.append(rejected_df), reasons_df)
+        st.download_button(
+            label="Download Final Report",
+            data=excel_data,
+            file_name=f"validation_report_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     except Exception as e:
-        st.error(f"Error processing the uploaded file: {e}")
+        st.error(f"❌ Error processing the uploaded file: {e}")
