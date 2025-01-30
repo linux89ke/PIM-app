@@ -18,6 +18,11 @@ def load_blacklisted_words():
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
+# Function to load sensitive brands
+def load_sensitive_brands():
+    # Define sensitive brands here
+    return ["SensitiveBrand1", "SensitiveBrand2", "SensitiveBrand3"]  # Example list
+
 # Load and validate configuration files
 def load_config_files():
     config_files = {
@@ -70,8 +75,9 @@ except Exception as e:
     st.error(f"Error processing flags data: {e}")
     st.stop()
 
-# Load blacklisted words
+# Load blacklisted words and sensitive brands
 blacklisted_words = load_blacklisted_words()
+sensitive_brands = load_sensitive_brands()
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
@@ -94,14 +100,7 @@ if uploaded_file is not None:
                                    data['NAME'].isna() | (data['NAME'] == '')]
         single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
                               (data['BRAND'] != 'Jumia Book')]
-
-        # Load check_variation data for variation validation
-        check_variation_data = config_data['check_variation']
         
-        # Check for missing variation in products where the category code is in check_variation
-        missing_variation = data[data['CATEGORY_CODE'].isin(check_variation_data['ID'].tolist()) & 
-                                 (data['VARIATION'].isna() | (data['VARIATION'] == ''))]
-
         # Category validation
         valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
         generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
@@ -133,6 +132,13 @@ if uploaded_file is not None:
         
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
+        # Missing Variation Flag check
+        missing_variation = data[~data['CATEGORY_CODE'].isin(config_data['check_variation']['ID']) &
+                                 data['VARIATION'].isna()]
+
+        # Sensitive Brands Flag
+        sensitive_brand_issues = data[data['BRAND'].isin(sensitive_brands)]
+
         # Generate report with a single reason per rejection
         final_report_rows = []
         for _, row in data.iterrows():
@@ -148,7 +154,8 @@ if uploaded_file is not None:
                 (flagged_blacklisted, "Blacklisted word in NAME"),
                 (brand_in_name, "BRAND name repeated in NAME"),
                 (duplicate_products, "Duplicate product"),
-                (missing_variation, "Missing VARIATION for category code")
+                (missing_variation, "Missing Variation"),
+                (sensitive_brand_issues, "Sensitive Brand")
             ]
             
             for validation_df, flag in validations:
@@ -201,7 +208,8 @@ if uploaded_file is not None:
             ("Blacklisted Words", flagged_blacklisted),
             ("Brand in Name", brand_in_name),
             ("Duplicate Products", duplicate_products),
-            ("Missing VARIATION for Category Code", missing_variation)
+            ("Missing Variation", missing_variation),
+            ("Sensitive Brands", sensitive_brand_issues)
         ]
 
         for title, df in validation_results:
@@ -254,4 +262,3 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
-
