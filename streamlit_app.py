@@ -30,6 +30,18 @@ def load_sensitive_brands():
         st.error(f"Error loading sensitive brands: {e}")
         return []
 
+# Load category_FAS.xlsx to get the allowed CATEGORY_CODE values
+def load_category_FAS():
+    try:
+        category_fas_df = pd.read_excel('category_FAS.xlsx')
+        return category_fas_df['ID'].tolist()  # Assuming 'ID' column contains the category codes
+    except FileNotFoundError:
+        st.error("category_FAS.xlsx file not found!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading category_FAS data: {e}")
+        return []
+
 # Load and validate configuration files
 def load_config_files():
     config_files = {
@@ -57,6 +69,10 @@ st.title("Product Validation Tool")
 # Load configuration files
 config_data = load_config_files()
 
+# Load category_FAS and sensitive brands
+category_FAS_codes = load_category_FAS()
+sensitive_brands = load_sensitive_brands()
+
 # Load and process flags data
 flags_data = config_data['flags']
 reasons_dict = {}
@@ -82,10 +98,6 @@ except Exception as e:
     st.error(f"Error processing flags data: {e}")
     st.stop()
 
-# Load blacklisted words and sensitive brands
-blacklisted_words = load_blacklisted_words()
-sensitive_brands = load_sensitive_brands()
-
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
@@ -109,7 +121,7 @@ if uploaded_file is not None:
                               (data['BRAND'] != 'Jumia Book')]
         
         # Category validation
-        valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
+        valid_category_codes_fas = category_FAS_codes
         generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
                                   (data['BRAND'] == 'Generic')]
         
@@ -143,8 +155,9 @@ if uploaded_file is not None:
         missing_variation = data[~data['CATEGORY_CODE'].isin(config_data['check_variation']['ID']) &
                                  data['VARIATION'].isna()]
 
-        # Sensitive Brands Flag
-        sensitive_brand_issues = data[data['BRAND'].isin(sensitive_brands)]
+        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
+        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) & 
+                                      (data['BRAND'].isin(sensitive_brands))]
 
         # Generate report with a single reason per rejection
         final_report_rows = []
