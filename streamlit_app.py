@@ -9,7 +9,7 @@ def load_and_clean_data(file_path):
     """Loads the data, cleans it, and returns a Pandas DataFrame with flags."""
     df = pd.read_csv(file_path, sep=";")
 
-    # Data type conversion and handling missing values (first ensure numerics can be coerced without error)
+    # Data type conversion and handling missing values
     df['GLOBAL_SALE_PRICE'] = pd.to_numeric(df['GLOBAL_SALE_PRICE'], errors='coerce')
     df['GLOBAL_PRICE'] = pd.to_numeric(df['GLOBAL_PRICE'], errors='coerce')
     df['CATEGORY_CODE'] = pd.to_numeric(df['CATEGORY_CODE'], errors='coerce')
@@ -112,26 +112,6 @@ def main():
         st.header("Filtered Data")
         st.dataframe(filtered_df)  # Display the filtered DataFrame
 
-
-        # --- Basic Metrics ---
-        st.header("Key Metrics")
-        st.write(f"Number of Products: {len(filtered_df)}")
-
-        average_price = filtered_df['GLOBAL_PRICE'].mean()
-        st.write(f"Average Price: {average_price:.2f}")
-
-        # --- Visualizations (Example) ---
-        st.header("Visualizations")
-
-        # Category Counts Bar Chart (Example)
-        st.subheader("Product Count by Category")
-        category_counts = filtered_df['CATEGORY'].value_counts()
-        st.bar_chart(category_counts)
-
-        # Seller Counts Bar Chart (Example)
-        st.subheader("Product Count by Seller")
-        seller_counts = filtered_df['SELLER_NAME'].value_counts()
-        st.bar_chart(seller_counts)
 
 if __name__ == "__main__":
     main()
