@@ -14,7 +14,7 @@ def load_config_files():
         'flags': 'flags.xlsx',
         'reasons': 'reasons.xlsx'
     }
-    
+
     data = {}
     for key, filename in config_files.items():
         try:
@@ -26,12 +26,31 @@ def load_config_files():
                 st.stop()
     return data
 
+# Function to load book category names
+def load_book_category_brands():
+    try:
+        with open('Books_cat.txt', 'r') as f:
+            return [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        st.error("Books_cat.txt file not found!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading book category names: {e}")
+        return []
+
 # --- Main Streamlit App ---
 
 # Initialize the app
 st.title("Product Validation Tool")
 
 config_data = load_config_files() # Load config
+
+# Load book category names
+try:
+    book_category_brands = load_book_category_brands()
+except Exception as e:
+    st.error(f"Error loading book category data: {e}")
+    st.stop()
 
 # Load and process flags data
 flags_data = config_data['flags']
@@ -86,7 +105,7 @@ if uploaded_file is not None:
         # Use PRODUCT_SET_SID to identify rows in the validation results
         validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
         validation_results["Single-word NAME"] = data[(data['name'].str.split().str.len() == 1) &
-                              (data['brand'] != 'jumia book')]
+                              (~data['category_code'].isin(book_category_brands))]
 
         # Display results
         for title, df in validation_results.items():
