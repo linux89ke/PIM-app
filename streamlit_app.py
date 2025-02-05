@@ -14,7 +14,7 @@ def load_config_files():
         'flags': 'flags.xlsx',
         'reasons': 'reasons.xlsx'
     }
-
+    
     data = {}
     for key, filename in config_files.items():
         try:
