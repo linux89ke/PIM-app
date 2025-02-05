@@ -104,8 +104,11 @@ if uploaded_file is not None:
 
         # Use PRODUCT_SET_SID to identify rows in the validation results
         validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
-        validation_results["Single-word NAME"] = data[(data['name'].str.split().str.len() == 1) &
-                              (~data['category_code'].isin(book_category_brands))]
+        validation_results["Single-word NAME"] = data[
+            (data['name'].str.split().str.len() == 1) &
+            (~data['category_code'].isin(book_category_brands)) & #If Category Code is OK, this flag should not be checked, 
+            (data['brand'].str.lower() != 'jumia book') # also needs check against the 'Jumia Book' brand.
+            ]
 
         # Display results
         for title, df in validation_results.items():
