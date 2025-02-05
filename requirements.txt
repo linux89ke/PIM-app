@@ -4,7 +4,7 @@ pandas
 pydeck
 streamlit
 openpyxl
-tensorflow
+pyyaml
 Sequential
 LSTM
 odfpy
