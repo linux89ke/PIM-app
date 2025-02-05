@@ -1,191 +1,86 @@
-import pandas as pd
 import streamlit as st
-from io import BytesIO
-from datetime import datetime
-from collections import OrderedDict  # For keeping track of validation results
+import pandas as pd
+import numpy as np  # Import numpy
 
-# Set page config
-st.set_page_config(page_title="Product Validation Tool", layout="centered")
+# --- Data Loading and Cleaning ---
+@st.cache_data
+def load_and_clean_data(file_path):
+    """Loads the data, cleans it, and returns a Pandas DataFrame."""
+    df = pd.read_csv(file_path, sep=";")
 
-# --- Function Definitions (Keep these at the top) ---
+    # Data type conversion and handling missing values
+    df['GLOBAL_SALE_PRICE'] = pd.to_numeric(df['GLOBAL_SALE_PRICE'], errors='coerce')
+    df['GLOBAL_PRICE'] = pd.to_numeric(df['GLOBAL_PRICE'], errors='coerce')
+    df['CATEGORY_CODE'] = pd.to_numeric(df['CATEGORY_CODE'], errors='coerce')
 
-def load_config_files():
-    config_files = {
-        'flags': 'flags.xlsx',
-        'reasons': 'reasons.xlsx',
-        'category_fas': 'category_FAS.xlsx'  # Include category_fas again
-    }
-    
-    data = {}
-    for key, filename in config_files.items():
-        try:
-            df = pd.read_excel(filename).rename(columns=lambda x: x.strip())  # Strip spaces from column names
-            data[key] = df
-        except Exception as e:
-            st.error(f"❌ Error loading {filename}: {e}")
-            if key == 'flags':  # flags.xlsx is critical
-                st.stop()
-    return data
+    # Fill missing values in 'COLOR' with 'Unknown'
+    df['COLOR'] = df['COLOR'].fillna('Unknown')
 
-# Function to load blacklisted words from a file
-def load_blacklisted_words():
-    try:
-        with open('blacklisted.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("blacklisted.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading blacklisted words: {e}")
-        return []
 
-# Load sensitive brands from the sensitive_brands.xlsx file
-def load_sensitive_brands():
-    try:
-        sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['BRAND'].tolist()  # Assuming the file has a 'Brand' column
-    except FileNotFoundError:
-        st.error("sensitive_brands.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading sensitive brands: {e}")
-        return []
+    return df
 
-# Function to load category_FAS.xlsx to get the allowed CATEGORY_CODE values
-def load_category_FAS():
-    try:
-        category_fas_df = pd.read_excel('category_FAS.xlsx')
-        return category_fas_df['ID'].tolist()  # Assuming 'ID' column contains the category codes
-    except FileNotFoundError:
-        st.error("category_FAS.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading category_FAS data: {e}")
-        return []
+# --- Main App ---
+def main():
+    st.title("Jumia Product Set Explorer")
 
-# Function to load allowed book sellers
-def load_allowed_book_sellers():
-    try:
-        with open('Books.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("Books.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading allowed book sellers: {e}")
-        return []
+    # File Upload
+    file_path = st.file_uploader("Upload your product data (CSV file)", type=["csv"])
 
-# Function to load book category names
-def load_book_category_brands():
-    try:
-        with open('Books_cat.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("Books_cat.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading book category names: {e}")
-        return []
+    if file_path is not None:
+        # Load and Clean the Data
+        df = load_and_clean_data(file_path)
 
-# --- Main Streamlit App ---
+        st.success("Data loaded successfully!")
 
-# Initialize the app
-st.title("Product Validation Tool")
+        # --- Sidebar for Filters and Options ---
+        st.sidebar.header("Filters & Options")
 
-config_data = load_config_files() # Load config
+        # Type Filter
+        unique_types = df['TYPE'].unique()
+        selected_types = st.sidebar.multiselect("Product Type:", unique_types, default=unique_types)
+        filtered_df = df[df['TYPE'].isin(selected_types)]
 
-# Load allowed book sellers and book brands
-#Load and process flag category and processing
+        # Brand Filter
+        unique_brands = df['BRAND'].unique()
+        selected_brands = st.sidebar.multiselect("Brand:", unique_brands, default=unique_brands)
+        filtered_df = filtered_df[filtered_df['BRAND'].isin(selected_brands)]
 
-category_FAS_codes = load_category_FAS() #This works based on trace back
-# Load category_FAS and sensitive brands
+        # Seller Filter
+        unique_sellers = filtered_df['SELLER_NAME'].unique()
+        selected_sellers = st.sidebar.multiselect("Seller:", unique_sellers, default=unique_sellers)
+        filtered_df = filtered_df[filtered_df['SELLER_NAME'].isin(selected_sellers)]
 
-flags_data = config_data['flags']
-reasons_dict = {}
-try:
-    # Find the correct column names (case-insensitive)
-    flag_col = next((col for col in flags_data.columns if col.lower() == 'flag'), None)
-    reason_col = next((col for col in flags_data.columns if col.lower() == 'reason'), None)
-    comment_col = next((col for col in flags_data.columns if col.lower() == 'comment'), None)
+        # Price range
+        price_range = st.sidebar.slider("Price Range",
+                                         min_value=float(df['GLOBAL_PRICE'].min()),
+                                         max_value=float(df['GLOBAL_PRICE'].max()),
+                                         value=(float(df['GLOBAL_PRICE'].min()), float(df['GLOBAL_PRICE'].max())))
+        filtered_df = filtered_df[(filtered_df['GLOBAL_PRICE'] >= price_range[0]) & (filtered_df['GLOBAL_PRICE'] <= price_range[1])]
 
-    if not all([flag_col, reason_col, comment_col]):
-        st.error(f"Missing required columns in flags.xlsx. Required: Flag, Reason, Comment. Found: {flags_data.columns.tolist()}")
-        st.stop()
+        # --- Display Data ---
+        st.header("Filtered Data")
+        st.dataframe(filtered_df)  # Display the filtered DataFrame
 
-    for _, row in flags_data.iterrows():
-        flag = str(row[flag_col]).strip()
-        reason = str(row[reason_col]).strip()
-        comment = str(row[comment_col]).strip()
-        reason_parts = reason.split(' - ', 1)
-        code = reason_parts[0]
-        message = reason_parts[1] if len(reason_parts) > 1 else ''
-        reasons_dict[flag] = (code, message, comment)
-except Exception as e:
-    st.error(f"Error processing flags data: {e}")
-    st.stop()
-# Let the user verify this works
-print(f"Category FAS Data loaded, first 10 elements {category_FAS_codes[:10]}...")
+        # --- Basic Metrics ---
+        st.header("Key Metrics")
+        st.write(f"Number of Products: {len(filtered_df)}")
 
-# File upload section
-uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
+        average_price = filtered_df['GLOBAL_PRICE'].mean()
+        st.write(f"Average Price: {average_price:.2f}")
 
-# Process uploaded file
-if uploaded_file is not None:
-    try:
-        st.info("Loading and processing your CSV file...") # message
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1') #data loaded
+        # --- Visualizations (Example) ---
+        st.header("Visualizations")
 
-        # Strip and Lowercase Column Names:
-        data.columns = [col.strip().lower() for col in data.columns]
+        # Category Counts Bar Chart (Example)
+        st.subheader("Product Count by Category")
+        category_counts = filtered_df['CATEGORY'].value_counts()
+        st.bar_chart(category_counts)
 
-        if data.empty:
-            st.warning("The uploaded file is empty.")
-            st.stop()
+        # Seller Counts Bar Chart (Example)
+        st.subheader("Product Count by Seller")
+        seller_counts = filtered_df['SELLER_NAME'].value_counts()
+        st.bar_chart(seller_counts)
 
-        # **Debug: Print Column Names:** See what columns are actually present.
-        st.write("Column Names in Uploaded File:", data.columns.tolist())
 
-        st.write("CSV file loaded successfully. Preview of data:")
-        st.write(data.head())
-
-        validation_results = OrderedDict()
-
-        # # Add here other variables #check category code against
-
-        sensitive_brands = load_sensitive_brands()
-
-        blacklisted_words = load_blacklisted_words()
-
-        book_category_brands = load_book_category_brands() #check it
-
-        validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
-
-        validation_results["Single-word NAME"] = data[(data['name'].str.split().str.len() == 1) & (~data['category_code'].isin(book_category_brands))]# Use list name for condition again.
-        validation_results["Blacklisted word in NAME"] = data[data['name'].apply(lambda name: any(black_word.lower() in str(name).lower().split() for black_word in blacklisted_words))]
-        validation_results["Generic BRAND"] = data[(data['category_code'].isin(valid_category_codes_fas)) &
-                              (data['brand'] == 'generic')]
-
-        brand_in_name = data[data.apply(lambda row: 
-        isinstance(row['brand'], str) and isinstance(row['name'], str) and 
-        row['brand'].lower() in row['name'].lower(), axis=1)]
-        validation_results["BRAND name repeated in NAME"] = brand_in_name
-        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-
-        sensitive_brand_issues = data[
-            (data['category_code'].isin(category_FAS_codes)) &
-            (data['brand'].isin(sensitive_brands))
-        ]
-
-        validation_results["Sensitive Brand"] = sensitive_brand_issues  #load all flags
-
-        # Display results
-        for title, df in validation_results.items():
-            with st.expander(f"{title} ({len(df)} products)"):
-                if not df.empty:
-                    st.dataframe(df)
-                else:
-                    st.write("No issues found")
-
-    except Exception as e:
-        st.error(f"Error processing the uploaded file: {e}")
-        st.error(f"Detailed error: {e}")
+if __name__ == "__main__":
+    main()
