@@ -227,121 +227,65 @@ if uploaded_file is not None:
         missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
         missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') |
                                      data['NAME'].isna() | (data['NAME'] == '')]
-        single_word_name = data[(data['NAME'].str.split().str.len() == 1) &
-                                (~data['CATEGORY_CODE'].astype(int).isin(book_categories)) & #Convert here
-                                (data['BRAND'].str.lower() != 'jumia book')]
+        single_word_name = data[data['NAME'].str.split().str.len() == 1]
 
-        # Category validation
-        valid_category_codes_fas = category_FAS_codes
-        generic_brand_issues = data[(data['CATEGORY_CODE'].astype(int).isin(valid_category_codes_fas)) & #Convert here
-                                    (data['BRAND'].str.lower() == 'generic')]
-
-        # Perfume price validation
-        flagged_perfumes = []
-        perfumes_data = config_data.get('perfumes')
-        if perfumes_data is not None:
-            for _, row in data.iterrows():
-                brand = row['BRAND'].lower()
-                if brand in [str(b).lower() for b in perfumes_data['BRAND'].tolist()]:
-                    keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
-                    for keyword in keywords:
-                        if keyword in row['NAME'].lower():
-                            try: #ensure that GLOBAL_PRICE exists for perfumes.
-                                perfume_price = perfumes_data.loc[perfumes_data['BRAND'].str.lower() == brand and perfumes_data['KEYWORD'].str.lower() == keyword, 'PRICE'].values[0]
-                                if row['GLOBAL_PRICE'] < perfume_price:
-                                    flagged_perfumes.append(row)
-                            except KeyError:
-                                st.warning("GLOBAL_PRICE column is missing. Perfume price validation will be skipped.")
-                                break
-                            except IndexError:
-                                st.warning(f"No price found for BRAND: {brand}, KEYWORD: {keyword}")
-                                break
-
-        # Blacklist and brand name checks
-        flagged_blacklisted = data[data['NAME'].apply(lambda name:
-            any(black_word in str(name).lower().split() for black_word in blacklisted_words))]
-
-        brand_in_name = data[data.apply(lambda row:
-            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
-            row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-
-        duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
-
-        # Missing Variation Flag check
-        check_variation_data = config_data.get('check_variation')
-        missing_variation = data[~data['CATEGORY_CODE'].astype(int).isin([int(i) for i in check_variation_data['ID'].tolist()]) & #Convert here
-                                 data['VARIATION'].isna()]
-
-        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        sensitive_brand_issues = data[(data['CATEGORY_CODE'].astype(int).isin(category_FAS_codes)) & #Convert here
-                                      (data['BRAND'].str.lower().isin(sensitive_brands))]
-
-        # Generate report with a single reason per rejection
-        final_report_rows = []
+        flagged_rows = []
         for _, row in data.iterrows():
-            reason, reason_details = validate_product(row, config_data, blacklisted_words, book_categories, sensitive_brands, category_FAS_codes)
-            status = 'Rejected' if reason else 'Approved'
-            reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
-            detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else ""
+            reason, reason_details = validate_product(row, config_data, blacklisted_words, book_categories,
+                                                      sensitive_brands, category_FAS_codes)
+            if reason is not None:
+                flagged_rows.append({
+                    'ProductSetSid': row['PRODUCT_SET_SID'],
+                    'ParentSKU': row['PARENTSKU'],
+                    'Status': 'Rejected',
+                    'Reason': reason,
+                    'Comment': reason_details[1]
+                })
+            else:
+                flagged_rows.append({
+                    'ProductSetSid': row['PRODUCT_SET_SID'],
+                    'ParentSKU': row['PARENTSKU'],
+                    'Status': 'Approved',
+                    'Reason': "",
+                    'Comment': ""
+                })
 
-            final_report_rows.append({
-                'ProductSetSid': row['PRODUCT_SET_SID'],
-                'ParentSKU': row.get('PARENTSKU', ''),
-                'Status': status,
-                'Reason': detailed_reason,
-                'Comment': comment
-            })
+        final_report_rows = flagged_rows  # Store the flagged rows for final report generation.
 
-        # Create final report DataFrame
-        final_report_df = pd.DataFrame(final_report_rows)
-
-        # Split into approved and rejected
-        approved_df = final_report_df[final_report_df['Status'] == 'Approved']
-        rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
-
-        # Display results
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Products", len(data))
-            st.metric("Approved Products", len(approved_df))
-        with col2:
-            st.metric("Rejected Products", len(rejected_df))
-            st.metric("Rejection Rate", f"{(len(rejected_df) / len(data) * 100):.1f}%")
-
-        # Show detailed results in expanders
-        validation_results = [
-            ("Missing COLOR", missing_color),
-            ("Missing BRAND or NAME", missing_brand_or_name),
-            ("Single-word NAME", single_word_name),
-            ("Generic BRAND Issues", generic_brand_issues),
-            ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
-            ("Blacklisted Words", flagged_blacklisted),
-            ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products),
-            ("Missing Variation", missing_variation),
-            ("Sensitive Brands", sensitive_brand_issues)
-        ]
-
-        for title, df in validation_results:
-            count = len(df) if not df.empty else 0
-            with st.expander(f"{title} ({count})"):
-                if count > 0:
-                    st.write(df)
-                else:
-                    st.write("No issues found.")
-
-        # Download options for the report
-        @st.cache_data
-        def to_excel(df):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Final Report")
-            output.seek(0)
-            return output
-
-        excel_data = to_excel(final_report_df)
-        st.download_button(label="Download Final Report", data=excel_data, file_name="validation_report.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.write(f"Total flagged rows: {len(flagged_rows)}")
 
     except Exception as e:
-        st.error(f"❌ Error processing the uploaded file: {e}")
+        st.error(f"Error processing uploaded file: {e}")
+
+# Final report generation and file download section
+if uploaded_file is not None:
+    try:
+        # Generate the final report DataFrame
+        final_report_df = pd.DataFrame(final_report_rows)
+        
+        # Save the reasons data into a separate DataFrame
+        rejection_reasons_df = pd.DataFrame({
+            'Reason Code': [item[0] for item in reason_details],
+            'Reason Message': [item[1] for item in reason_details],
+            'Comment': [item[2] for item in reason_details]
+        })
+        
+        # Creating the Excel file in memory
+        with BytesIO() as output:
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                final_report_df.to_excel(writer, sheet_name='ProductSets', index=False)
+                rejection_reasons_df.to_excel(writer, sheet_name='RejectionReasons', index=False)
+
+            # Move to the beginning of the BytesIO object
+            output.seek(0)
+
+            # Provide the download link to the user
+            st.download_button(
+                label="Download Final Report",
+                data=output,
+                file_name="final_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    except Exception as e:
+        st.error(f"Error generating final report: {e}")
