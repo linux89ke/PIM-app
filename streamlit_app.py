@@ -151,13 +151,13 @@ if uploaded_file is not None:
          # --- Track Validation Results using OrderedDict ---
         validation_results = OrderedDict()  # Order matters
 
-        # --- Track Validation Results using OrderedDict ---
-        validation_results = OrderedDict()  # Order matters
-
         # Use PRODUCT_SET_SID to identify rows in the validation results
         validation_results["Missing COLOR"] = data[data['COLOR'].isna() | (data['COLOR'] == '')]
         validation_results["Missing BRAND or NAME"] = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
                                    data['NAME'].isna() | (data['NAME'] == '')]
+        validation_results["Single-word NAME"] = data[(data['NAME'].str.split().str.len() == 1) & 
+                              (data['BRAND'] != 'Jumia Book')]
+
 
         # Display results
         for title, df in validation_results.items():
