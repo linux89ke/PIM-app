@@ -129,12 +129,9 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Inside the `if uploaded_file is not None:` block, use the encoding from the config
 if uploaded_file is not None:
-    try:
-        encoding = config.get('csv_encoding', 'ISO-8859-1') # get encoding value from config, if it doesn't exist, default to ISO-8859-1
+   try:
 
-        data = pd.read_csv(uploaded_file, sep=';', encoding=encoding)
+        st.write("File uploaded!")
 
-        # ... (rest of your data processing code) ...
-
-    except Exception as e:
-        st.error(f"❌ Error processing the uploaded file: {e}")
+   except Exception as e:
+       st.error(f"❌ Error processing the uploaded file: {e}")
