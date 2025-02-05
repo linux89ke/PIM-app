@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re  # Import the regular expression module
 
 # --- Data Loading and Cleaning ---
 @st.cache_data
@@ -8,18 +9,38 @@ def load_and_clean_data(file_path):
     """Loads the data, cleans it, and returns a Pandas DataFrame with flags."""
     df = pd.read_csv(file_path, sep=";")
 
-    # Data type conversion and handling missing values
+    # Data type conversion and handling missing values (first ensure numerics can be coerced without error)
     df['GLOBAL_SALE_PRICE'] = pd.to_numeric(df['GLOBAL_SALE_PRICE'], errors='coerce')
     df['GLOBAL_PRICE'] = pd.to_numeric(df['GLOBAL_PRICE'], errors='coerce')
     df['CATEGORY_CODE'] = pd.to_numeric(df['CATEGORY_CODE'], errors='coerce')
 
-    # Fill missing values in 'COLOR' with 'Unknown'
-    df['COLOR'] = df['COLOR'].fillna('Unknown')
 
-    # --- Add Data Quality Flags ---
-    df['HAS_MISSING_COLOR'] = df['COLOR'] == 'Unknown'  # Flag missing color values
-    df['INCONSISTENT_COLOR_SPACING'] = df['COLOR'].str.contains(r'^\s+|\s+$', regex=True) # Regex to flag leading or trailing spaces.
-    #More flags will be placed here
+    # **CLEANING THE 'COLOR' Column (Before Flagging)**
+
+    #Handle any empty string/ nan, NaN entries. Use regex for additional cases with \s
+
+    #Flag the original count for reporting's sake
+    df['ORIGINAL_HAS_MISSING_COLOR'] = df['COLOR'].isna()
+
+    #Fill all the nan empty space fields/objects
+
+    df['COLOR'] = df['COLOR'].fillna('')
+
+    #Standardise ALL values:
+    # Remove leading/trailing whitespace
+    df['COLOR'] = df['COLOR'].str.strip()
+    # Replace multiple spaces with a single space ( \s means whitespace, + mean one or more)
+    df['COLOR'] = df['COLOR'].str.replace(r'\s+', ' ', regex=True)
+    # Convert to lowercase for consistent comparison (now safe, nan string are accounted for!)
+    df['COLOR'] = df['COLOR'].str.lower()
+
+
+    # --- Add Data Quality Flags --- after preprocessing
+    #At this point all rows, NAN or not, have a non-problem string or "" (for before, nan entries).
+    df['HAS_MISSING_COLOR'] = df['COLOR'] == ''  # Flag "" now = Flag if it originally was None
+    df['INCONSISTENT_COLOR_SPACING'] = (df['COLOR'] != '') & ((df['COLOR'].str.contains(r'^\s+|\s+$', regex=True))| df['COLOR'].str.contains(r'\s{2,}', regex =True))
+     #regex on all the COLOURS,  "" does not count here because any whitespace would have had ""  due to str.strip at first cleaning before this stage if we got more values from an LLM!
+
 
 
     return df
@@ -71,11 +92,13 @@ def main():
 
             flag_summary = pd.DataFrame({
                 'Flag': [
-                    "Missing Color",
+                    "ORIGINAL Missing Color",
+                    "CLEANED Missing Color",
                     "Inconsistent Color Spacing",
                     # Add your flags here as well.
                 ],
                 'Count': [
+                    filtered_df['ORIGINAL_HAS_MISSING_COLOR'].sum(),
                     filtered_df['HAS_MISSING_COLOR'].sum(),
                     filtered_df['INCONSISTENT_COLOR_SPACING'].sum(),
                     #Sum each flag's colunm
@@ -96,7 +119,6 @@ def main():
 
         average_price = filtered_df['GLOBAL_PRICE'].mean()
         st.write(f"Average Price: {average_price:.2f}")
-
 
         # --- Visualizations (Example) ---
         st.header("Visualizations")
