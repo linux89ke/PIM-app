@@ -7,164 +7,27 @@ st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
-    try:
-        with open('blacklisted.txt', 'r') as f:
-            return [line.strip().lower() for line in f.readlines()]  # Lowercase for case-insensitivity
-    except FileNotFoundError:
-        st.error("blacklisted.txt not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading blacklisted words: {e}")
-        return []
+    # ... (Same as before)
 
 # Function to load sensitive brands from the sensitive_brands.xlsx file
 def load_sensitive_brands():
-    try:
-        df = pd.read_excel('sensitive_brands.xlsx')
-        return [str(brand).lower() for brand in df['BRAND'].dropna().tolist()]  # Lowercase & handle potential NaN
-    except FileNotFoundError:
-        st.error("sensitive_brands.xlsx not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading sensitive brands: {e}")
-        return []
+    # ... (Same as before)
 
 # Load category_FAS.xlsx to get the allowed CATEGORY_CODE values
 def load_category_FAS():
-    try:
-        df = pd.read_excel('category_FAS.xlsx')
-        return [int(code) for code in df['ID'].dropna().tolist()]  # Ensure integers
-    except FileNotFoundError:
-        st.error("category_FAS.xlsx not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading category_FAS data: {e}")
-        return []
+    # ... (Same as before)
 
 # Load book categories from Books_cat.txt
 def load_book_categories():
-    try:
-        with open('Books_cat.txt', 'r') as f:
-            return [int(line.strip()) for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("Books_cat.txt not found!")
-        return []
-    except ValueError:
-        st.error("Books_cat.txt contains non-integer values!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading book categories: {e}")
-        return []
+    # ... (Same as before)
 
 # Load and validate configuration files
 def load_config_files():
-    config_files = {
-        'flags': 'flags.xlsx',
-        'check_variation': 'check_variation.xlsx',
-        'perfumes': 'perfumes.xlsx'
-    }
-    
-    data = {}
-    for key, filename in config_files.items():
-        try:
-            df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
-            data[key] = df
-        except FileNotFoundError:
-            st.error(f"{filename} not found!")
-            if key == 'flags':
-                st.stop()
-        except Exception as e:
-            st.error(f"Error loading {filename}: {e}")
-            if key == 'flags':
-                st.stop()
-    return data
+    # ... (Same as before)
 
 # Function to validate a single product
 def validate_product(row, config_data, blacklisted_words, book_categories, sensitive_brands, category_FAS_codes):
-    reason = None
-    reason_details = None
-
-    # Convert relevant columns to string and handle potential NaN values before applying string methods
-    try:
-        brand = str(row['BRAND']).lower()
-        name = str(row['NAME']).lower()
-        color = str(row['COLOR']).lower()
-    except Exception as e:
-        st.error(f"Error converting data to string: {e}")
-        return None, None
-
-
-    # Missing COLOR
-    if color.strip() == "":
-        reason = "Missing COLOR"
-        reason_details = ("COLOR-MISSING", "Color is missing or empty.", "")
-        return reason, reason_details
-
-    # Missing BRAND or NAME
-    if brand.strip() == "" or name.strip() == "":
-        reason = "Missing BRAND or NAME"
-        reason_details = ("BRAND_OR_NAME-MISSING", "Brand or Name is missing or empty.", "")
-        return reason, reason_details
-
-    # Single-word NAME (excluding books)
-    if len(name.split()) == 1 and row['CATEGORY_CODE'] not in book_categories and brand != 'jumia book':
-        reason = "Single-word NAME"
-        reason_details = ("SINGLE-WORD-NAME", "Product name has only one word and is not a book.", "")
-        return reason, reason_details
-
-    # Generic BRAND in specific categories
-    if brand == 'generic' and row['CATEGORY_CODE'] in category_FAS_codes:
-        reason = "Generic BRAND"
-        reason_details = ("GENERIC-BRAND", "Product is of Generic brand in this category.", "")
-        return reason, reason_details
-
-    # Perfume price validation
-    perfumes_data = config_data.get('perfumes')
-    if perfumes_data is not None:
-        if brand in [str(b).lower() for b in perfumes_data['BRAND'].tolist()]:  # Convert to string during lookup
-            brand_perfumes = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]
-            keywords = [str(k).lower() for k in brand_perfumes['KEYWORD'].tolist()] #Convert to string during lookup
-            for keyword in keywords:
-                if keyword in name:
-                    try: #ensure that GLOBAL_PRICE exists for perfumes.
-                        perfume_price = brand_perfumes.loc[brand_perfumes['KEYWORD'].str.lower() == keyword, 'PRICE'].values[0]
-                        if row['GLOBAL_PRICE'] < perfume_price:
-                            reason = "Perfume price issue"
-                            reason_details = ("PERFUME-PRICE", "Perfume price is below the threshold.", "")
-                            return reason, reason_details
-                    except KeyError:
-                        st.error("GLOBAL_PRICE column missing in input file.")
-                        return None, None
-                    except IndexError:
-                        st.error(f"No price found for BRAND: {brand}, KEYWORD: {keyword}")
-                        return None, None
-
-    # Blacklisted word in NAME
-    if any(black_word in name.split() for black_word in blacklisted_words):
-        reason = "Blacklisted word in NAME"
-        reason_details = ("BLACKLISTED-WORD", "Name contains a blacklisted word.", "")
-        return reason, reason_details
-
-    # BRAND name repeated in NAME
-    if brand in name:
-        reason = "BRAND name repeated in NAME"
-        reason_details = ("BRAND-IN-NAME", "Brand name is found in the product name.", "")
-        return reason, reason_details
-
-    # Missing Variation in specific categories
-    check_variation_data = config_data.get('check_variation')
-    if check_variation_data is not None and row['CATEGORY_CODE'] not in [int(i) for i in check_variation_data['ID'].tolist()] and pd.isna(row['VARIATION']):
-        reason = "Missing Variation"
-        reason_details = ("MISSING-VARIATION", "Variation is missing for this category.", "")
-        return reason, reason_details
-
-    # Sensitive Brand in specific categories
-    if brand in sensitive_brands and row['CATEGORY_CODE'] in category_FAS_codes:
-        reason = "Sensitive Brand"
-        reason_details = ("SENSITIVE-BRAND", "Product is from a sensitive brand in this category.", "")
-        return reason, reason_details
-
-    return None, None  # No issues found
+    # ... (Same as before)
 
 # Initialize the app
 st.title("Product Validation Tool")
@@ -204,6 +67,10 @@ if flags_data is not None:
     except Exception as e:
         st.error(f"Error processing flags data: {e}")
         st.stop()
+        
+#Display Flags data
+st.subheader("Flags Data")
+st.dataframe(flags_data)
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
