@@ -1,73 +1,90 @@
 import streamlit as st
 import pandas as pd
+import os
 
-# Function to check various validation rules
-def validate_products(df, perfumes, blacklisted_words, category_variation):
-    flagged_results = {}
+def load_excel(file_path):
+    """Load an Excel file and return a DataFrame."""
+    try:
+        return pd.read_excel(file_path)
+    except Exception as e:
+        st.error(f"Error loading {file_path}: {e}")
+        return pd.DataFrame()
 
-    # 1. Missing COLOR
-    flagged_results["Missing COLOR"] = df[df["COLOR"].isna()]
+def validate_data(df, category_fas, wrong_brands, perfumes, check_variation, blacklisted):
+    """Perform all validation checks on the uploaded data."""
+    flagged_products = []
+    
+    # Convert reference files to sets for quick lookup
+    category_fas_set = set(category_fas['ID'])
+    wrong_brands_set = set(wrong_brands['Brand'])
+    perfumes_dict = perfumes.set_index('PRODUCT_NAME')['PRICE'].to_dict()
+    check_variation_set = set(check_variation['ID'])
+    blacklisted_set = set(blacklisted['Word'])
+    
+    for _, row in df.iterrows():
+        reason = []
+        
+        # Category and Brand validation
+        if row['CATEGORY_CODE'] in category_fas_set and row['BRAND'] == 'Generic':
+            reason.append("Kindly use Fashion as Brand name for fashion items.")
+        
+        # Brand name check
+        if row['BRAND'] in wrong_brands_set:
+            reason.append("Incorrect Brand Name")
+        
+        # Price validation
+        product_name = row['NAME']
+        if product_name in perfumes_dict:
+            price_diff = abs(row['GLOBAL_SALE_PRICE'] - perfumes_dict[product_name])
+            if price_diff < (0.3 * perfumes_dict[product_name]):
+                reason.append("Perfume price too low")
+        
+        # Variation check
+        if row['CATEGORY_CODE'] in check_variation_set and pd.isna(row['VARIATION']):
+            reason.append("Variation required but missing")
+        
+        # Blacklisted words
+        if any(word in row['NAME'].split() for word in blacklisted_set):
+            reason.append("Blacklisted word in NAME")
+        
+        if reason:
+            flagged_products.append({
+                'ProductSetSid': row['PRODUCT_SET_SID'],
+                'ParentSKU': row['PARENTSKU'],
+                'Status': 'Rejected',
+                'Reason': ", ".join(reason),
+                'Comment': ", ".join(reason)
+            })
+    
+    return pd.DataFrame(flagged_products)
 
-    # 2. Missing BRAND or NAME
-    flagged_results["Missing BRAND or NAME"] = df[df["BRAND"].isna() | df["NAME"].isna()]
-
-    # 3. Single-word NAME
-    flagged_results["Single-word NAME"] = df[df["NAME"].str.split().str.len() == 1]
-
-    # 4. Generic BRAND Issues
-    flagged_results["Generic BRAND Issues"] = df[df["BRAND"].str.lower() == "generic"]
-
-    # 5. Perfume Price Issues
-    df_merged = df.merge(perfumes, left_on="NAME", right_on="PRODUCT_NAME", how="left")
-    flagged_results["Perfume Price Issues"] = df_merged[
-        (df_merged["GLOBAL_SALE_PRICE"] / df_merged["PRICE"]) >= 0.7
-    ]
-
-    # 6. Blacklisted Words in NAME
-    blacklisted_pattern = "|".join(blacklisted_words)
-    flagged_results["Blacklisted Words"] = df[df["NAME"].str.contains(blacklisted_pattern, case=False, na=False)]
-
-    # 7. BRAND name repeated in NAME
-    flagged_results["Brand in Name"] = df[
-        df.apply(lambda row: row["BRAND"].lower() in row["NAME"].lower(), axis=1)
-    ]
-
-    # 8. Duplicate Products
-    flagged_results["Duplicate Products"] = df[df.duplicated(subset=["PRODUCT_SET_ID"], keep=False)]
-
-    # 9. Missing Variation
-    flagged_results["Missing Variation"] = df[
-        (df["CATEGORY_CODE"].isin(category_variation["ID"])) & (df["VARIATION"].isna())
-    ]
-
-    # 10. Sensitive Brands (Example check, adjust logic if needed)
-    flagged_results["Sensitive Brands"] = df[df["BRAND"].str.contains("sensitive", case=False, na=False)]
-
-    return flagged_results
-
-# Streamlit UI
-st.title("Product Validation Tool")
-
-# File Uploads
-uploaded_file = st.file_uploader("Upload your product CSV", type="csv")
-perfumes_file = st.file_uploader("Upload perfumes.xlsx", type="xlsx")
-blacklisted_file = st.file_uploader("Upload blacklisted.txt", type="txt")
-category_variation_file = st.file_uploader("Upload check_variation.xlsx", type="xlsx")
-
-if uploaded_file and perfumes_file and blacklisted_file and category_variation_file:
-    df = pd.read_csv(uploaded_file)
-    perfumes = pd.read_excel(perfumes_file)
-    blacklisted_words = blacklisted_file.read().decode("utf-8").splitlines()
-    category_variation = pd.read_excel(category_variation_file)
-
-    # Validate products
-    flagged_results = validate_products(df, perfumes, blacklisted_words, category_variation)
-
-    # Show results with row counts
-    for flag, result_df in flagged_results.items():
-        count = len(result_df)
-        with st.expander(f"{flag} ({count})"):
-            if count > 0:
-                st.write(result_df)
-            else:
-                st.write("No flagged rows")
+def main():
+    st.title("Product Validation Tool")
+    
+    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        
+        # Load reference data
+        category_fas = load_excel("pages/category_FAS.xlsx")
+        wrong_brands = load_excel("pages/wrong_brands.xlsx")
+        perfumes = load_excel("pages/perfumes.xlsx")
+        check_variation = load_excel("pages/check_variation.xlsx")
+        blacklisted = load_excel("pages/blacklisted.xlsx")
+        
+        # Validate data
+        flagged_df = validate_data(df, category_fas, wrong_brands, perfumes, check_variation, blacklisted)
+        
+        # Display results
+        if not flagged_df.empty:
+            st.write("### Flagged Products")
+            st.dataframe(flagged_df)
+            
+            # Download option
+            csv = flagged_df.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Flagged Products", csv, "flagged_products.csv", "text/csv")
+        else:
+            st.success("No issues found!")
+    
+if __name__ == "__main__":
+    main()
