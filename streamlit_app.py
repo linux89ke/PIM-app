@@ -9,52 +9,12 @@ st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # --- Function Definitions (Keep these at the top) ---
 
-# Function to load blacklisted words from a file
-def load_blacklisted_words():
-    try:
-        with open('blacklisted.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("blacklisted.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading blacklisted words: {e}")
-        return []
-
-# Load sensitive brands from the sensitive_brands.xlsx file
-def load_sensitive_brands():
-    try:
-        sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['BRAND'].tolist()  # Assuming the file has a 'BRAND' column
-    except FileNotFoundError:
-        st.error("sensitive_brands.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading sensitive brands: {e}")
-        return []
-
-# Load category_FAS.xlsx to get the allowed CATEGORY_CODE values
-def load_category_FAS():
-    try:
-        category_fas_df = pd.read_excel('category_FAS.xlsx')
-        return category_fas_df['ID'].tolist()  # Assuming 'ID' column contains the category codes
-    except FileNotFoundError:
-        st.error("category_FAS.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading category_FAS data: {e}")
-        return []
-
-# Load and validate configuration files
 def load_config_files():
     config_files = {
         'flags': 'flags.xlsx',
-        'check_variation': 'check_variation.xlsx',
-        'category_fas': 'category_FAS.xlsx',
-        'perfumes': 'perfumes.xlsx',
-        'reasons': 'reasons.xlsx'  # Adding reasons.xlsx
+        'reasons': 'reasons.xlsx'
     }
-
+    
     data = {}
     for key, filename in config_files.items():
         try:
@@ -62,69 +22,16 @@ def load_config_files():
             data[key] = df
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
-            st.error(f"Detailed error: {e}")  # **Crucial:** Show the detailed error
             if key == 'flags':  # flags.xlsx is critical
                 st.stop()
     return data
-
-# Function to load allowed book sellers
-def load_allowed_book_sellers():
-    try:
-        with open('Books.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("Books.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading allowed book sellers: {e}")
-        return []
-
-# Function to load book category names
-def load_book_category_brands():
-    try:
-        with open('Books_cat.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
-    except FileNotFoundError:
-        st.error("Books_cat.txt file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading book category names: {e}")
-        return []
 
 # --- Main Streamlit App ---
 
 # Initialize the app
 st.title("Product Validation Tool")
 
-# Load configuration files
-try:
-    config_data = load_config_files()
-except Exception as e:
-    st.error(f"Failed to load configuration files: {e}")
-    st.stop()
-
-# Load category_FAS and sensitive brands
-try:
-    category_FAS_codes = load_category_FAS()
-    sensitive_brands = load_sensitive_brands()
-except Exception as e:
-    st.error(f"Failed to load category or sensitive brand data: {e}")
-    st.stop()
-
-# Load blacklisted words
-try:
-    blacklisted_words = load_blacklisted_words()
-except Exception as e:
-    st.error(f"Failed to load blacklisted words: {e}")
-    st.stop()
-
-# Load allowed book sellers and book brands
-try:
-    allowed_book_sellers = load_allowed_book_sellers()
-    book_category_brands = load_book_category_brands()
-except Exception as e:
-    st.error(f"Failed to load book seller data: {e}")
-    st.stop()
+config_data = load_config_files() # Load config
 
 # Load and process flags data
 flags_data = config_data['flags']
@@ -157,58 +64,26 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Process uploaded file
 if uploaded_file is not None:
     try:
-        # **Immediate Feedback:**  Before reading, tell the user something is happening.
-        st.info("Loading and processing your CSV file...")
-
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
 
-        #No column to lower cases/Strip
+        # Strip and Lowercase Column Names:
+        data.columns = [col.strip().lower() for col in data.columns]
+
+        if data.empty:
+            st.warning("The uploaded file is empty.")
+            st.stop()
+
         # **Debug: Print Column Names:** See what columns are actually present.
         st.write("Column Names in Uploaded File:", data.columns.tolist())
 
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
-        # Category validation
-        valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
-
         # --- Track Validation Results using OrderedDict ---
         validation_results = OrderedDict()  # Order matters
 
         # Use PRODUCT_SET_SID to identify rows in the validation results
-        validation_results["Missing COLOR"] = data[data['COLOR'].isna() | (data['COLOR'] == '')]
-        validation_results["Missing BRAND or NAME"] = data[data['BRAND'].isna() | (data['BRAND'] == '') |
-                                   data['NAME'].isna() | (data['NAME'] == '')]
-        validation_results["Single-word NAME"] = data[(data['NAME'].str.split().str.len() == 1) &
-                              (data['BRAND'] != 'Jumia Book')]
-        validation_results["Generic BRAND"] = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
-                                  (data['BRAND'] == 'Generic')]
-        validation_results["Blacklisted word in NAME"] = data[data['NAME'].apply(lambda name:
-            any(black_word.lower() in str(name).lower().split() for black_word in blacklisted_words))]
-        validation_results["BRAND name repeated in NAME"] = data[data.apply(lambda row:
-            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
-            row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-
-        # Duplicate product flag has been removed in this build to check better the process
-        #duplicate_products = data[data.duplicated(subset=['name', 'brand', 'seller_name'], keep=False)]
-        #validation_results["Duplicate product"] = duplicate_products
-
-        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        sensitive_brand_issues = data[
-            (data['CATEGORY_CODE'].isin(category_FAS_codes)) &
-            (data['BRAND'].isin(sensitive_brands))
-        ]
-        print("Sensitive Brand issues:")  # debugging purpose
-        print(sensitive_brand_issues[['PRODUCT_SET_SID', 'BRAND', 'CATEGORY_CODE']])  # check what products are
-        validation_results["Sensitive Brand"] = sensitive_brand_issues
-
-        #Book Seller Check:
-        invalid_book_sellers = data[
-            (data['BRAND'].isin(book_category_brands)) &  # Is it a book?
-            (data['SELLER_NAME'].isin(allowed_book_sellers)) &  # Seller is allowed...
-            (~data['CATEGORY_CODE'].isin(book_category_brands)) #but Category Code not in book category list
-        ]
-        validation_results["Invalid Book Seller"] = invalid_book_sellers
+        validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
 
         # Display results
         for title, df in validation_results.items():
