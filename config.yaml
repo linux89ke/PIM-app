@@ -1,0 +1,16 @@
+blacklisted_file: 'blacklisted.txt'
+sensitive_brands_file: 'sensitive_brands.xlsx'
+sensitive_brands_column: 'BRAND'
+category_fas_file: 'category_FAS.xlsx'
+category_code_column: 'ID'
+csv_encoding: 'UTF-8'
+flag_column: 'Flag'
+reason_column: 'Reason'
+comment_column: 'Comment'
+
+config_files:
+  flags: 'flags.xlsx'
+  check_variation: 'check_variation.xlsx'
+  category_fas: 'category_FAS.xlsx'
+  perfumes: 'perfumes.xlsx'
+  reasons: 'reasons.xlsx'
