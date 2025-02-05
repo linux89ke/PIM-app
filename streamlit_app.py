@@ -154,6 +154,12 @@ if uploaded_file is not None:
         
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
+        # **Sensitive Brands Flag (only for categories in category_FAS.xlsx)**
+        sensitive_brand_issues = data[
+            (data['CATEGORY_CODE'].isin(category_FAS_codes)) &
+            (data['BRAND'].isin(sensitive_brands))
+        ]
+
         # Generate report with a single reason per rejection
         final_report_rows = []
         for _, row in data.iterrows():
@@ -168,7 +174,8 @@ if uploaded_file is not None:
                 (generic_brand_issues, "Generic BRAND"),
                 (flagged_blacklisted, "Blacklisted word in NAME"),
                 (brand_in_name, "BRAND name repeated in NAME"),
-                (duplicate_products, "Duplicate product")
+                (duplicate_products, "Duplicate product"),
+                (sensitive_brand_issues, "Sensitive Brand")
             ]
             
             for validation_df, flag in validations:
@@ -220,7 +227,8 @@ if uploaded_file is not None:
             ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
             ("Blacklisted Words", flagged_blacklisted),
             ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products)
+            ("Duplicate Products", duplicate_products),
+            ("Sensitive Brands", sensitive_brand_issues)
         ]
 
         for title, df in validation_results:
