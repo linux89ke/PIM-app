@@ -194,15 +194,6 @@ if flags_data is not None:
             st.subheader("Flags Data")
             st.write(f"Total number of flags: {len(flags_data)}")  # Display total number of flags
 
-            # Display individual flags and their counts
-            if flag_col in flags_data.columns: #Check column exists before computing
-                flag_counts = flags_data[flag_col].value_counts()
-                for flag_value, count in flag_counts.items():
-                    st.write(f"Flag: {flag_value}, Count: {count}")
-
-                st.dataframe(flags_data)  # Display the flags dataframe
-            else:
-                st.error("Flag column not found in flags_data.")
     except Exception as e:
         st.error(f"Error processing flags data: {e}")
 
@@ -236,6 +227,57 @@ if uploaded_file is not None:
         except ValueError:
             st.warning("GLOBAL_PRICE column contains invalid values (non-numeric). Perfume price validation will be skipped.")
 
+        # Validation checks
+        missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
+        missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') |
+                                     data['NAME'].isna() | (data['NAME'] == '')]
+        single_word_name = data[(data['NAME'].str.split().str.len() == 1) &
+                                (~data['CATEGORY_CODE'].isin(book_categories)) &
+                                (data['BRAND'].str.lower() != 'jumia book')]
+
+        # Category validation
+        valid_category_codes_fas = category_FAS_codes
+        generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
+                                    (data['BRAND'].str.lower() == 'generic')]
+
+        # Perfume price validation
+        flagged_perfumes = []
+        perfumes_data = config_data.get('perfumes')
+        if perfumes_data is not None:
+            for _, row in data.iterrows():
+                brand = row['BRAND'].lower()
+                if brand in [str(b).lower() for b in perfumes_data['BRAND'].tolist()]:
+                    keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
+                    for keyword in keywords:
+                        if keyword in row['NAME'].lower():
+                            try: #ensure that GLOBAL_PRICE exists for perfumes.
+                                perfume_price = perfumes_data.loc[perfumes_data['BRAND'].str.lower() == brand and perfumes_data['KEYWORD'].str.lower() == keyword, 'PRICE'].values[0]
+                                if row['GLOBAL_PRICE'] < perfume_price:
+                                    flagged_perfumes.append(row)
+                            except KeyError:
+                                st.warning("GLOBAL_PRICE column is missing. Perfume price validation will be skipped.")
+                                break
+                            except IndexError:
+                                st.warning(f"No price found for BRAND: {brand}, KEYWORD: {keyword}")
+                                break
+        # Blacklist and brand name checks
+        flagged_blacklisted = data[data['NAME'].apply(lambda name:
+            any(black_word in str(name).lower().split() for black_word in blacklisted_words))]
+
+        brand_in_name = data[data.apply(lambda row:
+            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
+            row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+
+        duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
+
+        # Missing Variation Flag check
+        missing_variation = data[~data['CATEGORY_CODE'].isin(config_data['check_variation']['ID']) &
+                                 data['VARIATION'].isna()]
+
+        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
+        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) &
+                                      (data['BRAND'].str.lower().isin(sensitive_brands))]
+
         # Generate report with a single reason per rejection
         final_report_rows = []
         for _, row in data.iterrows():
@@ -267,6 +309,28 @@ if uploaded_file is not None:
         with col2:
             st.metric("Rejected Products", len(rejected_df))
             st.metric("Rejection Rate", f"{(len(rejected_df) / len(data) * 100):.1f}%")
+
+        # Show detailed results in expanders
+        validation_results = [
+            ("Missing COLOR", missing_color),
+            ("Missing BRAND or NAME", missing_brand_or_name),
+            ("Single-word NAME", single_word_name),
+            ("Generic BRAND Issues", generic_brand_issues),
+            ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
+            ("Blacklisted Words", flagged_blacklisted),
+            ("Brand in Name", brand_in_name),
+            ("Duplicate Products", duplicate_products),
+            ("Missing Variation", missing_variation),
+            ("Sensitive Brands", sensitive_brand_issues)
+        ]
+
+        for title, df in validation_results:
+            count = len(df) if not df.empty else 0
+            with st.expander(f"{title} ({count})"):
+                if count > 0:
+                    st.write(df)
+                else:
+                    st.write("No issues found.")
 
         # Download options for the report
         @st.cache_data
