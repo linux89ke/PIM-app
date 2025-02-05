@@ -194,7 +194,8 @@ if uploaded_file is not None:
         validation_results["BRAND name repeated in NAME"] = data[data.apply(lambda row:
             isinstance(row['brand'], str) and isinstance(row['name'], str) and
             row['brand'].lower() in row['name'].lower(), axis=1)]
-        # Duplicate product" flag has been removed in this build to check better the process
+
+        # Duplicate product flag has been removed in this build to check better the process
         #duplicate_products = data[data.duplicated(subset=['name', 'brand', 'seller_name'], keep=False)]
         #validation_results["Duplicate product"] = duplicate_products
 
@@ -203,11 +204,11 @@ if uploaded_file is not None:
             (data['category_code'].isin(category_FAS_codes)) &
             (data['brand'].isin(sensitive_brands))
         ]
-        print("Sensitive Brand issues:") #debugging purpose
-        print(sensitive_brand_issues[['product_set_sid', 'brand', 'category_code']]) #check what products are
+        print("Sensitive Brand issues:")  # debugging purpose
+        print(sensitive_brand_issues[['product_set_sid', 'brand', 'category_code']])  # check what products are
         validation_results["Sensitive Brand"] = sensitive_brand_issues
 
-        #Book Seller Check:
+        # Book Seller Check:
         invalid_book_sellers = data[
             (data['brand'].isin(book_category_brands)) &  # Is it a book?
             (data['seller_name'].isin(allowed_book_sellers)) &  # Seller is allowed...
@@ -222,7 +223,6 @@ if uploaded_file is not None:
                     st.dataframe(df)
                 else:
                     st.write("No issues found")
-
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
