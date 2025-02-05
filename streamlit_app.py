@@ -85,8 +85,8 @@ if uploaded_file is not None:
 
         # Use PRODUCT_SET_SID to identify rows in the validation results
         validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
-        validation_results["Missing BRAND or NAME"] = data[data['brand'].isna() | (data['brand'] == '') |
-                                   data['name'].isna() | (data['name'] == '')]
+        validation_results["Single-word NAME"] = data[(data['name'].str.split().str.len() == 1) &
+                              (data['brand'] != 'jumia book')]
 
         # Display results
         for title, df in validation_results.items():
