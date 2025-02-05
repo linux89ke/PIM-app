@@ -130,8 +130,18 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Inside the `if uploaded_file is not None:` block, use the encoding from the config
 if uploaded_file is not None:
    try:
+       excel_filename = uploaded_file.name  #this gives back a fake path for troubleshooting Streamilt not Pandas
+       st.write(f"Uploaded Excel File Name: {excel_filename}")
 
-        st.write("File uploaded!")
+       encoding = config.get('csv_encoding', 'ISO-8859-1')
+       data = pd.read_csv(uploaded_file, sep=';', encoding=encoding) # try read file you uploaded as dataframe
+       st.write(data.head())
+       st.write(f"Data Shape: {data.shape}")
+   except pd.errors.ParserError as e:  # pandas load issue? Let handle here
+       st.error(f"Pandas ParserError: {e}") # pandas help back info back error here if load CSV has error with stream format to excel data
+       st.stop()
+   except Exception as e:  # see if basic reads with system but we have more exception checkings to excel not in the format side and handle those
+       st.error(f"Error processing the uploaded CSV file: {e}") # file load see more errors in those if so thanks and again check for load files
+       st.stop()
 
-   except Exception as e:
-       st.error(f"❌ Error processing the uploaded file: {e}")
+#check 1, see file you select what is excel says by Streamtil after selection what gives and share if comes back or it can connect! Also excel has info side by pandas or gives exception if error. Give report for these side, thnks
