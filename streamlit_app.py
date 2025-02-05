@@ -52,6 +52,20 @@ def load_blacklisted_words():
 
 blacklisted_words = load_blacklisted_words()
 
+# Define reasons_dict for flagging
+reasons_dict = {
+    "Missing COLOR": ("1000005", "Kindly confirm the actual product colour", "Kindly include color of the product"),
+    "Missing BRAND or NAME": ("1000007", "Other Reason", "Missing BRAND or NAME"),
+    "Single-word NAME": ("1000008", "Kindly Improve Product Name Description", "Kindly Improve Product Name"),
+    "Generic BRAND": ("1000007", "Other Reason", "Kindly use Fashion as brand name for Fashion products"),
+    "Perfume price issue": ("1000030", "Suspected Counterfeit/Fake Product. Please Contact Seller Support By Raising A Claim, For Questions & Inquiries (Not Authorized)", "Perfume price too low"),
+    "Blacklisted word in NAME": ("1000033", "Keywords in your content/ Product name / description has been blacklisted", "Keywords in your content/ Product name / description has been blacklisted"),
+    "BRAND name repeated in NAME": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
+    "Duplicate product": ("1000007", "Other Reason", "Product is duplicated"),
+    "Missing Variation": ("1000009", "Category Missing Variation", "Please check Variation for this category"),
+    "Sensitive Brand": ("1000010", "Sensitive Brand Issue", "Sensitive Brand Name detected")
+}
+
 # Process uploaded file
 uploaded_file = st.file_uploader("Upload CSV", type="csv")
 
