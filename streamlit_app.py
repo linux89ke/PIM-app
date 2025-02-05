@@ -89,8 +89,9 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
         brand = str(row['BRAND']).lower()
         name = str(row['NAME']).lower()
         color = str(row['COLOR']).lower()
+        category_code = int(row['CATEGORY_CODE'])  # Convert to integer here
     except Exception as e:
-        st.error(f"Error converting data to string: {e}")
+        st.error(f"Error converting data to string or integer: {e}")
         return None, None
 
     # Missing COLOR
@@ -106,13 +107,13 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
         return reason, reason_details
 
     # Single-word NAME (excluding books)
-    if len(name.split()) == 1 and int(row['CATEGORY_CODE']) not in book_categories and brand != 'jumia book': #Cast to Integer
+    if len(name.split()) == 1 and category_code not in book_categories and brand != 'jumia book':
         reason = "Single-word NAME"
         reason_details = ("SINGLE-WORD-NAME", "Product name has only one word and is not a book.", "")
         return reason, reason_details
 
     # Generic BRAND in specific categories
-    if brand == 'generic' and int(row['CATEGORY_CODE']) in category_FAS_codes: #Cast to Integer
+    if brand == 'generic' and category_code in category_FAS_codes:
         reason = "Generic BRAND"
         reason_details = ("GENERIC-BRAND", "Product is of Generic brand in this category.", "")
         return reason, reason_details
@@ -152,13 +153,13 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
 
     # Missing Variation in specific categories
     check_variation_data = config_data.get('check_variation')
-    if check_variation_data is not None and row['CATEGORY_CODE'] not in [int(i) for i in check_variation_data['ID'].tolist()] and pd.isna(row['VARIATION']):
+    if check_variation_data is not None and int(row['CATEGORY_CODE']) not in [int(i) for i in check_variation_data['ID'].tolist()] and pd.isna(row['VARIATION']):
         reason = "Missing Variation"
         reason_details = ("MISSING-VARIATION", "Variation is missing for this category.", "")
         return reason, reason_details
 
     # Sensitive Brand in specific categories
-    if brand in sensitive_brands and int(row['CATEGORY_CODE']) in category_FAS_codes: #Cast to Integer
+    if brand in sensitive_brands and category_code in category_FAS_codes:
         reason = "Sensitive Brand"
         reason_details = ("SENSITIVE-BRAND", "Product is from a sensitive brand in this category.", "")
         return reason, reason_details
@@ -213,12 +214,7 @@ if uploaded_file is not None:
         st.write(data.head())
 
         # Ensure that category code is an integer if possible.
-        try:
-            data['CATEGORY_CODE'] = data['CATEGORY_CODE'].astype(int)
-        except ValueError:
-            st.error("CATEGORY_CODE column contains non-integer values.")
-            st.stop()
-            
+
         # Ensure that GLOBAL_PRICE is a float if possible
         try:
             data['GLOBAL_PRICE'] = data['GLOBAL_PRICE'].astype(float)
@@ -232,12 +228,12 @@ if uploaded_file is not None:
         missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') |
                                      data['NAME'].isna() | (data['NAME'] == '')]
         single_word_name = data[(data['NAME'].str.split().str.len() == 1) &
-                                (~data['CATEGORY_CODE'].isin(book_categories)) &
+                                (~data['CATEGORY_CODE'].astype(int).isin(book_categories)) & #Convert here
                                 (data['BRAND'].str.lower() != 'jumia book')]
 
         # Category validation
         valid_category_codes_fas = category_FAS_codes
-        generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
+        generic_brand_issues = data[(data['CATEGORY_CODE'].astype(int).isin(valid_category_codes_fas)) & #Convert here
                                     (data['BRAND'].str.lower() == 'generic')]
 
         # Perfume price validation
@@ -272,11 +268,12 @@ if uploaded_file is not None:
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
         # Missing Variation Flag check
-        missing_variation = data[~data['CATEGORY_CODE'].isin(config_data['check_variation']['ID']) &
+        check_variation_data = config_data.get('check_variation')
+        missing_variation = data[~data['CATEGORY_CODE'].astype(int).isin([int(i) for i in check_variation_data['ID'].tolist()]) & #Convert here
                                  data['VARIATION'].isna()]
 
         # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) &
+        sensitive_brand_issues = data[(data['CATEGORY_CODE'].astype(int).isin(category_FAS_codes)) & #Convert here
                                       (data['BRAND'].str.lower().isin(sensitive_brands))]
 
         # Generate report with a single reason per rejection
