@@ -62,7 +62,7 @@ def load_config_files():
             data[key] = df
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
-            st.error(f"Detailed error: {e}") # **Crucial:** Show the detailed error
+            st.error(f"Detailed error: {e}")  # **Crucial:** Show the detailed error
             if key == 'flags':  # flags.xlsx is critical
                 st.stop()
     return data
@@ -161,7 +161,10 @@ if uploaded_file is not None:
         # **Immediate Feedback:**  Before reading, tell the user something is happening.
         st.info("Loading and processing your CSV file...")
 
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
+        # **Explicitly use a BytesIO object:** This is the most reliable way.
+        bytes_data = uploaded_file.getvalue()
+        data = pd.read_csv(BytesIO(bytes_data), sep=';', encoding='ISO-8859-1')
+
 
         if data.empty:
             st.warning("The uploaded file is empty.")
@@ -347,5 +350,3 @@ if uploaded_file is not None:
         st.error(f"Error processing the uploaded file: {e}")
         st.error(f"Detailed error: {e}")  # Show the full error
         st.stop()  # Stop execution after an error
-
-print("test")
