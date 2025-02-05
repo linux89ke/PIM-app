@@ -1,45 +1,33 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re  # Import the regular expression module
 
 # --- Data Loading and Cleaning ---
 @st.cache_data
 def load_and_clean_data(file_path):
     """Loads the data, cleans it, and returns a Pandas DataFrame with flags."""
-    df = pd.read_csv(file_path, sep=";")
+    df = pd.read_csv(file_path, sep=";", encoding='ISO-8859-1')
 
     # Data type conversion and handling missing values
     df['GLOBAL_SALE_PRICE'] = pd.to_numeric(df['GLOBAL_SALE_PRICE'], errors='coerce')
     df['GLOBAL_PRICE'] = pd.to_numeric(df['GLOBAL_PRICE'], errors='coerce')
     df['CATEGORY_CODE'] = pd.to_numeric(df['CATEGORY_CODE'], errors='coerce')
 
-    # **CLEANING THE 'COLOR' Column (Before Flagging)**
+    # Cleaning steps
+    df['COLOR'] = df['COLOR'].fillna('').str.strip().str.lower().str.replace(r'\s+', ' ', regex=True)
+    df['BRAND'] = df['BRAND'].fillna('').str.strip() # fill nan
+    df['NAME'] = df['NAME'].fillna('').str.strip()
 
-    #Handle any empty string/ nan, NaN entries. Use regex for additional cases with \s
-
-    #Flag the original count for reporting's sake, if either missing initially or after data cleanup
-
-    #Flag any blank initial entries: these are important to monitor since the cleaned results will then show all flags together
-    df['ORIGINAL_HAS_MISSING_COLOR'] = df['COLOR'].isna()
+    return df
 
 
-    #Fill all the nan empty space objects, this is required for downstream string parsing
+def apply_validation_checks(df):
+    """Applies specific validation checks and creates flags"""
+    df['FLAG_MISSING_COLOR'] = df['COLOR'] == '' # Check if value now has nothing and is not useful
+    df['FLAG_MISSING_BRAND_OR_NAME'] = (df['BRAND'] == '') | (df['NAME'] == '')  # Missing BRAND or NAME
+    df['FLAG_SINGLE_WORD_NAME'] = (df['NAME'].str.split().str.len() == 1) & (df['BRAND'] != 'Jumia Book')
 
-    df['COLOR'] = df['COLOR'].fillna('')
-
-    #Standardise ALL values, must account that "nan" from empty entries is handled, so a non nan data point
-    # Remove leading/trailing whitespace
-    df['COLOR'] = df['COLOR'].str.strip()
-    # Replace multiple spaces with a single space ( \s means whitespace, + mean one or more)
-    df['COLOR'] = df['COLOR'].str.replace(r'\s+', ' ', regex=True)
-    # Convert to lowercase for consistent comparison (now safe, nan string are accounted for!)
-    df['COLOR'] = df['COLOR'].str.lower()
-
-
-    # --- Add Data Quality Flags --- after preprocessing
-    df['HAS_WRONG_OR_MISSING_COLOR'] = (df['COLOR'] == '') | (df['COLOR'].str.contains(r'^\s+|\s+$', regex=True))| df['COLOR'].str.contains(r'\s{2,}', regex =True)
-
+    df['HAS_MULTIPLE_ISSUES'] = df[['FLAG_MISSING_COLOR', 'FLAG_MISSING_BRAND_OR_NAME', 'FLAG_SINGLE_WORD_NAME']].any(axis=1)
     return df
 
 # --- Main App ---
@@ -53,7 +41,10 @@ def main():
         # Load and Clean the Data
         df = load_and_clean_data(file_path)
 
-        st.success("Data loaded successfully!")
+        #Apply Validation Checks
+        df = apply_validation_checks(df)
+
+        st.success("Data loaded and validated successfully!")
 
         # --- Sidebar for Filters and Options ---
         st.sidebar.header("Filters & Options")
@@ -64,7 +55,7 @@ def main():
         filtered_df = df[df['TYPE'].isin(selected_types)]
 
         # Brand Filter
-        unique_brands = df['BRAND'].unique()
+        unique_brands = filtered_df['BRAND'].unique()
         selected_brands = st.sidebar.multiselect("Brand:", unique_brands, default=unique_brands)
         filtered_df = filtered_df[filtered_df['BRAND'].isin(selected_brands)]
 
@@ -80,7 +71,6 @@ def main():
                                          value=(float(df['GLOBAL_PRICE'].min()), float(df['GLOBAL_PRICE'].max())))
         filtered_df = filtered_df[(filtered_df['GLOBAL_PRICE'] >= price_range[0]) & (filtered_df['GLOBAL_PRICE'] <= price_range[1])]
 
-
         # --- Display Data Quality Flags ---
         st.header("Data Quality Summary")
 
@@ -89,17 +79,15 @@ def main():
 
             flag_summary = pd.DataFrame({
                 'Flag': [
-                    "Wrong / Missing Color", #This replaces all prior values with the now all encompasing flag
-                    # Add your flags here as well.
+                    "HAS Multiple Issues",
                 ],
                 'Count': [
-                    filtered_df['HAS_WRONG_OR_MISSING_COLOR'].sum(),
-                    #Sum each flag's colunm
+                    filtered_df['HAS_MULTIPLE_ISSUES'].sum(),
                 ]
             })
 
             st.dataframe(flag_summary)
-            st.write("Rows that were summed represent all flags marked `True` for any reason")
+            st.write("These Rows may have: Missing/Wrong information and may benefit from review")
 
         # --- Display Data ---
         st.header("Filtered Data")
