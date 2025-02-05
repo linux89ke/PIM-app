@@ -189,25 +189,22 @@ if flags_data is not None:
 
         if not all([flag_col, reason_col, comment_col]):
             st.error(f"Missing required columns in flags.xlsx. Required: Flag, Reason, Comment. Found: {flags_data.columns.tolist()}")
-            st.stop()
 
-        for _, row in flags_data.iterrows():
-            flag = str(row[flag_col]).strip()
-            reason = str(row[reason_col]).strip()
-            comment = str(row[comment_col]).strip()
-            reason_parts = reason.split(' - ', 1)
-            code = reason_parts[0]
-            message = reason_parts[1] if len(reason_parts) > 1 else ''
-            reasons_dict[flag] = (code, message, comment)
+        else:
+            st.subheader("Flags Data")
+            st.write(f"Total number of flags: {len(flags_data)}")  # Display total number of flags
+
+            # Display individual flags and their counts
+            if flag_col in flags_data.columns: #Check column exists before computing
+                flag_counts = flags_data[flag_col].value_counts()
+                for flag_value, count in flag_counts.items():
+                    st.write(f"Flag: {flag_value}, Count: {count}")
+
+                st.dataframe(flags_data)  # Display the flags dataframe
+            else:
+                st.error("Flag column not found in flags_data.")
     except Exception as e:
         st.error(f"Error processing flags data: {e}")
-        st.stop()
-
-#Display Flags data on Front end
-if flags_data is not None: #Only display if it was loaded correctly
-    st.subheader("Flags Data")
-    st.write(f"Number of Rows: {len(flags_data)}")
-    st.dataframe(flags_data)
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
