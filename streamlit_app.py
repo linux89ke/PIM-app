@@ -106,13 +106,13 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
         return reason, reason_details
 
     # Single-word NAME (excluding books)
-    if len(name.split()) == 1 and row['CATEGORY_CODE'] not in book_categories and brand != 'jumia book':
+    if len(name.split()) == 1 and int(row['CATEGORY_CODE']) not in book_categories and brand != 'jumia book': #Cast to Integer
         reason = "Single-word NAME"
         reason_details = ("SINGLE-WORD-NAME", "Product name has only one word and is not a book.", "")
         return reason, reason_details
 
     # Generic BRAND in specific categories
-    if brand == 'generic' and row['CATEGORY_CODE'] in category_FAS_codes:
+    if brand == 'generic' and int(row['CATEGORY_CODE']) in category_FAS_codes: #Cast to Integer
         reason = "Generic BRAND"
         reason_details = ("GENERIC-BRAND", "Product is of Generic brand in this category.", "")
         return reason, reason_details
@@ -158,7 +158,7 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
         return reason, reason_details
 
     # Sensitive Brand in specific categories
-    if brand in sensitive_brands and row['CATEGORY_CODE'] in category_FAS_codes:
+    if brand in sensitive_brands and int(row['CATEGORY_CODE']) in category_FAS_codes: #Cast to Integer
         reason = "Sensitive Brand"
         reason_details = ("SENSITIVE-BRAND", "Product is from a sensitive brand in this category.", "")
         return reason, reason_details
@@ -260,6 +260,7 @@ if uploaded_file is not None:
                             except IndexError:
                                 st.warning(f"No price found for BRAND: {brand}, KEYWORD: {keyword}")
                                 break
+
         # Blacklist and brand name checks
         flagged_blacklisted = data[data['NAME'].apply(lambda name:
             any(black_word in str(name).lower().split() for black_word in blacklisted_words))]
