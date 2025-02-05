@@ -64,7 +64,8 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Process uploaded file
 if uploaded_file is not None:
     try:
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
+        st.info("Loading and processing your CSV file...") # message
+        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1') #data loaded
 
         # Strip and Lowercase Column Names:
         data.columns = [col.strip().lower() for col in data.columns]
@@ -83,7 +84,7 @@ if uploaded_file is not None:
         validation_results = OrderedDict()  # Order matters
 
         # Use PRODUCT_SET_SID to identify rows in the validation results
-        validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')]
+        validation_results["Missing COLOR"] = data[data['color'].isna() | (data['color'] == '')] #check COLOR
 
         # Display results
         for title, df in validation_results.items():
