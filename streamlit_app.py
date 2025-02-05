@@ -164,6 +164,19 @@ if uploaded_file is not None:
 
         # Generate report with a single reason per rejection
         final_report_rows = []
+        flag_counts = {
+            'Missing COLOR': 0,
+            'Missing BRAND or NAME': 0,
+            'Single-word NAME': 0,
+            'Generic BRAND': 0,
+            'Perfume price issue': 0,
+            'Blacklisted word in NAME': 0,
+            'BRAND name repeated in NAME': 0,
+            'Duplicate product': 0,
+            'Missing Variation': 0,
+            'Sensitive Brand': 0
+        }
+        
         for _, row in data.iterrows():
             reason = None
             reason_details = None
@@ -185,12 +198,14 @@ if uploaded_file is not None:
                 if row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                     reason = flag
                     reason_details = reasons_dict.get(flag, ("", "", ""))
+                    flag_counts[flag] += 1  # Increment the count for this flag
                     break  # Stop after finding the first applicable reason
 
             # Check perfume price issues separately
             if not reason and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                 reason = "Perfume price issue"
                 reason_details = reasons_dict.get("Perfume price issue", ("", "", ""))
+                flag_counts["Perfume price issue"] += 1
 
             # Prepare report row
             status = 'Rejected' if reason else 'Approved'
@@ -208,6 +223,11 @@ if uploaded_file is not None:
         # Create final report DataFrame
         final_report_df = pd.DataFrame(final_report_rows)
         
+        # Display the flag counts on the front-end
+        st.subheader("Number of Rows per Flag")
+        for flag, count in flag_counts.items():
+            st.write(f"{flag}: {count} products")
+
         # Split into approved and rejected
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
@@ -245,11 +265,10 @@ if uploaded_file is not None:
         def to_excel(df):
             output = BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Final Report")
-            output.seek(0)
-            return output
+                df.to_excel(writer, sheet_name="ProductSets", index=False)
+                config_data['reasons'].to_excel(writer, sheet_name="RejectionReasons", index=False)
+            return output.getvalue()
 
         st.download_button("Download Final Report", to_excel(final_report_df), "final_report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
     except Exception as e:
         st.error(f"❌ Error processing uploaded file: {e}")
