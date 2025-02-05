@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from datetime import datetime
 
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
@@ -10,9 +9,9 @@ st.set_page_config(page_title="Product Validation Tool", layout="centered")
 def load_blacklisted_words():
     try:
         with open('blacklisted.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
+            return [line.strip().lower() for line in f.readlines()]  # Lowercase for case-insensitivity
     except FileNotFoundError:
-        st.error("blacklisted.txt file not found!")
+        st.error("blacklisted.txt not found!")
         return []
     except Exception as e:
         st.error(f"Error loading blacklisted words: {e}")
@@ -21,10 +20,10 @@ def load_blacklisted_words():
 # Function to load sensitive brands from the sensitive_brands.xlsx file
 def load_sensitive_brands():
     try:
-        sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['BRAND'].tolist()  # Assuming the file has a 'Brand' column
+        df = pd.read_excel('sensitive_brands.xlsx')
+        return [brand.lower() for brand in df['BRAND'].dropna().astype(str).tolist()]  # Lowercase & handle potential NaN
     except FileNotFoundError:
-        st.error("sensitive_brands.xlsx file not found!")
+        st.error("sensitive_brands.xlsx not found!")
         return []
     except Exception as e:
         st.error(f"Error loading sensitive brands: {e}")
@@ -33,13 +32,28 @@ def load_sensitive_brands():
 # Load category_FAS.xlsx to get the allowed CATEGORY_CODE values
 def load_category_FAS():
     try:
-        category_fas_df = pd.read_excel('category_FAS.xlsx')
-        return category_fas_df['ID'].tolist()  # Assuming 'ID' column contains the category codes
+        df = pd.read_excel('category_FAS.xlsx')
+        return [int(code) for code in df['ID'].dropna().astype(int).tolist()]  # Ensure integers
     except FileNotFoundError:
-        st.error("category_FAS.xlsx file not found!")
+        st.error("category_FAS.xlsx not found!")
         return []
     except Exception as e:
         st.error(f"Error loading category_FAS data: {e}")
+        return []
+
+# Load book categories from Books_cat.txt
+def load_book_categories():
+    try:
+        with open('Books_cat.txt', 'r') as f:
+            return [int(line.strip()) for line in f.readlines()]
+    except FileNotFoundError:
+        st.error("Books_cat.txt not found!")
+        return []
+    except ValueError:
+        st.error("Books_cat.txt contains non-integer values!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading book categories: {e}")
         return []
 
 # Load and validate configuration files
@@ -63,6 +77,77 @@ def load_config_files():
                 st.stop()
     return data
 
+# Function to validate a single product
+def validate_product(row, config_data, blacklisted_words, book_categories, sensitive_brands, category_FAS_codes):
+    reason = None
+    reason_details = None
+
+    # Missing COLOR
+    if pd.isna(row['COLOR']) or row['COLOR'].strip() == "":
+        reason = "Missing COLOR"
+        reason_details = ("COLOR-MISSING", "Color is missing or empty.", "")
+        return reason, reason_details
+
+    # Missing BRAND or NAME
+    if pd.isna(row['BRAND']) or row['BRAND'].strip() == "" or pd.isna(row['NAME']) or row['NAME'].strip() == "":
+        reason = "Missing BRAND or NAME"
+        reason_details = ("BRAND_OR_NAME-MISSING", "Brand or Name is missing or empty.", "")
+        return reason, reason_details
+
+    # Single-word NAME (excluding books)
+    if len(row['NAME'].split()) == 1 and row['CATEGORY_CODE'] not in book_categories and row['BRAND'].lower() != 'jumia book':
+        reason = "Single-word NAME"
+        reason_details = ("SINGLE-WORD-NAME", "Product name has only one word and is not a book.", "")
+        return reason, reason_details
+
+    # Generic BRAND in specific categories
+    if row['BRAND'].lower() == 'generic' and row['CATEGORY_CODE'] in category_FAS_codes:
+        reason = "Generic BRAND"
+        reason_details = ("GENERIC-BRAND", "Product is of Generic brand in this category.", "")
+        return reason, reason_details
+
+    # Perfume price validation
+    perfumes_data = config_data.get('perfumes')
+    if perfumes_data is not None:
+        brand = row['BRAND'].lower()
+        if brand in perfumes_data['BRAND'].str.lower().values:
+            keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
+            for keyword in keywords:
+                if keyword.lower() in row['NAME'].lower():
+                    perfume_price = perfumes_data.loc[
+                        (perfumes_data['BRAND'].str.lower() == brand) &
+                        (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
+                    if row['GLOBAL_PRICE'] < perfume_price:
+                        reason = "Perfume price issue"
+                        reason_details = ("PERFUME-PRICE", "Perfume price is below the threshold.", "")
+                        return reason, reason_details
+
+    # Blacklisted word in NAME
+    if any(black_word in row['NAME'].lower().split() for black_word in blacklisted_words):
+        reason = "Blacklisted word in NAME"
+        reason_details = ("BLACKLISTED-WORD", "Name contains a blacklisted word.", "")
+        return reason, reason_details
+
+    # BRAND name repeated in NAME
+    if row['BRAND'].lower() in row['NAME'].lower():
+        reason = "BRAND name repeated in NAME"
+        reason_details = ("BRAND-IN-NAME", "Brand name is found in the product name.", "")
+        return reason, reason_details
+
+    # Missing Variation in specific categories
+    if row['CATEGORY_CODE'] not in config_data['check_variation']['ID'].values and pd.isna(row['VARIATION']):
+        reason = "Missing Variation"
+        reason_details = ("MISSING-VARIATION", "Variation is missing for this category.", "")
+        return reason, reason_details
+
+    # Sensitive Brand in specific categories
+    if row['BRAND'].lower() in sensitive_brands and row['CATEGORY_CODE'] in category_FAS_codes:
+        reason = "Sensitive Brand"
+        reason_details = ("SENSITIVE-BRAND", "Product is from a sensitive brand in this category.", "")
+        return reason, reason_details
+
+    return None, None  # No issues found
+
 # Initialize the app
 st.title("Product Validation Tool")
 
@@ -75,6 +160,9 @@ sensitive_brands = load_sensitive_brands()
 
 # Load blacklisted words
 blacklisted_words = load_blacklisted_words()
+
+# Load book categories
+book_categories = load_book_categories()
 
 # Load and process flags data
 flags_data = config_data['flags']
@@ -108,50 +196,51 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 if uploaded_file is not None:
     try:
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
-        
+
         if data.empty:
             st.warning("The uploaded file is empty.")
             st.stop()
-            
+
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
         # Validation checks
         missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
-        missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') | 
-                                   data['NAME'].isna() | (data['NAME'] == '')]
-        single_word_name = data[(data['NAME'].str.split().str.len() == 1) & 
-                              (data['BRAND'] != 'Jumia Book')]
-        
+        missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') |
+                                     data['NAME'].isna() | (data['NAME'] == '')]
+        single_word_name = data[(data['NAME'].str.split().str.len() == 1) &
+                                (~data['CATEGORY_CODE'].isin(book_categories)) &
+                                (data['BRAND'].str.lower() != 'jumia book')]
+
         # Category validation
         valid_category_codes_fas = category_FAS_codes
-        generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
-                                  (data['BRAND'] == 'Generic')]
-        
+        generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) &
+                                    (data['BRAND'].str.lower() == 'generic')]
+
         # Perfume price validation
         flagged_perfumes = []
         perfumes_data = config_data['perfumes']
         for _, row in data.iterrows():
-            brand = row['BRAND']
-            if brand in perfumes_data['BRAND'].values:
-                keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
+            brand = row['BRAND'].lower()
+            if brand in perfumes_data['BRAND'].str.lower().values:
+                keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
                 for keyword in keywords:
                     if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
                         perfume_price = perfumes_data.loc[
-                            (perfumes_data['BRAND'] == brand) & 
-                            (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
+                            (perfumes_data['BRAND'].str.lower() == brand) &
+                            (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
                         if row['GLOBAL_PRICE'] < perfume_price:
                             flagged_perfumes.append(row)
                             break
 
         # Blacklist and brand name checks
-        flagged_blacklisted = data[data['NAME'].apply(lambda name: 
-            any(black_word.lower() in str(name).lower().split() for black_word in blacklisted_words))]
-        
-        brand_in_name = data[data.apply(lambda row: 
-            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and 
+        flagged_blacklisted = data[data['NAME'].str.lower().apply(lambda name:
+            any(black_word in name.split() for black_word in blacklisted_words))]
+
+        brand_in_name = data[data.apply(lambda row:
+            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
             row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-        
+
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
         # Missing Variation Flag check
@@ -159,8 +248,8 @@ if uploaded_file is not None:
                                  data['VARIATION'].isna()]
 
         # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) & 
-                                      (data['BRAND'].isin(sensitive_brands))]
+        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) &
+                                      (data['BRAND'].str.lower().isin(sensitive_brands))]
 
         # Generate report with a single reason per rejection
         final_report_rows = []
@@ -168,7 +257,7 @@ if uploaded_file is not None:
             reason = None
             reason_details = None
 
-            # Check all validation conditions in a specific order and take the first applicable one
+            # Check all validation conditions and take the first applicable one
             validations = [
                 (missing_color, "Missing COLOR"),
                 (missing_brand_or_name, "Missing BRAND or NAME"),
@@ -180,23 +269,22 @@ if uploaded_file is not None:
                 (missing_variation, "Missing Variation"),
                 (sensitive_brand_issues, "Sensitive Brand")
             ]
-            
             for validation_df, flag in validations:
-                if row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
+                if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                     reason = flag
                     reason_details = reasons_dict.get(flag, ("", "", ""))
-                    break  # Stop after finding the first applicable reason
+                    break
 
             # Check perfume price issues separately
-            if not reason and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
+            if not reason and not pd.DataFrame(flagged_perfumes).empty and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
                 reason = "Perfume price issue"
                 reason_details = reasons_dict.get("Perfume price issue", ("", "", ""))
-
+            
             # Prepare report row
             status = 'Rejected' if reason else 'Approved'
             reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
             detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else ""
-            
+
             final_report_rows.append({
                 'ProductSetSid': row['PRODUCT_SET_SID'],
                 'ParentSKU': row.get('PARENTSKU', ''),
@@ -207,7 +295,7 @@ if uploaded_file is not None:
 
         # Create final report DataFrame
         final_report_df = pd.DataFrame(final_report_rows)
-        
+
         # Split into approved and rejected
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
@@ -219,7 +307,7 @@ if uploaded_file is not None:
             st.metric("Approved Products", len(approved_df))
         with col2:
             st.metric("Rejected Products", len(rejected_df))
-            st.metric("Rejection Rate", f"{(len(rejected_df)/len(data)*100):.1f}%")
+            st.metric("Rejection Rate", f"{(len(rejected_df) / len(data) * 100):.1f}%")
 
         # Show detailed results in expanders with row counts
         validation_results = [
@@ -252,7 +340,8 @@ if uploaded_file is not None:
             return output
 
         excel_data = to_excel(final_report_df)
-        st.download_button(label="Download Final Report", data=excel_data, file_name="validation_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.download_button(label="Download Final Report", data=excel_data, file_name="validation_report.xlsx",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     except Exception as e:
         st.error(f"❌ Error processing the uploaded file: {e}")
