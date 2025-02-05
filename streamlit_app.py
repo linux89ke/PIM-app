@@ -168,7 +168,7 @@ if uploaded_file is not None:
         brand_in_name = data[data.apply(lambda row: 
         isinstance(row['brand'], str) and isinstance(row['name'], str) and 
         row['brand'].lower() in row['name'].lower(), axis=1)]
-         validation_results["BRAND name repeated in NAME"] = brand_in_name
+        validation_results["BRAND name repeated in NAME"] = brand_in_name
         # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
 
         sensitive_brand_issues = data[
