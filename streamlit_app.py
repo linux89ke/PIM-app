@@ -7,6 +7,8 @@ from collections import OrderedDict  # For keeping track of validation results
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
+# --- Function Definitions (Keep these at the top) ---
+
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
     try:
@@ -60,6 +62,7 @@ def load_config_files():
             data[key] = df
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
+            st.error(f"Detailed error: {e}") # **Crucial:** Show the detailed error
             if key == 'flags':  # flags.xlsx is critical
                 st.stop()
     return data
@@ -88,22 +91,40 @@ def load_book_category_brands():
         st.error(f"Error loading book category names: {e}")
         return []
 
+# --- Main Streamlit App ---
+
 # Initialize the app
 st.title("Product Validation Tool")
 
 # Load configuration files
-config_data = load_config_files()
+try:
+    config_data = load_config_files()
+except Exception as e:
+    st.error(f"Failed to load configuration files: {e}")
+    st.stop()
 
 # Load category_FAS and sensitive brands
-category_FAS_codes = load_category_FAS()
-sensitive_brands = load_sensitive_brands()
+try:
+    category_FAS_codes = load_category_FAS()
+    sensitive_brands = load_sensitive_brands()
+except Exception as e:
+    st.error(f"Failed to load category or sensitive brand data: {e}")
+    st.stop()
 
 # Load blacklisted words
-blacklisted_words = load_blacklisted_words()
+try:
+    blacklisted_words = load_blacklisted_words()
+except Exception as e:
+    st.error(f"Failed to load blacklisted words: {e}")
+    st.stop()
 
 # Load allowed book sellers and book brands
-allowed_book_sellers = load_allowed_book_sellers()
-book_category_brands = load_book_category_brands()
+try:
+    allowed_book_sellers = load_allowed_book_sellers()
+    book_category_brands = load_book_category_brands()
+except Exception as e:
+    st.error(f"Failed to load book seller data: {e}")
+    st.stop()
 
 # Load and process flags data
 flags_data = config_data['flags']
@@ -128,6 +149,7 @@ try:
         reasons_dict[flag] = (code, message, comment)
 except Exception as e:
     st.error(f"Error processing flags data: {e}")
+    st.error(f"Detailed error: {e}")
     st.stop()
 
 # File upload section
@@ -136,11 +158,17 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Process uploaded file
 if uploaded_file is not None:
     try:
+        # **Immediate Feedback:**  Before reading, tell the user something is happening.
+        st.info("Loading and processing your CSV file...")
+
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
 
         if data.empty:
             st.warning("The uploaded file is empty.")
             st.stop()
+
+        # **Debug: Print Column Names:** See what columns are actually present.
+        st.write("Column Names in Uploaded File:", data.columns.tolist())
 
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
@@ -317,3 +345,7 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
+        st.error(f"Detailed error: {e}")  # Show the full error
+        st.stop()  # Stop execution after an error
+
+print("test")
