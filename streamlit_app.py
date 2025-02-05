@@ -63,6 +63,31 @@ def load_config_files():
                 st.stop()
     return data
 
+# Function to load allowed book sellers
+def load_allowed_book_sellers():
+    try:
+        with open('Books.txt', 'r') as f:
+            return [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        st.error("Books.txt file not found!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading allowed book sellers: {e}")
+        return []
+
+# Function to load book category names
+def load_book_category_brands():
+    try:
+        with open('Books_cat.txt', 'r') as f:
+            return [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        st.error("Books_cat.txt file not found!")
+        return []
+    except Exception as e:
+        st.error(f"Error loading book category names: {e}")
+        return []
+
+
 # Initialize the app
 st.title("Product Validation Tool")
 
@@ -75,6 +100,11 @@ sensitive_brands = load_sensitive_brands()
 
 # Load blacklisted words
 blacklisted_words = load_blacklisted_words()
+
+# Load allowed book sellers and book brands
+allowed_book_sellers = load_allowed_book_sellers()
+book_category_brands = load_book_category_brands()
+
 
 # Load and process flags data
 flags_data = config_data['flags']
@@ -154,6 +184,12 @@ if uploaded_file is not None:
         
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
+         # **Book Seller Check:**
+        invalid_book_sellers = data[
+            (data['BRAND'].isin(book_category_brands)) &  # Is it a book?
+            (~data['SELLER_NAME'].isin(allowed_book_sellers)) #Check if allowed
+            ]
+
         # **Sensitive Brands Flag (only for categories in category_FAS.xlsx)**
         sensitive_brand_issues = data[
             (data['CATEGORY_CODE'].isin(category_FAS_codes)) &
@@ -175,110 +211,5 @@ if uploaded_file is not None:
                 (flagged_blacklisted, "Blacklisted word in NAME"),
                 (brand_in_name, "BRAND name repeated in NAME"),
                 (duplicate_products, "Duplicate product"),
-                (sensitive_brand_issues, "Sensitive Brand")
-            ]
-            
-            for validation_df, flag in validations:
-                if row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                    reason = flag
-                    reason_details = reasons_dict.get(flag, ("", "", ""))
-                    break  # Stop after finding the first applicable reason
-
-            # Check perfume price issues separately
-            if not reason and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                reason = "Perfume price issue"
-                reason_details = reasons_dict.get("Perfume price issue", ("", "", ""))
-
-            # Prepare report row
-            status = 'Rejected' if reason else 'Approved'
-            reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
-            detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else ""
-            
-            final_report_rows.append({
-                'ProductSetSid': row['PRODUCT_SET_SID'],
-                'ParentSKU': row.get('PARENTSKU', ''),
-                'Status': status,
-                'Reason': detailed_reason,
-                'Comment': comment
-            })
-
-        # Create final report DataFrame
-        final_report_df = pd.DataFrame(final_report_rows)
-        
-        # Split into approved and rejected
-        approved_df = final_report_df[final_report_df['Status'] == 'Approved']
-        rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
-
-        # Display results
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Products", len(data))
-            st.metric("Approved Products", len(approved_df))
-        with col2:
-            st.metric("Rejected Products", len(rejected_df))
-            st.metric("Rejection Rate", f"{(len(rejected_df)/len(data)*100):.1f}%")
-
-        # Show detailed results in expanders
-        validation_results = [
-            ("Missing COLOR", missing_color),
-            ("Missing BRAND or NAME", missing_brand_or_name),
-            ("Single-word NAME", single_word_name),
-            ("Generic BRAND Issues", generic_brand_issues),
-            ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
-            ("Blacklisted Words", flagged_blacklisted),
-            ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products),
-            ("Sensitive Brands", sensitive_brand_issues)
-        ]
-
-        for title, df in validation_results:
-            with st.expander(f"{title} ({len(df)} products)"):
-                if not df.empty:
-                    st.dataframe(df)
-                else:
-                    st.write("No issues found")
-
-        # Export functions
-        @st.cache_data
-        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df1.to_excel(writer, index=False, sheet_name=sheet1_name)
-                df2.to_excel(writer, index=False, sheet_name=sheet2_name)
-            output.seek(0)
-            return output
-
-        # Download buttons
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            final_report_excel = to_excel(final_report_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Final Export",
-                data=final_report_excel,
-                file_name=f"Final_Report_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col2:
-            rejected_excel = to_excel(rejected_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Rejected Export",
-                data=rejected_excel,
-                file_name=f"Rejected_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        
-        with col3:
-            approved_excel = to_excel(approved_df, config_data['reasons'], "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Approved Export",
-                data=approved_excel,
-                file_name=f"Approved_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    except Exception as e:
-        st.error(f"Error processing the uploaded file: {e}")
+                (sensitive_brand_issues, "Sensitive Brand"),
+                (invalid_
