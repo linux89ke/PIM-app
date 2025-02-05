@@ -61,19 +61,21 @@ def load_config_files():
     config_files = {
         'flags': 'flags.xlsx',
         'check_variation': 'check_variation.xlsx',
-        'category_fas': 'category_FAS.xlsx',
-        'perfumes': 'perfumes.xlsx',
-        'reasons': 'reasons.xlsx'  # Adding reasons.xlsx
+        'perfumes': 'perfumes.xlsx'
     }
     
     data = {}
     for key, filename in config_files.items():
         try:
-            df = pd.read_excel(filename).rename(columns=lambda x: x.strip())  # Strip spaces from column names
+            df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
             data[key] = df
+        except FileNotFoundError:
+            st.error(f"{filename} not found!")
+            if key == 'flags':
+                st.stop()
         except Exception as e:
-            st.error(f"❌ Error loading {filename}: {e}")
-            if key == 'flags':  # flags.xlsx is critical
+            st.error(f"Error loading {filename}: {e}")
+            if key == 'flags':
                 st.stop()
     return data
 
@@ -82,26 +84,31 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
     reason = None
     reason_details = None
 
+    # Convert relevant columns to string and handle NaN values before applying string methods
+    brand = str(row['BRAND']).lower() if pd.notna(row['BRAND']) else ''
+    name = str(row['NAME']).lower() if pd.notna(row['NAME']) else ''
+    color = str(row['COLOR']).lower() if pd.notna(row['COLOR']) else ''
+
     # Missing COLOR
-    if pd.isna(row['COLOR']) or row['COLOR'].strip() == "":
+    if color.strip() == "":
         reason = "Missing COLOR"
         reason_details = ("COLOR-MISSING", "Color is missing or empty.", "")
         return reason, reason_details
 
     # Missing BRAND or NAME
-    if pd.isna(row['BRAND']) or row['BRAND'].strip() == "" or pd.isna(row['NAME']) or row['NAME'].strip() == "":
+    if brand.strip() == "" or name.strip() == "":
         reason = "Missing BRAND or NAME"
         reason_details = ("BRAND_OR_NAME-MISSING", "Brand or Name is missing or empty.", "")
         return reason, reason_details
 
     # Single-word NAME (excluding books)
-    if len(row['NAME'].split()) == 1 and row['CATEGORY_CODE'] not in book_categories and row['BRAND'].lower() != 'jumia book':
+    if len(name.split()) == 1 and row['CATEGORY_CODE'] not in book_categories and brand != 'jumia book':
         reason = "Single-word NAME"
         reason_details = ("SINGLE-WORD-NAME", "Product name has only one word and is not a book.", "")
         return reason, reason_details
 
     # Generic BRAND in specific categories
-    if row['BRAND'].lower() == 'generic' and row['CATEGORY_CODE'] in category_FAS_codes:
+    if brand == 'generic' and row['CATEGORY_CODE'] in category_FAS_codes:
         reason = "Generic BRAND"
         reason_details = ("GENERIC-BRAND", "Product is of Generic brand in this category.", "")
         return reason, reason_details
@@ -109,39 +116,44 @@ def validate_product(row, config_data, blacklisted_words, book_categories, sensi
     # Perfume price validation
     perfumes_data = config_data.get('perfumes')
     if perfumes_data is not None:
-        brand = row['BRAND'].lower()
         if brand in perfumes_data['BRAND'].str.lower().values:
             keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
             for keyword in keywords:
-                if keyword.lower() in row['NAME'].lower():
-                    perfume_price = perfumes_data.loc[
-                        (perfumes_data['BRAND'].str.lower() == brand) &
-                        (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
-                    if row['GLOBAL_PRICE'] < perfume_price:
-                        reason = "Perfume price issue"
-                        reason_details = ("PERFUME-PRICE", "Perfume price is below the threshold.", "")
-                        return reason, reason_details
+                if keyword.lower() in name:
+                    try: #ensure that GLOBAL_PRICE exists for perfumes.
+                        perfume_price = perfumes_data.loc[
+                            (perfumes_data['BRAND'].str.lower() == brand) &
+                            (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
+                        if row['GLOBAL_PRICE'] < perfume_price:
+                            reason = "Perfume price issue"
+                            reason_details = ("PERFUME-PRICE", "Perfume price is below the threshold.", "")
+                            return reason, reason_details
+                    except KeyError:
+                        st.error("GLOBAL_PRICE column missing in input file.")
+                        return None, None
+                
 
     # Blacklisted word in NAME
-    if any(black_word in row['NAME'].lower().split() for black_word in blacklisted_words):
+    if any(black_word in name.split() for black_word in blacklisted_words):
         reason = "Blacklisted word in NAME"
         reason_details = ("BLACKLISTED-WORD", "Name contains a blacklisted word.", "")
         return reason, reason_details
 
     # BRAND name repeated in NAME
-    if row['BRAND'].lower() in row['NAME'].lower():
+    if brand in name:
         reason = "BRAND name repeated in NAME"
         reason_details = ("BRAND-IN-NAME", "Brand name is found in the product name.", "")
         return reason, reason_details
 
     # Missing Variation in specific categories
-    if row['CATEGORY_CODE'] not in config_data['check_variation']['ID'].values and pd.isna(row['VARIATION']):
+    check_variation_data = config_data.get('check_variation')
+    if check_variation_data is not None and row['CATEGORY_CODE'] not in check_variation_data['ID'].values and pd.isna(row['VARIATION']):
         reason = "Missing Variation"
         reason_details = ("MISSING-VARIATION", "Variation is missing for this category.", "")
         return reason, reason_details
 
     # Sensitive Brand in specific categories
-    if row['BRAND'].lower() in sensitive_brands and row['CATEGORY_CODE'] in category_FAS_codes:
+    if brand in sensitive_brands and row['CATEGORY_CODE'] in category_FAS_codes:
         reason = "Sensitive Brand"
         reason_details = ("SENSITIVE-BRAND", "Product is from a sensitive brand in this category.", "")
         return reason, reason_details
@@ -154,40 +166,38 @@ st.title("Product Validation Tool")
 # Load configuration files
 config_data = load_config_files()
 
-# Load category_FAS and sensitive brands
+# Load lists
 category_FAS_codes = load_category_FAS()
 sensitive_brands = load_sensitive_brands()
-
-# Load blacklisted words
 blacklisted_words = load_blacklisted_words()
-
-# Load book categories
 book_categories = load_book_categories()
 
 # Load and process flags data
-flags_data = config_data['flags']
+flags_data = config_data.get('flags')
 reasons_dict = {}
-try:
-    # Find the correct column names (case-insensitive)
-    flag_col = next((col for col in flags_data.columns if col.lower() == 'flag'), None)
-    reason_col = next((col for col in flags_data.columns if col.lower() == 'reason'), None)
-    comment_col = next((col for col in flags_data.columns if col.lower() == 'comment'), None)
 
-    if not all([flag_col, reason_col, comment_col]):
-        st.error(f"Missing required columns in flags.xlsx. Required: Flag, Reason, Comment. Found: {flags_data.columns.tolist()}")
+if flags_data is not None:  # Check if flags_data loaded successfully
+    try:
+        # Find the correct column names (case-insensitive)
+        flag_col = next((col for col in flags_data.columns if col.lower() == 'flag'), None)
+        reason_col = next((col for col in flags_data.columns if col.lower() == 'reason'), None)
+        comment_col = next((col for col in flags_data.columns if col.lower() == 'comment'), None)
+
+        if not all([flag_col, reason_col, comment_col]):
+            st.error(f"Missing required columns in flags.xlsx. Required: Flag, Reason, Comment. Found: {flags_data.columns.tolist()}")
+            st.stop()
+
+        for _, row in flags_data.iterrows():
+            flag = str(row[flag_col]).strip()
+            reason = str(row[reason_col]).strip()
+            comment = str(row[comment_col]).strip()
+            reason_parts = reason.split(' - ', 1)
+            code = reason_parts[0]
+            message = reason_parts[1] if len(reason_parts) > 1 else ''
+            reasons_dict[flag] = (code, message, comment)
+    except Exception as e:
+        st.error(f"Error processing flags data: {e}")
         st.stop()
-
-    for _, row in flags_data.iterrows():
-        flag = str(row[flag_col]).strip()
-        reason = str(row[reason_col]).strip()
-        comment = str(row[comment_col]).strip()
-        reason_parts = reason.split(' - ', 1)
-        code = reason_parts[0]
-        message = reason_parts[1] if len(reason_parts) > 1 else ''
-        reasons_dict[flag] = (code, message, comment)
-except Exception as e:
-    st.error(f"Error processing flags data: {e}")
-    st.stop()
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
@@ -204,6 +214,11 @@ if uploaded_file is not None:
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
+        # Explicitly convert specific columns to string to avoid type inference issues
+        data['BRAND'] = data['BRAND'].astype(str)
+        data['NAME'] = data['NAME'].astype(str)
+        data['COLOR'] = data['COLOR'].astype(str)
+
         # Validation checks
         missing_color = data[data['COLOR'].isna() | (data['COLOR'] == '')]
         missing_brand_or_name = data[data['BRAND'].isna() | (data['BRAND'] == '') |
@@ -219,23 +234,28 @@ if uploaded_file is not None:
 
         # Perfume price validation
         flagged_perfumes = []
-        perfumes_data = config_data['perfumes']
-        for _, row in data.iterrows():
-            brand = row['BRAND'].lower()
-            if brand in perfumes_data['BRAND'].str.lower().values:
-                keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
-                for keyword in keywords:
-                    if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                        perfume_price = perfumes_data.loc[
-                            (perfumes_data['BRAND'].str.lower() == brand) &
-                            (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
-                        if row['GLOBAL_PRICE'] < perfume_price:
-                            flagged_perfumes.append(row)
-                            break
+        perfumes_data = config_data.get('perfumes')
+        if perfumes_data is not None:
+            for _, row in data.iterrows():
+                brand = row['BRAND'].lower()
+                if brand in perfumes_data['BRAND'].str.lower().values:
+                    keywords = perfumes_data[perfumes_data['BRAND'].str.lower() == brand]['KEYWORD'].tolist()
+                    for keyword in keywords:
+                        if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
+                            try: #ensure that GLOBAL_PRICE exists for perfumes.
+                                perfume_price = perfumes_data.loc[
+                                    (perfumes_data['BRAND'].str.lower() == brand) &
+                                    (perfumes_data['KEYWORD'].str.lower() == keyword.lower()), 'PRICE'].values[0]
+                                if row['GLOBAL_PRICE'] < perfume_price:
+                                    flagged_perfumes.append(row)
+                                    break
+                            except KeyError:
+                                st.error("GLOBAL_PRICE column missing in input file.")
+                                st.stop()
 
         # Blacklist and brand name checks
-        flagged_blacklisted = data[data['NAME'].str.lower().apply(lambda name:
-            any(black_word in name.split() for black_word in blacklisted_words))]
+        flagged_blacklisted = data[data['NAME'].apply(lambda name:
+            any(black_word in str(name).lower().split() for black_word in blacklisted_words))]
 
         brand_in_name = data[data.apply(lambda row:
             isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
@@ -257,29 +277,9 @@ if uploaded_file is not None:
             reason = None
             reason_details = None
 
-            # Check all validation conditions and take the first applicable one
-            validations = [
-                (missing_color, "Missing COLOR"),
-                (missing_brand_or_name, "Missing BRAND or NAME"),
-                (single_word_name, "Single-word NAME"),
-                (generic_brand_issues, "Generic BRAND"),
-                (flagged_blacklisted, "Blacklisted word in NAME"),
-                (brand_in_name, "BRAND name repeated in NAME"),
-                (duplicate_products, "Duplicate product"),
-                (missing_variation, "Missing Variation"),
-                (sensitive_brand_issues, "Sensitive Brand")
-            ]
-            for validation_df, flag in validations:
-                if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                    reason = flag
-                    reason_details = reasons_dict.get(flag, ("", "", ""))
-                    break
+            # Call the validation function
+            reason, reason_details = validate_product(row, config_data, blacklisted_words, book_categories, sensitive_brands, category_FAS_codes)
 
-            # Check perfume price issues separately
-            if not reason and not pd.DataFrame(flagged_perfumes).empty and row['PRODUCT_SET_SID'] in [r['PRODUCT_SET_SID'] for r in flagged_perfumes]:
-                reason = "Perfume price issue"
-                reason_details = reasons_dict.get("Perfume price issue", ("", "", ""))
-            
             # Prepare report row
             status = 'Rejected' if reason else 'Approved'
             reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
