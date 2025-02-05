@@ -194,13 +194,19 @@ if uploaded_file is not None:
         validation_results["BRAND name repeated in NAME"] = data[data.apply(lambda row:
             isinstance(row['brand'], str) and isinstance(row['name'], str) and
             row['brand'].lower() in row['name'].lower(), axis=1)]
-        validation_results["Duplicate product"] = data[data.duplicated(subset=['name', 'brand', 'seller_name'], keep=False)]
+        # Duplicate product" flag has been removed in this build to check better the process
+        #duplicate_products = data[data.duplicated(subset=['name', 'brand', 'seller_name'], keep=False)]
+        #validation_results["Duplicate product"] = duplicate_products
 
         # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        validation_results["Sensitive Brand"] = data[
+        sensitive_brand_issues = data[
             (data['category_code'].isin(category_FAS_codes)) &
             (data['brand'].isin(sensitive_brands))
         ]
+        print("Sensitive Brand issues:") #debugging purpose
+        print(sensitive_brand_issues[['product_set_sid', 'brand', 'category_code']]) #check what products are
+        validation_results["Sensitive Brand"] = sensitive_brand_issues
+
         #Book Seller Check:
         invalid_book_sellers = data[
             (data['brand'].isin(book_category_brands)) &  # Is it a book?
