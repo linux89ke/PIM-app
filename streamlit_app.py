@@ -148,6 +148,9 @@ if uploaded_file is not None:
         st.write("CSV file loaded successfully. Preview of data:")
         st.write(data.head())
 
+        # Category validation
+        valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
+
          # --- Track Validation Results using OrderedDict ---
         validation_results = OrderedDict()  # Order matters
 
@@ -157,6 +160,20 @@ if uploaded_file is not None:
                                    data['NAME'].isna() | (data['NAME'] == '')]
         validation_results["Single-word NAME"] = data[(data['NAME'].str.split().str.len() == 1) & 
                               (data['BRAND'] != 'Jumia Book')]
+        validation_results["Generic BRAND"] = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
+                                  (data['BRAND'] == 'Generic')]
+        validation_results["Blacklisted word in NAME"] = data[data['NAME'].apply(lambda name: 
+            any(black_word.lower() in str(name).lower().split() for black_word in blacklisted_words))]
+        validation_results["BRAND name repeated in NAME"] = data[data.apply(lambda row: 
+            isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and 
+            row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+        validation_results["Duplicate product"] = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
+
+        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
+        validation_results["Sensitive Brand"] = data[
+            (data['CATEGORY_CODE'].isin(category_FAS_codes)) &
+            (data['BRAND'].isin(sensitive_brands))
+        ]
 
 
         # Display results
