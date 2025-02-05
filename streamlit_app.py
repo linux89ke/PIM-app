@@ -206,7 +206,7 @@ if flags_data is not None:
 #Display Flags data on Front end
 if flags_data is not None: #Only display if it was loaded correctly
     st.subheader("Flags Data")
-    st.write(f"Number of Flags:{len(flags_data)}")
+    st.write(f"Number of Rows: {len(flags_data)}")
     st.dataframe(flags_data)
 
 # File upload section
