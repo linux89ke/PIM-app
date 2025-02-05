@@ -203,9 +203,10 @@ if flags_data is not None:
         st.error(f"Error processing flags data: {e}")
         st.stop()
 
-#Display Flags data
+#Display Flags data on Front end
 if flags_data is not None: #Only display if it was loaded correctly
     st.subheader("Flags Data")
+    st.write(f"Number of Flags:{len(flags_data)}")
     st.dataframe(flags_data)
 
 # File upload section
