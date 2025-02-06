@@ -18,30 +18,6 @@ def load_blacklisted_words():
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
-# Function to load sensitive brands from the sensitive_brands.xlsx file
-def load_sensitive_brands():
-    try:
-        sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['BRAND'].tolist()  # Assuming the file has a 'Brand' column
-    except FileNotFoundError:
-        st.error("sensitive_brands.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading sensitive brands: {e}")
-        return []
-
-# Load category_FAS.xlsx to get the allowed CATEGORY_CODE values
-def load_category_FAS():
-    try:
-        category_fas_df = pd.read_excel('category_FAS.xlsx')
-        return category_fas_df['ID'].tolist()  # Assuming 'ID' column contains the category codes
-    except FileNotFoundError:
-        st.error("category_FAS.xlsx file not found!")
-        return []
-    except Exception as e:
-        st.error(f"Error loading category_FAS data: {e}")
-        return []
-
 # Load and validate configuration files
 def load_config_files():
     config_files = {
@@ -69,13 +45,6 @@ st.title("Product Validation Tool")
 # Load configuration files
 config_data = load_config_files()
 
-# Load category_FAS and sensitive brands
-category_FAS_codes = load_category_FAS()
-sensitive_brands = load_sensitive_brands()
-
-# Load blacklisted words
-blacklisted_words = load_blacklisted_words()
-
 # Load and process flags data
 flags_data = config_data['flags']
 reasons_dict = {}
@@ -101,6 +70,9 @@ except Exception as e:
     st.error(f"Error processing flags data: {e}")
     st.stop()
 
+# Load blacklisted words
+blacklisted_words = load_blacklisted_words()
+
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
@@ -124,7 +96,7 @@ if uploaded_file is not None:
                               (data['BRAND'] != 'Jumia Book')]
         
         # Category validation
-        valid_category_codes_fas = category_FAS_codes
+        valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
         generic_brand_issues = data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & 
                                   (data['BRAND'] == 'Generic')]
         
@@ -154,14 +126,6 @@ if uploaded_file is not None:
         
         duplicate_products = data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
-        # Missing Variation Flag check
-        missing_variation = data[~data['CATEGORY_CODE'].isin(config_data['check_variation']['ID']) &
-                                 data['VARIATION'].isna()]
-
-        # Sensitive Brands Flag (only for categories in category_FAS.xlsx)
-        sensitive_brand_issues = data[(data['CATEGORY_CODE'].isin(category_FAS_codes)) & 
-                                      (data['BRAND'].isin(sensitive_brands))]
-
         # Generate report with a single reason per rejection
         final_report_rows = []
         for _, row in data.iterrows():
@@ -176,9 +140,7 @@ if uploaded_file is not None:
                 (generic_brand_issues, "Generic BRAND"),
                 (flagged_blacklisted, "Blacklisted word in NAME"),
                 (brand_in_name, "BRAND name repeated in NAME"),
-                (duplicate_products, "Duplicate product"),
-                (missing_variation, "Missing Variation"),
-                (sensitive_brand_issues, "Sensitive Brand")
+                (duplicate_products, "Duplicate product")
             ]
             
             for validation_df, flag in validations:
@@ -230,27 +192,56 @@ if uploaded_file is not None:
             ("Perfume Price Issues", pd.DataFrame(flagged_perfumes)),
             ("Blacklisted Words", flagged_blacklisted),
             ("Brand in Name", brand_in_name),
-            ("Duplicate Products", duplicate_products),
-            ("Missing Variation", missing_variation),
-            ("Sensitive Brands", sensitive_brand_issues)
+            ("Duplicate Products", duplicate_products)
         ]
 
         for title, df in validation_results:
-            with st.expander(title):
+            with st.expander(f"{title} ({len(df)} products)"):
                 if not df.empty:
-                    st.write(df)
+                    st.dataframe(df)
+                else:
+                    st.write("No issues found")
 
-        # Download options for the report
-        @st.cache_data
-        def to_excel(df):
+        # Export functions
+        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
             output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Final Report")
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df1.to_excel(writer, index=False, sheet_name=sheet1_name)
+                df2.to_excel(writer, index=False, sheet_name=sheet2_name)
             output.seek(0)
             return output
 
-        excel_data = to_excel(final_report_df)
-        st.download_button(label="Download Final Report", data=excel_data, file_name="validation_report.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        # Download buttons
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            final_report_excel = to_excel(final_report_df, config_data['reasons'], "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Final Export",
+                data=final_report_excel,
+                file_name=f"Final_Report_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col2:
+            rejected_excel = to_excel(rejected_df, config_data['reasons'], "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Rejected Export",
+                data=rejected_excel,
+                file_name=f"Rejected_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        
+        with col3:
+            approved_excel = to_excel(approved_df, config_data['reasons'], "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Approved Export",
+                data=approved_excel,
+                file_name=f"Approved_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
     except Exception as e:
-        st.error(f"❌ Error processing the uploaded file: {e}")
+        st.error(f"Error processing the uploaded file: {e}")
