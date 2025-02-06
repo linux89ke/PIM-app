@@ -76,10 +76,9 @@ def load_config_files():
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Validation check functions (modularized) - Modified check_sensitive_brands
+# Validation check functions (modularized) - No changes needed for these tests
 def check_missing_color(data, book_category_codes):
-    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
-    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
     return missing_color_non_books
 
@@ -87,8 +86,7 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
-    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
-    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     flagged_non_book_single_word_names = non_book_data[
         (non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')
     ]
@@ -107,19 +105,17 @@ def check_duplicate_products(data):
 
 def check_sensitive_brands(data, sensitive_brand_words, book_category_codes): # Modified Function
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
-    if book_data.empty:
-        return pd.DataFrame() # No books, return empty DataFrame
-
-    if not sensitive_brand_words or book_data.empty: # Use book_data here
+    if not sensitive_brand_words or book_data.empty:
         return pd.DataFrame()
 
     sensitive_regex_words = [r'\b' + re.escape(word.lower()) + r'\b' for word in sensitive_brand_words]
     sensitive_brands_regex = '|'.join(sensitive_regex_words)
 
     mask_name = book_data['NAME'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False) # Apply to book_data
-    mask_brand = book_data['BRAND'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False) # Apply to book_data
+    # mask_brand = book_data['BRAND'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False) # Brand check removed for books - per requirement
 
-    combined_mask = mask_name | mask_brand
+    # combined_mask = mask_name | mask_brand # Brand check removed for books
+    combined_mask = mask_name # Only check NAME for sensitive words in books
     return book_data[combined_mask] # Return filtered book_data
 
 
@@ -131,6 +127,7 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     # Check if SellerName is NOT in approved list for book data
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
+
 
 
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers):
