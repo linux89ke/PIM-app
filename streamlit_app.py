@@ -9,7 +9,7 @@ import re
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # Function to load configuration files (excluding flags.xlsx)
-def load_config_files(): # ... (rest of load_config_files function is the same) ...
+def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
@@ -28,7 +28,7 @@ def load_config_files(): # ... (rest of load_config_files function is the same) 
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Function to load blacklisted words from a file (No changes needed)
+# Function to load blacklisted words from a file
 def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is the same) ...
     try:
         with open('blacklisted.txt', 'r') as f:
@@ -40,7 +40,7 @@ def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is 
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
-# Function to load book category codes from file (No changes needed)
+# Function to load book category codes from file
 def load_book_category_codes(): # ... (rest of load_book_category_codes function is the same) ...
     try:
         book_cat_df = pd.read_excel('Books_cat.xlsx')
@@ -52,7 +52,7 @@ def load_book_category_codes(): # ... (rest of load_book_category_codes function
         st.error(f"Error loading Books_cat.xlsx: {e}")
         return []
 
-# Function to load sensitive brand words from Excel file (No changes needed)
+# Function to load sensitive brand words from Excel file
 def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words function is the same) ...
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
@@ -64,7 +64,7 @@ def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words func
         st.error(f"Error loading sensitive_brands.xlsx: {e}")
         return []
 
-# Function to load approved book sellers from Excel file (No changes needed)
+# Function to load approved book sellers from Excel file
 def load_approved_book_sellers(): # ... (rest of load_approved_book_sellers function is the same) ...
     try:
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
@@ -263,18 +263,16 @@ current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date in side
 
 filtered_seller_excel = BytesIO() # Initialize for filtered seller export
 
-st.sidebar.download_button( # Filtered seller export button in sidebar
-    label="Filtered Seller Export",
-    data=filtered_seller_excel,
-    file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True, # Initially disabled
-    key="filtered_seller_button" # Key to prevent re-creation
-)
-
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
+
+# Initialize download button data outside conditional block
+final_report_excel = BytesIO()
+rejected_excel = BytesIO()
+approved_excel = BytesIO()
+full_data_excel = BytesIO()
+
 
 # Process uploaded file
 if uploaded_file is not None:
@@ -303,9 +301,15 @@ if uploaded_file is not None:
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-        # Update sidebar download button data and enable them
+        # Update sidebar download button data
         filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # Re-generate filtered data excel
-        st.sidebar.download_button(label="Filtered Seller Export", data=filtered_seller_excel, file_name=f"Seller_Filtered_Data_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False, key="filtered_seller_button") # Added key
+
+
+        # Update main body download button data
+        final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
+        rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
+        approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
+        full_data_excel = to_excel_full_data(data.copy(), final_report_df)
 
 
         # Display results metrics - No change
@@ -347,7 +351,6 @@ if uploaded_file is not None:
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
             st.download_button(
                 label="Final Export",
                 data=final_report_excel,
@@ -356,7 +359,6 @@ if uploaded_file is not None:
             )
 
         with col2:
-            rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
             st.download_button(
                 label="Rejected Export",
                 data=rejected_excel,
@@ -365,7 +367,6 @@ if uploaded_file is not None:
             )
 
         with col3:
-            approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
             st.download_button(
                 label="Approved Export",
                 data=approved_excel,
@@ -374,13 +375,15 @@ if uploaded_file is not None:
             )
 
         with col4:
-            full_data_excel = to_excel_full_data(data.copy(), final_report_df)
             st.download_button(
                 label="Full Data Export",
                 data=full_data_excel,
                 file_name=f"Full_Data_Export_{current_date}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+        # Sidebar Filtered Seller Button - Update data and enable (moved here)
+        st.sidebar.download_button(label="Filtered Seller Export", data=filtered_seller_excel, file_name=f"Seller_Filtered_Data_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False, key="filtered_seller_button")
 
 
     except Exception as e:
