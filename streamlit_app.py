@@ -56,7 +56,7 @@ def load_approved_book_sellers():
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
         return []
 
-# Load and validate configuration files (excluding flags.xlsx) (No changes needed)
+# Function to load configuration files (excluding flags.xlsx) (No changes needed)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
@@ -76,7 +76,7 @@ def load_config_files():
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Validation check functions (modularized) - No changes needed for these tests
+# Validation check functions (modularized) - Modified check_sensitive_brands
 def check_missing_color(data, book_category_codes):
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
@@ -105,20 +105,24 @@ def check_brand_in_name(data):
 def check_duplicate_products(data):
     return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME', 'COLOR'], keep=False)]
 
-def check_sensitive_brands(data, sensitive_brand_words): # Optimized Function (No changes needed)
-    if not sensitive_brand_words or data.empty:
+def check_sensitive_brands(data, sensitive_brand_words, book_category_codes): # Modified Function
+    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
+    if book_data.empty:
+        return pd.DataFrame() # No books, return empty DataFrame
+
+    if not sensitive_brand_words or book_data.empty: # Use book_data here
         return pd.DataFrame()
 
     sensitive_regex_words = [r'\b' + re.escape(word.lower()) + r'\b' for word in sensitive_brand_words]
     sensitive_brands_regex = '|'.join(sensitive_regex_words)
 
-    mask_name = data['NAME'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False)
-    mask_brand = data['BRAND'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False)
+    mask_name = book_data['NAME'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False) # Apply to book_data
+    mask_brand = book_data['BRAND'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False) # Apply to book_data
 
     combined_mask = mask_name | mask_brand
-    return data[combined_mask]
+    return book_data[combined_mask] # Return filtered book_data
 
-# New validation function for approved book sellers (NEW FUNCTION)
+
 def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers):
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
     if book_data.empty:
@@ -129,47 +133,52 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
 
 
-def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers): # Added approved_book_sellers
+def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers):
     validations = [
-        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}), # Specify arguments for each function
-        (check_missing_brand_or_name, "Missing BRAND or NAME", {}), # No extra arguments needed
+        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}),
+        (check_missing_brand_or_name, "Missing BRAND or NAME", {}),
         (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
         (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
-        (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words}), # New Validation
+        (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Pass book_category_codes here
         (check_brand_in_name, "BRAND name repeated in NAME", {}),
         (check_duplicate_products, "Duplicate product", {}),
-        (check_seller_approved_for_books, "Seller Approve to sell books",  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}), # New Validation
+        (check_seller_approved_for_books, "Seller Approve to sell books",  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}),
     ]
+
+    # --- Calculate validation DataFrames ONCE, outside the loop ---
+    validation_results_dfs = {}
+    for check_func, flag_name, func_kwargs in validations:
+        kwargs = {'data': data, **func_kwargs}
+        validation_results_dfs[flag_name] = check_func(**kwargs)
+    # --- Now validation_results_dfs contains DataFrames with flagged products for each check ---
 
     final_report_rows = []
     for _, row in data.iterrows():
-        reasons = [] # Changed to list to hold multiple reasons
+        reasons = []
 
         for check_func, flag_name, func_kwargs in validations:
-            start_time = time.time() # <---- Start timing
-            kwargs = {'data': data, **func_kwargs}
-            validation_df = check_func(**kwargs)
-            end_time = time.time() # <---- End timing
+            start_time = time.time()
+            validation_df = validation_results_dfs[flag_name] # <--- Get pre-calculated DataFrame
+            end_time = time.time()
             elapsed_time = end_time - start_time
-            print(f"Validation '{flag_name}' took: {elapsed_time:.4f} seconds") # <---- Print timing
+            print(f"Validation '{flag_name}' took: {elapsed_time:.4f} seconds")
 
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                reason_details = reasons_dict.get(flag_name, ("", "", "")) # Renamed flags to reasons_dict
+                reason_details = reasons_dict.get(flag_name, ("", "", ""))
                 reason_code, reason_message, comment = reason_details
                 detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else flag_name
-                reasons.append(detailed_reason) # Append reason to list
+                reasons.append(detailed_reason)
 
-        status = 'Rejected' if reasons else 'Approved' # Check if reasons list is empty
-        # Join multiple reasons into single string for report
+        status = 'Rejected' if reasons else 'Approved'
         report_reason_message = "; ".join(reasons) if reasons else ""
-        comment = "; ".join([reasons_dict.get(reason_name, ("", "", ""))[2] for reason_name in reasons]) if reasons else "" # Combine comments # Renamed flags to reasons_dict
+        comment = "; ".join([reasons_dict.get(reason_name, ("", "", ""))[2] for reason_name in reasons]) if reasons else ""
 
         final_report_rows.append({
             'ProductSetSid': row['PRODUCT_SET_SID'],
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
-            'Reason': report_reason_message, # Use joined reason messages
-            'Comment': comment if comment else "See rejection reasons documentation for details" # Default comment from Excel
+            'Reason': report_reason_message,
+            'Comment': comment if comment else "See rejection reasons documentation for details"
         })
 
     final_report_df = pd.DataFrame(final_report_rows)
@@ -251,7 +260,7 @@ if uploaded_file is not None:
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
-            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words)), # New expander
+            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)), # New expander - pass book_category_codes
             ("Brand in Name", check_brand_in_name(data)),
             ("Duplicate Products", check_duplicate_products(data)),
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # New expander
