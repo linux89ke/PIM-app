@@ -86,9 +86,18 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
+    print("\n--- check_single_word_name function ---")
+    print("Book Category Codes (from Books_cat.xlsx):", book_category_codes)
+    print("Unique CATEGORY_CODE values in input data:", data['CATEGORY_CODE'].unique())
+    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
+    print("Data identified as 'book_data' (based on category codes):\n", book_data.head())
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
+    print("Data identified as 'non_book_data':\n", non_book_data.head())
     flagged_non_book_single_word_names = non_book_data[
         (non_book_data['NAME'].str.split().str.len() == 1)
+    ]
+    print("Products flagged for single-word name in 'non_book_data':\n", flagged_non_book_single_word_names.head())
+    return flagged_non_book_single_word_names
     ]
     return flagged_non_book_single_word_names
 
