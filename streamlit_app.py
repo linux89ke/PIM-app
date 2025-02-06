@@ -129,53 +129,50 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
 
 
-
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers):
     validations = [
-        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}),
-        (check_missing_brand_or_name, "Missing BRAND or NAME", {}),
-        (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
-        (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
-        (check_sensitive_brands, "Sensitive Brand Issues", {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Pass book_category_codes here
-        (check_brand_in_name, "BRAND name repeated in NAME", {}),
-        (check_duplicate_products, "Duplicate product", {}),
-        (check_seller_approved_for_books, "Seller Approve to sell books",  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}),
-    ]
+        ("Sensitive Brand Issues", check_sensitive_brands, {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Priority 1
+        ("Seller Approve to sell books", check_seller_approved_for_books,  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}), # Priority 2
+        ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}), # Priority 3
+        ("Missing BRAND or NAME", check_missing_brand_or_name, {}), # Priority 4
+        ("Duplicate product", check_duplicate_products, {}), # Priority 5
+        ("Generic BRAND Issues", check_generic_brand_issues, {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}), # Priority 6
+        ("Missing COLOR", check_missing_color, {'book_category_codes': book_category_codes}), # Priority 7
+        ("BRAND name repeated in NAME", check_brand_in_name, {}), # Priority 8
+    ] # Validations are now ORDERED by priority
 
     # --- Calculate validation DataFrames ONCE, outside the loop ---
     validation_results_dfs = {}
-    for check_func, flag_name, func_kwargs in validations:
+    for flag_name, check_func, func_kwargs in validations: # Iterate through ordered validations
         kwargs = {'data': data, **func_kwargs}
         validation_results_dfs[flag_name] = check_func(**kwargs)
     # --- Now validation_results_dfs contains DataFrames with flagged products for each check ---
 
     final_report_rows = []
     for _, row in data.iterrows():
-        reasons = []
+        rejection_reason = "" # Initialize as empty string, will hold only ONE reason
+        comment = ""
+        status = 'Approved' # Default to Approved, will change if rejection reason is found
 
-        for check_func, flag_name, func_kwargs in validations:
-            start_time = time.time()
-            validation_df = validation_results_dfs[flag_name] # <--- Get pre-calculated DataFrame
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            print(f"Validation '{flag_name}' took: {elapsed_time:.4f} seconds")
+        for flag_name, _, _ in validations: # Iterate through validations in PRIORITY ORDER
+            validation_df = validation_results_dfs[flag_name] # Get pre-calculated DataFrame for this flag
 
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                 reason_details = reasons_dict.get(flag_name, ("", "", ""))
-                reason_code, reason_message, comment = reason_details
+                reason_code, reason_message, reason_comment = reason_details
                 detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else flag_name
-                reasons.append(detailed_reason)
 
-        status = 'Rejected' if reasons else 'Approved'
-        report_reason_message = "; ".join(reasons) if reasons else ""
-        comment = "; ".join([reasons_dict.get(reason_name, ("", "", ""))[2] for reason_name in reasons]) if reasons else ""
+                rejection_reason = detailed_reason # Set the rejection reason (only the HIGHEST priority one)
+                comment = reason_comment if reason_comment else "See rejection reasons documentation for details" # Get comment
+                status = 'Rejected' # Change status to Rejected
+                break # Stop checking further validations once a reason is found (due to priority)
 
         final_report_rows.append({
             'ProductSetSid': row['PRODUCT_SET_SID'],
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
-            'Reason': report_reason_message,
-            'Comment': comment if comment else "See rejection reasons documentation for details"
+            'Reason': rejection_reason, # Only ONE rejection reason now
+            'Comment': comment
         })
 
     final_report_df = pd.DataFrame(final_report_rows)
@@ -270,7 +267,7 @@ if uploaded_file is not None:
                 else:
                     st.write("No issues found")
 
-        # Export functions - No change
+        # Export functions - No change - Modified to include 'flag' column in rejected report
         def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
