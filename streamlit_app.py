@@ -209,7 +209,7 @@ reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
 reasons_dict = {}
 if not reasons_df.empty:
     for _, row in reasons_df.iterrows():
-        code = row['Code']
+        code = row['CODE - REJECTION_REASON']
         message = row['Message']
         comment = row['Comment']
         reasons_dict[f"{code} - {message}"] = (code, message, comment) # Create reasons_dict from dataframe
