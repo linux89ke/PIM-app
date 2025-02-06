@@ -48,7 +48,7 @@ def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
-        'perfumes': 'perfumes.xlsx',
+        'perfumes': 'perfumes.xlsx', # Keep loading perfumes.xlsx config file, but we won't use the data in validations for now
         'reasons': 'reasons.xlsx'
     }
 
@@ -84,26 +84,27 @@ def check_single_word_name(data, book_category_codes):
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
 
-def check_perfume_price_issues(data, perfumes_data): # Optimized function
-    if perfumes_data.empty or data.empty: # Quick return if either DataFrame is empty
-        return pd.DataFrame()
-
-    # 1. Merge data and perfumes_data based on 'BRAND'
-    merged_df = pd.merge(data, perfumes_data, on='BRAND', how='inner')
-
-    # 2. Filter rows where keyword is in NAME (case-insensitive)
-    merged_df['keyword_found'] = merged_df.apply(
-        lambda row: isinstance(row['NAME'], str) and row['KEYWORD'].lower() in row['NAME'].lower(), axis=1 # Still using apply here, can be improved more if needed but more readable
-    )
-    filtered_perfumes = merged_df[merged_df['keyword_found']]
-
-    # 3. Filter for price issues
-    flagged_perfumes = filtered_perfumes[filtered_perfumes['GLOBAL_PRICE'] < filtered_perfumes['PRICE']]
-
-    if not flagged_perfumes.empty: # Select only columns from original 'data' DataFrame to match original function's return
-        return data[data['PRODUCT_SET_SID'].isin(flagged_perfumes['PRODUCT_SET_SID'])]
-    else:
-        return pd.DataFrame()
+# Removed check_perfume_price_issues function
+# def check_perfume_price_issues(data, perfumes_data): # Optimized function
+#     if perfumes_data.empty or data.empty: # Quick return if either DataFrame is empty
+#         return pd.DataFrame()
+#
+#     # 1. Merge data and perfumes_data based on 'BRAND'
+#     merged_df = pd.merge(data, perfumes_data, on='BRAND', how='inner')
+#
+#     # 2. Filter rows where keyword is in NAME (case-insensitive)
+#     merged_df['keyword_found'] = merged_df.apply(
+#         lambda row: isinstance(row['NAME'], str) and row['KEYWORD'].lower() in row['NAME'].lower(), axis=1 # Still using apply here, can be improved more if needed but more readable
+#     )
+#     filtered_perfumes = merged_df[merged_df['keyword_found']]
+#
+#     # 3. Filter for price issues
+#     flagged_perfumes = filtered_perfumes[filtered_perfumes['GLOBAL_PRICE'] < filtered_perfumes['PRICE']]
+#
+#     if not flagged_perfumes.empty: # Select only columns from original 'data' DataFrame to match original function's return
+#         return data[data['PRODUCT_SET_SID'].isin(flagged_perfumes['PRODUCT_SET_SID'])]
+#     else:
+#         return pd.DataFrame()
 
 
 def check_blacklisted_words(data, blacklisted_words):
@@ -130,12 +131,12 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         (check_missing_brand_or_name, "Missing BRAND or NAME", {}), # No extra arguments needed
         (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
         (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
-        (check_perfume_price_issues, "Perfume price issue", {'perfumes_data': config_data['perfumes']}),
+        # Removed Perfume Price Issues validation
+        # (check_perfume_price_issues, "Perfume price issue", {'perfumes_data': config_data['perfumes']}),
         (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words}), # New Validation
         (check_blacklisted_words, "Blacklisted word in NAME", {'blacklisted_words': blacklisted_words}),
         (check_brand_in_name, "BRAND name repeated in NAME", {}),
         (check_duplicate_products, "Duplicate product", {}),
-
     ]
 
     final_report_rows = []
@@ -242,7 +243,8 @@ if uploaded_file is not None:
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
-            ("Perfume Price Issues", check_perfume_price_issues(data, config_data['perfumes'])),
+            # Removed Perfume Price Issues from expander list
+            # ("Perfume Price Issues", check_perfume_price_issues(data, config_data['perfumes'])),
             ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words)), # New expander
             ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
             ("Brand in Name", check_brand_in_name(data)),
