@@ -200,7 +200,7 @@ def to_excel_full_data(data, final_report_df):
             merged_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
             merged_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if merged_df is empty
-        writer.save() # Save the writer object
+    # Removed writer.save() here
     output.seek(0)
     return output
 
@@ -216,7 +216,7 @@ def to_excel_flag_data(flag_df, flag_name):
             flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
             flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
-        writer.save() # Save the writer object
+    # Removed writer.save() here
     output.seek(0)
     return output
 
@@ -325,7 +325,7 @@ if uploaded_file is not None:
                     df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
                 else:
                     df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
-                df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+            # Removed writer.save() here
             output.seek(0)
             return output
 
