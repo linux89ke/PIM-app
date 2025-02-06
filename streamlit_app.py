@@ -18,13 +18,25 @@ def load_blacklisted_words():
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
+# Function to load book category codes from file
+def load_book_category_codes():
+    try:
+        with open('Books_cat.txt', 'r') as f:
+            return [line.strip() for line in f.readlines()]
+    except FileNotFoundError:
+        st.warning("Books_cat.txt file not found! Book category exemptions will not be applied.")
+        return []
+    except Exception as e:
+        st.error(f"Error loading Books_cat.txt: {e}")
+        return []
+
 # Load and validate configuration files (excluding flags.xlsx)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
         'perfumes': 'perfumes.xlsx',
-        'reasons': 'reasons.xlsx' # Keeping reasons.xlsx for descriptions
+        'reasons': 'reasons.xlsx'
     }
 
     data = {}
@@ -39,14 +51,18 @@ def load_config_files():
     return data
 
 # Validation check functions (modularized)
-def check_missing_color(data):
-    return data[data['COLOR'].isna() | (data['COLOR'] == '')]
+def check_missing_color(data, book_category_codes):
+    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
+    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
+    return missing_color_non_books
 
 def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
-def check_single_word_name(data):
-    return data[(data['NAME'].str.split().str.len() == 1) & (data['BRAND'] != 'Jumia Book')]
+def check_single_word_name(data, book_category_codes):
+    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    return non_book_data[(non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')]
 
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
@@ -83,22 +99,21 @@ def check_long_product_name(data, max_words=10): # Make max_words configurable l
     return data[data['NAME'].str.split().str.len() > max_words]
 
 
-def validate_products(data, config_data, blacklisted_words, reasons_dict):
+def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes): # Added book_category_codes
     valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
     perfumes_data = config_data['perfumes']
 
-    missing_color = check_missing_color(data)
+    missing_color = check_missing_color(data, book_category_codes) # Pass book_category_codes
     missing_brand_or_name = check_missing_brand_or_name(data)
-    single_word_name = check_single_word_name(data)
+    single_word_name = check_single_word_name(data, book_category_codes) # Pass book_category_codes
     generic_brand_issues = check_generic_brand_issues(data, valid_category_codes_fas)
     perfume_price_issues = check_perfume_price_issues(data, perfumes_data)
     flagged_blacklisted = check_blacklisted_words(data, blacklisted_words)
     brand_in_name_issues = check_brand_in_name(data)
     duplicate_products = check_duplicate_products(data)
-    long_product_name = check_long_product_name(data) # Call the new check
+    long_product_name = check_long_product_name(data)
 
-
-    # Define flags and rejection reasons directly in code
+    # Define flags and rejection reasons directly in code (no changes here)
     flags = {
         "Brand NOT Allowed": ("1000001", "Brand NOT Allowed", "Brand is not permitted"),
         "Brand Name Repeated in Product Name": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Remove redundant brand name from product name"),
@@ -157,7 +172,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
         "Blacklisted word in NAME": ("BLW", "Blacklisted word in NAME", "Inappropriate word used"),
         "BRAND name repeated in NAME": ("BRN", "BRAND name repeated in NAME", "Redundant brand name in product name"),
         "Duplicate product": ("DUP", "Duplicate product", "Product is a duplicate listing"),
-        "Long Product Name": ("LPN", "Product Name Too Long", "Keep product names concise") # Example new flag - already in your code
+        "Long Product Name": ("LPN", "Product Name Too Long", "Keep product names concise")
     }
 
     final_report_rows = []
@@ -174,7 +189,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
             (flagged_blacklisted, "Blacklisted word in NAME"),
             (brand_in_name_issues, "BRAND name repeated in NAME"),
             (duplicate_products, "Duplicate product"),
-            (long_product_name, "Long Product Name") # Include the new flag here
+            (long_product_name, "Long Product Name")
         ]
 
         for validation_df, flag_name in validations:
@@ -210,6 +225,9 @@ config_data = load_config_files()
 # Load blacklisted words
 blacklisted_words = load_blacklisted_words()
 
+# Load book category codes
+book_category_codes = load_book_category_codes() # Load book category codes
+
 # Load reasons dictionary from reasons.xlsx
 reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
 reasons_dict = {}
@@ -220,7 +238,7 @@ if not reasons_df.empty:
         code = reason_parts[0] # Extract code
         message = reason_parts[1] if len(reason_parts) > 1 else reason_text # Extract message, use full text if no '-' separator
         comment = "See rejection reasons documentation for details" # Default comment
-        reasons_dict[reason_text] = (code, message, comment) # Create reasons_dict
+        reasons_dict[f"{code} - {message}"] = (code, message, comment) # Create reasons_dict
 else:
     st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
 
@@ -241,7 +259,7 @@ if uploaded_file is not None:
         st.write(data.head())
 
         # Validation and report generation
-        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict)
+        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes) # Pass book_category_codes
 
         # Split into approved and rejected
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
@@ -258,15 +276,15 @@ if uploaded_file is not None:
 
         # Show detailed results in expanders (using flags list for titles)
         validation_results = [
-            ("Missing COLOR", check_missing_color(data)),
+            ("Missing COLOR", check_missing_color(data, book_category_codes)), # Pass book_category_codes
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
-            ("Single-word NAME", check_single_word_name(data)),
+            ("Single-word NAME", check_single_word_name(data, book_category_codes)), # Pass book_category_codes
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Perfume Price Issues", check_perfume_price_issues(data, config_data['perfumes'])),
             ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
             ("Brand in Name", check_brand_in_name(data)),
             ("Duplicate Products", check_duplicate_products(data)),
-            ("Long Product Name", check_long_product_name(data)) # Include the new flag here
+            ("Long Product Name", check_long_product_name(data))
         ]
 
         for title, df in validation_results:
