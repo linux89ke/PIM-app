@@ -200,7 +200,6 @@ def to_excel_full_data(data, final_report_df):
             merged_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
             merged_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if merged_df is empty
-    # Removed writer.save() here
     output.seek(0)
     return output
 
@@ -216,9 +215,8 @@ def to_excel_flag_data(flag_df, flag_name):
             flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
             flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
-    # Removed writer.save() here
-    output.seek(0)
-    return output
+        output.seek(0)
+        return output
 
 
 # Initialize the app
@@ -263,6 +261,7 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Process uploaded file
 if uploaded_file is not None:
+    current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date here, before try block
     try:
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str})
         print("CSV file successfully read by pandas.")
@@ -325,13 +324,12 @@ if uploaded_file is not None:
                     df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
                 else:
                     df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
-            # Removed writer.save() here
             output.seek(0)
             return output
 
 
         # Download buttons - No change
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        # current_date = datetime.now().strftime("%Y-%m-%d") # Moved current_date definition before try block
 
         col1, col2, col3, col4 = st.columns(4) # Added one more column
 
