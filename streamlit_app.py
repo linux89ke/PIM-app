@@ -77,31 +77,33 @@ def load_approved_book_sellers(): # ... (rest of load_approved_book_sellers func
         return []
 
 # Validation check functions (modularized) - No changes needed
-def check_missing_color(data, book_category_codes): # ... (rest of check_missing_color function is the same) ...
+def check_missing_color(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
     return missing_color_non_books
 
-def check_missing_brand_or_name(data): # ... (rest of check_missing_brand_or_name function is the same) ...
+def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
-def check_single_word_name(data, book_category_codes): # ... (rest of check_single_word_name function is the same) ...
+def check_single_word_name(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     flagged_non_book_single_word_names = non_book_data[
         (non_book_data['NAME'].str.split().str.len() == 1)
     ]
     return flagged_non_book_single_word_names
 
-def check_generic_brand_issues(data, valid_category_codes_fas): # ... (rest of check_generic_brand_issues function is the same) ...
+def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
 
-def check_brand_in_name(data): # ... (rest of check_brand_in_name function is the same) ...
-    return data[data.apply(lambda row: isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
+def check_brand_in_name(data):
+    return data[data.apply(lambda row:
+        isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
+        row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
 
-def check_duplicate_products(data): # ... (rest of check_duplicate_products function is the same) ...
+def check_duplicate_products(data):
     return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME', 'COLOR'], keep=False)]
 
-def check_sensitive_brands(data, sensitive_brand_words, book_category_codes): # ... (rest of check_sensitive_brands function is the same) ...
+def check_sensitive_brands(data, sensitive_brand_words, book_category_codes): # Modified Function
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
     if not sensitive_brand_words or book_data.empty:
         return pd.DataFrame()
@@ -114,7 +116,8 @@ def check_sensitive_brands(data, sensitive_brand_words, book_category_codes): # 
 
     # combined_mask = mask_name | mask_brand # Brand check removed for books
     combined_mask = mask_name # Only check NAME for sensitive words in books
-    return book_data[combined_mask]
+    return book_data[combined_mask] # Return filtered book_data
+
 
 def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers): # ... (rest of check_seller_approved_for_books function is the same) ...
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
@@ -183,23 +186,25 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df
 
-# --- New function to export full data ---
-def to_excel_full_data(df_to_export, filename):
+# --- New function to export flag-specific data ---
+def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
     full_data_cols = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
-    productsets_cols = full_data_cols # Use full_data_cols for ProductSets sheet columns order
+    flag_df['FLAG'] = flag_name # Set FLAG column for the specific flag
+    productsets_cols = full_data_cols
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        if not df_to_export.empty:
+        if not flag_df.empty:
             # Ensure 'FLAG' column exists before selection
-            if 'FLAG' not in df_to_export.columns:
-                df_to_export['FLAG'] = '' # Add empty FLAG column if missing
+            if 'FLAG' not in flag_df.columns:
+                flag_df['FLAG'] = flag_name  # Ensure flag_name is used if column is missing
 
-            df_to_export[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
+            flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
-            df_to_export.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if df_to_export is empty
+            flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
     output.seek(0)
     return output
+
 
 # Export functions - Modified to select and order columns for ProductSets sheet
 def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
@@ -210,7 +215,7 @@ def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"
             df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
         else:
             df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
-        df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+        df2.to_excel(writer, index=False, sheet_name="RejectionReasons")
     output.seek(0)
     return output
 
@@ -262,6 +267,15 @@ st.sidebar.header("Download Filtered Seller Report") # Header for filtered selle
 current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date in sidebar scope
 
 filtered_seller_excel = BytesIO() # Initialize for filtered seller export
+
+st.sidebar.download_button( # Filtered seller export button in sidebar
+    label="Filtered Seller Export",
+    data=filtered_seller_excel,
+    file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    disabled=True, # Initially disabled
+    key="filtered_seller_button" # Key to prevent re-creation
+)
 
 
 # File upload section
