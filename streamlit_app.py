@@ -9,7 +9,7 @@ import re
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # Function to load configuration files (excluding flags.xlsx) - No changes needed
-def load_config_files(): # ... (rest of load_config_files function is the same) ...
+def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
@@ -29,7 +29,7 @@ def load_config_files(): # ... (rest of load_config_files function is the same) 
     return data
 
 # Function to load blacklisted words from a file (No changes needed)
-def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is the same) ...
+def load_blacklisted_words():
     try:
         with open('blacklisted.txt', 'r') as f:
             return [line.strip() for line in f.readlines()]
@@ -41,7 +41,7 @@ def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is 
         return []
 
 # Function to load book category codes from file (No changes needed)
-def load_book_category_codes(): # ... (rest of load_book_category_codes function is the same) ...
+def load_book_category_codes():
     try:
         book_cat_df = pd.read_excel('Books_cat.xlsx')
         return book_cat_df['CategoryCode'].astype(str).tolist()
@@ -53,7 +53,7 @@ def load_book_category_codes(): # ... (rest of load_book_category_codes function
         return []
 
 # Function to load sensitive brand words from Excel file (No changes needed)
-def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words function is the same) ...
+def load_sensitive_brand_words():
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
         return sensitive_brands_df['BrandWords'].astype(str).tolist()
@@ -65,7 +65,7 @@ def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words func
         return []
 
 # Function to load approved book sellers from Excel file (No changes needed)
-def load_approved_book_sellers(): # ... (rest of load_approved_book_sellers function is the same) ...
+def load_approved_book_sellers():
     try:
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
         return approved_sellers_df['SellerName'].astype(str).tolist()
@@ -197,20 +197,18 @@ def to_excel_full_data(df_to_export, filename): # Modified to accept df and file
     output.seek(0)
     return output
 
-# --- New function to export flag-specific data ---
-def to_excel_flag_data(flag_df, flag_name): # ... (rest of to_excel_flag_data function is the same) ...
+# Export functions - Modified to select and order columns for ProductSets sheet
+def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
     output = BytesIO()
-    full_data_cols = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
-    flag_df['FLAG'] = flag_name # Set FLAG column for the specific flag
-    productsets_cols = full_data_cols
-
+    productsets_cols = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # Desired columns order
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        if not flag_df.empty:
-            flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
+        if not df1.empty: # Check if df1 is not empty before trying to select columns
+            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
         else:
-            flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
-        output.seek(0)
-        return output
+            df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
+        df2.to_excel(writer, index=False, sheet_name=sheet2_name)
+    output.seek(0)
+    return output
 
 
 # Initialize the app
@@ -249,62 +247,30 @@ if not reasons_df.empty:
 else:
     st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
 
-# --- Sidebar filters ---
+# --- Sidebar filters and downloads ---
 st.sidebar.header("Seller Filters")
 seller_names_input = st.sidebar.text_area("Enter Seller Names (one per line)")
 filtered_sellers = [seller.strip() for seller in seller_names_input.splitlines() if seller.strip()]
 seller_filter_button = st.sidebar.button("Filter by Sellers")
 
-# --- Sidebar Download Buttons (Initialized outside file processing) ---
-st.sidebar.header("Download Reports")
+st.sidebar.header("Download Filtered Seller Report") # Header for filtered seller export in sidebar
 current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date in sidebar scope
 
-final_report_excel = BytesIO() # Initialize as empty BytesIO objects
-rejected_excel = BytesIO()
-approved_excel = BytesIO()
-full_data_excel = BytesIO()
-filtered_seller_excel = BytesIO()
+filtered_seller_excel = BytesIO() # Initialize for filtered seller export
 
+if seller_filter_button and filtered_sellers and not data.empty: # data and seller_filter_button not defined yet in sidebar scope
+    filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # final_report_df and data not defined yet
 
-st.sidebar.download_button(
-    label="Final Export",
-    data=final_report_excel, # Initially empty, will be updated after processing
-    file_name=f"Final_Report_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True # Initially disabled, enabled after processing
-)
-
-st.sidebar.download_button(
-    label="Rejected Export",
-    data=rejected_excel, # Initially empty, will be updated after processing
-    file_name=f"Rejected_Products_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True # Initially disabled, enabled after processing
-)
-
-st.sidebar.download_button(
-    label="Approved Export",
-    data=approved_excel, # Initially empty, will be updated after processing
-    file_name=f"Approved_Products_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True # Initially disabled, enabled after processing
-)
-
-st.sidebar.download_button(
-    label="Full Data Export",
-    data=full_data_excel, # Initially empty, will be updated after processing
-    file_name=f"Full_Data_Export_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True # Initially disabled, enabled after processing
-)
-
-filtered_seller_export_button = st.sidebar.download_button( # Store button in variable
+st.sidebar.download_button( # Filtered seller export button in sidebar
     label="Filtered Seller Export",
-    data=filtered_seller_excel, # Initially empty, will be updated after processing
+    data=filtered_seller_excel,
     file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True # Initially disabled, enabled after processing
+    disabled=True, # Initially disabled
+    key="filtered_seller_button" # Key to prevent re-creation
 )
+if seller_filter_button and filtered_sellers and data.empty:
+    st.sidebar.write("No data to export for selected sellers.")
 
 
 # File upload section
@@ -337,20 +303,7 @@ if uploaded_file is not None:
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-        # Update sidebar download button data and enable them
-        final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
-        rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
-        approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
-        full_data_excel = to_excel_full_data(data.copy(), final_report_df)
-        filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # Re-generate filtered data excel
-
-        # Re-render download buttons with updated data and enabled state
-        st.sidebar.download_button(label="Final Export", data=final_report_excel, file_name=f"Final_Report_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False)
-        st.sidebar.download_button(label="Rejected Export", data=rejected_excel, file_name=f"Rejected_Products_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False)
-        st.sidebar.download_button(label="Approved Export", data=approved_excel, file_name=f"Approved_Products_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False)
-        st.sidebar.download_button(label="Full Data Export", data=full_data_excel, file_name=f"Full_Data_Export_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False)
-        st.sidebar.download_button(label="Filtered Seller Export", data=filtered_seller_excel, file_name=f"Seller_Filtered_Data_{current_date}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disabled=False, key="filtered_seller_button") # Added key
-
+        # Update sidebar download buttons with processed dataframes - No need to update sidebar buttons here anymore
 
         # Display results metrics - No change
         col1, col2 = st.columns(2)
@@ -387,18 +340,44 @@ if uploaded_file is not None:
                 else:
                     st.write("No issues found")
 
-        # Export functions - Modified to select and order columns for ProductSets sheet
-        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # ... (rest of to_excel function is the same) ...
-            output = BytesIO()
-            productsets_cols = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # Desired columns order
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                if not df1.empty: # Check if df1 is not empty before trying to select columns
-                    df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
-                else:
-                    df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
-            output.seek(0)
-            return output
+        # Download buttons in main body - 4 Columns
+        col1, col2, col3, col4 = st.columns(4)
 
+        with col1:
+            final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Final Export",
+                data=final_report_excel,
+                file_name=f"Final_Report_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col2:
+            rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Rejected Export",
+                data=rejected_excel,
+                file_name=f"Rejected_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col3:
+            approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Approved Export",
+                data=approved_excel,
+                file_name=f"Approved_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col4:
+            full_data_excel = to_excel_full_data(data.copy(), final_report_df)
+            st.download_button(
+                label="Full Data Export",
+                data=full_data_excel,
+                file_name=f"Full_Data_Export_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 
     except Exception as e:
