@@ -98,8 +98,7 @@ def check_single_word_name(data, book_category_codes):
     ]
     print("Products flagged for single-word name in 'non_book_data':\n", flagged_non_book_single_word_names.head())
     return flagged_non_book_single_word_names
-    ]
-    return flagged_non_book_single_word_names
+    
 
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
