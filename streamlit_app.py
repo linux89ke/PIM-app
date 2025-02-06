@@ -75,14 +75,14 @@ def check_missing_brand_or_name(data):
 
 def check_single_word_name(data, book_category_codes):
     # Debug print to check book_category_codes
-    print("check_single_word_name - Book Category Codes:", book_category_codes)
+    # print("check_single_word_name - Book Category Codes:", book_category_codes) # Commented out debug print
 
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
 
     # Debug print to check which products are considered books and non-books
-    print("\nBook Data (Exempted Categories):\n", book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
-    print("\nNon-Book Data (Subject to Single-Word Check):\n", non_book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+    # print("\nBook Data (Exempted Categories):\n", book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
+    # print("\nNon-Book Data (Subject to Single-Word Check):\n", non_book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
 
 
     flagged_non_book_single_word_names = non_book_data[
@@ -90,7 +90,7 @@ def check_single_word_name(data, book_category_codes):
     ]
 
     # Debug print to check flagged products in non-book data
-    print("\nFlagged Single-Word Names (Non-Book):\n", flagged_non_book_single_word_names[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+    # print("\nFlagged Single-Word Names (Non-Book):\n", flagged_non_book_single_word_names[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
 
     return flagged_non_book_single_word_names
 
@@ -142,7 +142,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         (check_blacklisted_words, "Blacklisted word in NAME"),
         (check_brand_in_name, "BRAND name repeated in NAME"),
         (check_duplicate_products, "Duplicate product"),
-       
+
     ]
 
     final_report_rows = []
@@ -152,7 +152,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         for check_func, flag_name in validations:
             validation_df = check_func(data=data, book_category_codes=book_category_codes, valid_category_codes_fas=config_data['category_fas']['ID'].tolist(), perfumes_data=config_data['perfumes'], blacklisted_words=blacklisted_words, sensitive_brand_words=sensitive_brand_words) # Pass all configs as needed
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                reason_details = flags.get(flag_name, ("", "", ""))
+                reason_details = reasons_dict.get(flag_name, ("", "", "")) # Renamed flags to reasons_dict
                 reason_code, reason_message, comment = reason_details
                 detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else flag_name
                 reasons.append(detailed_reason) # Append reason to list
@@ -160,7 +160,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         status = 'Rejected' if reasons else 'Approved' # Check if reasons list is empty
         # Join multiple reasons into single string for report
         report_reason_message = "; ".join(reasons) if reasons else ""
-        comment = "; ".join([flags.get(reason_name, ("", "", ""))[2] for reason_name in reasons]) if reasons else "" # Combine comments
+        comment = "; ".join([reasons_dict.get(reason_name, ("", "", ""))[2] for reason_name in reasons]) if reasons else "" # Combine comments # Renamed flags to reasons_dict
 
         final_report_rows.append({
             'ProductSetSid': row['PRODUCT_SET_SID'],
