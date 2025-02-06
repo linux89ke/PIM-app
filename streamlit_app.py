@@ -44,7 +44,7 @@ def load_sensitive_brand_words():
         st.error(f"Error loading sensitive_brands.xlsx: {e}")
         return []
 
-# Function to load approved book sellers from Excel file (NEW FUNCTION)
+# Function to load approved book sellers from Excel file (NEW FUNCTION with print statement)
 def load_approved_book_sellers():
     try:
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
@@ -132,6 +132,7 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     # Check if SellerName is NOT in approved list for book data
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
+
 
 
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers):
@@ -229,6 +230,13 @@ if uploaded_file is not None:
 
         # Validation results expanders - Updated to include "Sensitive Brand Issues" and "Seller Approve to sell books"
         validation_results = [
+            ("Missing COLOR", check_missing_color(data, book_category_codes)),
+            ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
+            ("Single-word NAME", check_single_word_name(data, book_category_codes)),
+            ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
+            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)), # New expander - pass book_category_codes
+            ("Brand in Name", check_brand_in_name(data)),
+            ("Duplicate Products", check_duplicate_products(data)),
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # New expander
         ]
 
