@@ -29,7 +29,7 @@ def load_config_files():
     return data
 
 # Function to load blacklisted words from a file
-def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is the same) ...
+def load_blacklisted_words():
     try:
         with open('blacklisted.txt', 'r') as f:
             return [line.strip() for line in f.readlines()]
@@ -41,7 +41,7 @@ def load_blacklisted_words(): # ... (rest of load_blacklisted_words function is 
         return []
 
 # Function to load book category codes from file
-def load_book_category_codes(): # ... (rest of load_book_category_codes function is the same) ...
+def load_book_category_codes():
     try:
         book_cat_df = pd.read_excel('Books_cat.xlsx')
         return book_cat_df['CategoryCode'].astype(str).tolist()
@@ -53,7 +53,7 @@ def load_book_category_codes(): # ... (rest of load_book_category_codes function
         return []
 
 # Function to load sensitive brand words from Excel file
-def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words function is the same) ...
+def load_sensitive_brand_words():
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
         return sensitive_brands_df['BrandWords'].astype(str).tolist()
@@ -65,7 +65,7 @@ def load_sensitive_brand_words(): # ... (rest of load_sensitive_brand_words func
         return []
 
 # Function to load approved book sellers from Excel file
-def load_approved_book_sellers(): # ... (rest of load_approved_book_sellers function is the same) ...
+def load_approved_book_sellers():
     try:
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
         return approved_sellers_df['SellerName'].astype(str).tolist()
@@ -76,7 +76,7 @@ def load_approved_book_sellers(): # ... (rest of load_approved_book_sellers func
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
         return []
 
-# Validation check functions (modularized) - No changes needed
+# Validation check functions (modularized)
 def check_missing_color(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
@@ -186,25 +186,23 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df
 
-# --- New function to export flag-specific data ---
-def to_excel_flag_data(flag_df, flag_name):
+# --- New function to export full data ---
+def to_excel_full_data(df_to_export, filename):
     output = BytesIO()
     full_data_cols = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
-    flag_df['FLAG'] = flag_name # Set FLAG column for the specific flag
-    productsets_cols = full_data_cols
+    productsets_cols = full_data_cols # Use full_data_cols for ProductSets sheet columns order
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        if not flag_df.empty:
+        if not df_to_export.empty:
             # Ensure 'FLAG' column exists before selection
-            if 'FLAG' not in flag_df.columns:
-                flag_df['FLAG'] = flag_name  # Ensure flag_name is used if column is missing
+            if 'FLAG' not in df_to_export.columns:
+                df_to_export['FLAG'] = '' # Add empty FLAG column if missing
 
-            flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
+            df_to_export[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
-            flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
+            df_to_export.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if df_to_export is empty
     output.seek(0)
     return output
-
 
 # Export functions - Modified to select and order columns for ProductSets sheet
 def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
@@ -268,15 +266,6 @@ current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date in side
 
 filtered_seller_excel = BytesIO() # Initialize for filtered seller export
 
-st.sidebar.download_button( # Filtered seller export button in sidebar
-    label="Filtered Seller Export",
-    data=filtered_seller_excel,
-    file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=True, # Initially disabled
-    key="filtered_seller_button" # Key to prevent re-creation
-)
-
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
@@ -316,14 +305,13 @@ if uploaded_file is not None:
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
         # Update sidebar download button data
-        filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # Re-generate filtered data excel
-
+        filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df, "Filtered_Seller_Report") # Re-generate filtered data excel # Added filename argument
 
         # Update main body download button data
         final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
         rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
         approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
-        full_data_excel = to_excel_full_data(data.copy(), final_report_df)
+        full_data_excel = to_excel_full_data(data.copy(), final_report_df, "Full_Data_Report") # Added filename argument
 
 
         # Display results metrics - No change
