@@ -142,7 +142,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         (check_blacklisted_words, "Blacklisted word in NAME"),
         (check_brand_in_name, "BRAND name repeated in NAME"),
         (check_duplicate_products, "Duplicate product"),
-        (check_long_product_name, "Long Product Name") # Removed
+       
     ]
 
     final_report_rows = []
