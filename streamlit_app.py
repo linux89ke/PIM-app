@@ -141,6 +141,17 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         ("BRAND name repeated in NAME", check_brand_in_name, {}), # Priority 8
     ] # Validations are now ORDERED by priority
 
+    flag_reason_comment_mapping = { # Define mapping here
+        "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical", "Please contact vendor support for sale of..."),
+        "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale", "Kindly Contact Jumia Seller Support To Confirm Possibil"),
+        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "See rejection reasons documentation for details"),
+        "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "See rejection reasons documentation for details"),
+        "Duplicate product": ("1000007 - Other Reason", "Product is duplicated"),
+        "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Kindly use Fashion for Fashion items"),
+        "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
+        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
+    }
+
     # --- Calculate validation DataFrames ONCE, outside the loop ---
     validation_results_dfs = {}
     for flag_name, check_func, func_kwargs in validations: # Iterate through ordered validations
@@ -158,16 +169,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             validation_df = validation_results_dfs[flag_name] # Get pre-calculated DataFrame for this flag
 
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
-                reason_details = reasons_dict.get(flag_name, ("", "", ""))
-                if reason_details and reason_details[0]: # Check if reason_details and reason_code are not empty
-                    reason_code, reason_message, reason_comment = reason_details
-                    detailed_reason = f"{reason_code} - {reason_message}"
-                    rejection_reason = detailed_reason # Set the rejection reason from reasons.xlsx
-                    comment = reason_comment if reason_comment else "" # Set comment from reasons.xlsx, leave blank if empty
-                else:
-                    rejection_reason = flag_name # Fallback to flag name if no details in reasons.xlsx
-                    comment = "See rejection reasons documentation for details" # Default comment
-
+                rejection_reason, comment = flag_reason_comment_mapping.get(flag_name) # Get reason and comment from mapping
                 status = 'Rejected' # Change status to Rejected
                 break # Stop checking further validations once a reason is found (due to priority)
 
@@ -175,7 +177,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'ProductSetSid': row['PRODUCT_SET_SID'],
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
-            'Reason': rejection_reason, # Only ONE rejection reason now (either from reasons.xlsx or flag name)
+            'Reason': rejection_reason, # Only ONE rejection reason now (from mapping)
             'Comment': comment
         })
 
@@ -205,7 +207,7 @@ approved_book_sellers = load_approved_book_sellers()
 print("\nLoaded Approved Book Sellers (from Books_Approved_Sellers.xlsx) at app start:\n", approved_book_sellers)
 
 
-# Load reasons dictionary from reasons.xlsx
+# Load reasons dictionary from reasons.xlsx - still load for RejectionReasons sheet
 reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
 reasons_dict = {}
 if not reasons_df.empty:
