@@ -84,21 +84,27 @@ def check_single_word_name(data, book_category_codes):
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
 
-def check_perfume_price_issues(data, perfumes_data):
-    flagged_perfumes = []
-    for _, row in data.iterrows():
-        brand = row['BRAND']
-        if brand in perfumes_data['BRAND'].values:
-            keywords = perfumes_data[perfumes_data['BRAND'] == brand]['KEYWORD'].tolist()
-            for keyword in keywords:
-                if isinstance(row['NAME'], str) and keyword.lower() in row['NAME'].lower():
-                    perfume_price = perfumes_data.loc[
-                        (perfumes_data['BRAND'] == brand) &
-                        (perfumes_data['KEYWORD'] == keyword), 'PRICE'].values[0]
-                    if row['GLOBAL_PRICE'] < perfume_price:
-                        flagged_perfumes.append(row)
-                        break
-    return pd.DataFrame(flagged_perfumes)
+def check_perfume_price_issues(data, perfumes_data): # Optimized function
+    if perfumes_data.empty or data.empty: # Quick return if either DataFrame is empty
+        return pd.DataFrame()
+
+    # 1. Merge data and perfumes_data based on 'BRAND'
+    merged_df = pd.merge(data, perfumes_data, on='BRAND', how='inner')
+
+    # 2. Filter rows where keyword is in NAME (case-insensitive)
+    merged_df['keyword_found'] = merged_df.apply(
+        lambda row: isinstance(row['NAME'], str) and row['KEYWORD'].lower() in row['NAME'].lower(), axis=1 # Still using apply here, can be improved more if needed but more readable
+    )
+    filtered_perfumes = merged_df[merged_df['keyword_found']]
+
+    # 3. Filter for price issues
+    flagged_perfumes = filtered_perfumes[filtered_perfumes['GLOBAL_PRICE'] < filtered_perfumes['PRICE']]
+
+    if not flagged_perfumes.empty: # Select only columns from original 'data' DataFrame to match original function's return
+        return data[data['PRODUCT_SET_SID'].isin(flagged_perfumes['PRODUCT_SET_SID'])]
+    else:
+        return pd.DataFrame()
+
 
 def check_blacklisted_words(data, blacklisted_words):
     return data[data['NAME'].apply(lambda name:
@@ -136,9 +142,14 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     for _, row in data.iterrows():
         reasons = [] # Changed to list to hold multiple reasons
 
-        for check_func, flag_name, func_kwargs in validations: # Unpack arguments from validations list
-            kwargs = {'data': data, **func_kwargs} # Construct keyword arguments including 'data'
-            validation_df = check_func(**kwargs) # Pass only relevant kwargs to each check_func
+        for check_func, flag_name, func_kwargs in validations:
+            start_time = time.time() # <---- Start timing
+            kwargs = {'data': data, **func_kwargs}
+            validation_df = check_func(**kwargs)
+            end_time = time.time() # <---- End timing
+            elapsed_time = end_time - start_time
+            print(f"Validation '{flag_name}' took: {elapsed_time:.4f} seconds") # <---- Print timing
+
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                 reason_details = reasons_dict.get(flag_name, ("", "", "")) # Renamed flags to reasons_dict
                 reason_code, reason_message, comment = reason_details
