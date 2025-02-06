@@ -159,11 +159,15 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                 reason_details = reasons_dict.get(flag_name, ("", "", ""))
-                reason_code, reason_message, reason_comment = reason_details
-                detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else flag_name
+                if reason_details and reason_details[0]: # Check if reason_details and reason_code are not empty
+                    reason_code, reason_message, reason_comment = reason_details
+                    detailed_reason = f"{reason_code} - {reason_message}"
+                    rejection_reason = detailed_reason # Set the rejection reason from reasons.xlsx
+                    comment = reason_comment if reason_comment else "" # Set comment from reasons.xlsx, leave blank if empty
+                else:
+                    rejection_reason = flag_name # Fallback to flag name if no details in reasons.xlsx
+                    comment = "See rejection reasons documentation for details" # Default comment
 
-                rejection_reason = detailed_reason # Set the rejection reason (only the HIGHEST priority one)
-                comment = reason_comment if reason_comment else "See rejection reasons documentation for details" # Get comment
                 status = 'Rejected' # Change status to Rejected
                 break # Stop checking further validations once a reason is found (due to priority)
 
@@ -171,7 +175,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'ProductSetSid': row['PRODUCT_SET_SID'],
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
-            'Reason': rejection_reason, # Only ONE rejection reason now
+            'Reason': rejection_reason, # Only ONE rejection reason now (either from reasons.xlsx or flag name)
             'Comment': comment
         })
 
@@ -210,7 +214,7 @@ if not reasons_df.empty:
         reason_parts = reason_text.split(' - ', 1)
         code = reason_parts[0]
         message = row['CODE - REJECTION_REASON'] #MESSAGE
-        comment = "See rejection reasons documentation for details"
+        comment = row['COMMENT'] if 'COMMENT' in row else "" # Get comment, use empty string if column missing or value is NaN
         reasons_dict[f"{code} - {message}"] = (code, message, comment)
 else:
     st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
@@ -267,14 +271,19 @@ if uploaded_file is not None:
                 else:
                     st.write("No issues found")
 
-        # Export functions - No change - Modified to include 'flag' column in rejected report
+        # Export functions - Modified to select and order columns for ProductSets sheet
         def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
             output = BytesIO()
+            productsets_cols = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # Desired columns order
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df1.to_excel(writer, index=False, sheet_name=sheet1_name)
+                if not df1.empty: # Check if df1 is not empty before trying to select columns
+                    df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
+                else:
+                    df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
                 df2.to_excel(writer, index=False, sheet_name=sheet2_name)
             output.seek(0)
             return output
+
 
         # Download buttons - No change
         current_date = datetime.now().strftime("%Y-%m-%d")
