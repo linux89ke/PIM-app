@@ -91,8 +91,13 @@ def check_brand_in_name(data):
         isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
         row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
 
-def check_duplicate_products(data):
-    return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
+def check_duplicate_products(data): # MODIFIED Function
+    """
+    Checks for duplicate products based on NAME, BRAND, SELLER_NAME, and COLOR.
+    Products are considered duplicates only if NAME, BRAND, SELLER_NAME, and COLOR are the same.
+    """
+    return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME', 'COLOR'], keep=False)]
+
 
 def check_sensitive_brands(data, sensitive_brand_words): # Optimized Function
     if not sensitive_brand_words or data.empty:
@@ -208,7 +213,6 @@ if uploaded_file is not None:
         print("Calling validate_products function...") # <----- ADDED LOGGING
         final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words)
 
-
         # Split into approved and rejected - No change
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
@@ -229,8 +233,10 @@ if uploaded_file is not None:
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words)), # New expander
+            # Removed Blacklisted Words expander
+            # ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
             ("Brand in Name", check_brand_in_name(data)),
-            ("Duplicate Products", check_duplicate_products(data)),
+            ("Duplicate Products", check_duplicate_products(data)), # Using the modified duplicate check
         ]
 
         for title, df in validation_results:
@@ -281,6 +287,5 @@ if uploaded_file is not None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-    except Exception as e: # Catch any error during CSV processing and display it
+    except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
-        print(f"Exception details: {e}") # Also print to console for full traceback
