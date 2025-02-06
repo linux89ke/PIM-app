@@ -52,7 +52,7 @@ def load_config_files():
 
 # Validation check functions (modularized)
 def check_missing_color(data, book_category_codes):
-    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
+    # Filter out book products by checking if CATEGORY_CODE is in book_category_codes
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
     return missing_color_non_books
@@ -61,6 +61,7 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
+    # Filter out book products by checking if CATEGORY_CODE is in book_category_codes
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     return non_book_data[(non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')]
 
@@ -99,19 +100,41 @@ def check_long_product_name(data, max_words=10): # Make max_words configurable l
     return data[data['NAME'].str.split().str.len() > max_words]
 
 
-def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes): # Added book_category_codes
+def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes):
     valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
     perfumes_data = config_data['perfumes']
 
-    missing_color = check_missing_color(data, book_category_codes) # Pass book_category_codes
+    # Pass book_category_codes to the check functions to exempt books
+    missing_color = check_missing_color(data, book_category_codes)
     missing_brand_or_name = check_missing_brand_or_name(data)
-    single_word_name = check_single_word_name(data, book_category_codes) # Pass book_category_codes
+    single_word_name = check_single_word_name(data, book_category_codes)
     generic_brand_issues = check_generic_brand_issues(data, valid_category_codes_fas)
     perfume_price_issues = check_perfume_price_issues(data, perfumes_data)
     flagged_blacklisted = check_blacklisted_words(data, blacklisted_words)
     brand_in_name_issues = check_brand_in_name(data)
     duplicate_products = check_duplicate_products(data)
     long_product_name = check_long_product_name(data)
+
+    # Define flags and rejection reasons directly in code
+    flags = {
+        # Your existing flags
+    }
+
+    # Combine all issues to be returned as the final validation output
+    validation_results = {
+        "missing_color": missing_color,
+        "missing_brand_or_name": missing_brand_or_name,
+        "single_word_name": single_word_name,
+        "generic_brand_issues": generic_brand_issues,
+        "perfume_price_issues": perfume_price_issues,
+        "flagged_blacklisted": flagged_blacklisted,
+        "brand_in_name_issues": brand_in_name_issues,
+        "duplicate_products": duplicate_products,
+        "long_product_name": long_product_name,
+    }
+
+    return validation_results
+
 
     # Define flags and rejection reasons directly in code (no changes here)
     flags = {
