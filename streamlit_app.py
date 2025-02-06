@@ -79,6 +79,10 @@ def check_brand_in_name(data):
 def check_duplicate_products(data):
     return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME'], keep=False)]
 
+def check_long_product_name(data, max_words=10): # Make max_words configurable later if needed
+    return data[data['NAME'].str.split().str.len() > max_words]
+
+
 def validate_products(data, config_data, blacklisted_words, reasons_dict):
     valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
     perfumes_data = config_data['perfumes']
@@ -91,6 +95,8 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
     flagged_blacklisted = check_blacklisted_words(data, blacklisted_words)
     brand_in_name_issues = check_brand_in_name(data)
     duplicate_products = check_duplicate_products(data)
+    long_product_name = check_long_product_name(data) # Call the new check
+
 
     # Define flags and rejection reasons directly in code
     flags = {
@@ -168,7 +174,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
             (flagged_blacklisted, "Blacklisted word in NAME"),
             (brand_in_name_issues, "BRAND name repeated in NAME"),
             (duplicate_products, "Duplicate product"),
-            (check_long_product_name(data), "Long Product Name") # Include the new flag here
+            (long_product_name, "Long Product Name") # Include the new flag here
         ]
 
         for validation_df, flag_name in validations:
@@ -188,7 +194,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
             'Reason': report_reason_message, # Use the message for final report
-            'Comment': comment
+            'Comment': comment if comment else "See rejection reasons documentation for details" # Default comment if no comment from Excel
         })
 
     final_report_df = pd.DataFrame(final_report_rows)
@@ -209,10 +215,12 @@ reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
 reasons_dict = {}
 if not reasons_df.empty:
     for _, row in reasons_df.iterrows():
-        code = row['CODE - REJECTION_REASON']
-        message = row['Message']
-        comment = row['Comment']
-        reasons_dict[f"{code} - {message}"] = (code, message, comment) # Create reasons_dict from dataframe
+        reason_text = row['CODE - REJECTION_REASON'] # Correct column name
+        reason_parts = reason_text.split(' - ', 1) # Split into code and message
+        code = reason_parts[0] # Extract code
+        message = reason_parts[1] if len(reason_parts) > 1 else reason_text # Extract message, use full text if no '-' separator
+        comment = "See rejection reasons documentation for details" # Default comment
+        reasons_dict[reason_text] = (code, message, comment) # Create reasons_dict
 else:
     st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
 
