@@ -61,9 +61,25 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
+    # Debug print to check book_category_codes
+    print("Book Category Codes:", book_category_codes)
+
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
-    return non_book_data[(non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')]
+
+    # Debug print to check which products are considered books and non-books
+    print("\nBook Data (Exempted Categories):\n", book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+    print("\nNon-Book Data (Subject to Single-Word Check):\n", non_book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+
+
+    flagged_non_book_single_word_names = non_book_data[
+        (non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')
+    ]
+
+    # Debug print to check flagged products in non-book data
+    print("\nFlagged Single-Word Names (Non-Book):\n", flagged_non_book_single_word_names[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+
+    return flagged_non_book_single_word_names
 
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
@@ -104,9 +120,16 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     valid_category_codes_fas = config_data['category_fas']['ID'].tolist()
     perfumes_data = config_data['perfumes']
 
+    # Debug print to check book_category_codes in validate_products
+    print("\nBook Category Codes in validate_products:\n", book_category_codes)
+
     missing_color = check_missing_color(data, book_category_codes) # Pass book_category_codes
     missing_brand_or_name = check_missing_brand_or_name(data)
     single_word_name = check_single_word_name(data, book_category_codes) # Pass book_category_codes
+
+    # Debug print to check single_word_name DataFrame
+    print("\nDataFrame from check_single_word_name:\n", single_word_name[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string())
+
     generic_brand_issues = check_generic_brand_issues(data, valid_category_codes_fas)
     perfume_price_issues = check_perfume_price_issues(data, perfumes_data)
     flagged_blacklisted = check_blacklisted_words(data, blacklisted_words)
@@ -257,7 +280,7 @@ if uploaded_file is not None:
             st.stop()
 
         st.write("CSV file loaded successfully. Preview of data:")
-        st.write(data.head())
+        st.dataframe(data)
 
         # Validation and report generation
         final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes) # Pass book_category_codes
