@@ -76,7 +76,7 @@ def load_config_files():
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Validation check functions (modularized) - Modified "Missing COLOR" and "Single-word NAME" functions
+# Validation check functions (modularized) - No changes needed for these tests except data type fix in load_csv
 def check_missing_color(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
@@ -86,19 +86,11 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
-    print("\n--- check_single_word_name function ---")
-    print("Book Category Codes (from Books_cat.xlsx):", book_category_codes)
-    print("Unique CATEGORY_CODE values in input data:", data['CATEGORY_CODE'].unique())
-    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
-    print("Data identified as 'book_data' (based on category codes):\n", book_data.head())
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
-    print("Data identified as 'non_book_data':\n", non_book_data.head())
     flagged_non_book_single_word_names = non_book_data[
         (non_book_data['NAME'].str.split().str.len() == 1)
     ]
-    print("Products flagged for single-word name in 'non_book_data':\n", flagged_non_book_single_word_names.head())
     return flagged_non_book_single_word_names
-    
 
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
@@ -233,7 +225,7 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Process uploaded file
 if uploaded_file is not None:
     try:
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
+        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str}) # <--- ADDED dtype={'CATEGORY_CODE': str} HERE
         print("CSV file successfully read by pandas.")
 
         if data.empty:
