@@ -74,24 +74,11 @@ def check_missing_brand_or_name(data):
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
 
 def check_single_word_name(data, book_category_codes):
-    # Debug print to check book_category_codes
-    # print("check_single_word_name - Book Category Codes:", book_category_codes) # Commented out debug print
-
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
-
-    # Debug print to check which products are considered books and non-books
-    # print("\nBook Data (Exempted Categories):\n", book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
-    # print("\nNon-Book Data (Subject to Single-Word Check):\n", non_book_data[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
-
-
     flagged_non_book_single_word_names = non_book_data[
         (non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')
     ]
-
-    # Debug print to check flagged products in non-book data
-    # print("\nFlagged Single-Word Names (Non-Book):\n", flagged_non_book_single_word_names[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'NAME', 'BRAND']].to_string()) # Commented out debug print
-
     return flagged_non_book_single_word_names
 
 def check_generic_brand_issues(data, valid_category_codes_fas):
@@ -133,15 +120,15 @@ def check_sensitive_brands(data, sensitive_brand_words): # New check function
 
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words): # Added book_category_codes
     validations = [
-        (check_missing_color, "Missing COLOR"),
-        (check_missing_brand_or_name, "Missing BRAND or NAME"),
-        (check_single_word_name, "Single-word NAME"),
-        (check_generic_brand_issues, "Generic BRAND Issues"),
-        (check_perfume_price_issues, "Perfume price issue"),
-        (check_sensitive_brands, "Sensitive Brand"), # New Validation
-        (check_blacklisted_words, "Blacklisted word in NAME"),
-        (check_brand_in_name, "BRAND name repeated in NAME"),
-        (check_duplicate_products, "Duplicate product"),
+        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}), # Specify arguments for each function
+        (check_missing_brand_or_name, "Missing BRAND or NAME", {}), # No extra arguments needed
+        (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
+        (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
+        (check_perfume_price_issues, "Perfume price issue", {'perfumes_data': config_data['perfumes']}),
+        (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words}), # New Validation
+        (check_blacklisted_words, "Blacklisted word in NAME", {'blacklisted_words': blacklisted_words}),
+        (check_brand_in_name, "BRAND name repeated in NAME", {}),
+        (check_duplicate_products, "Duplicate product", {}),
 
     ]
 
@@ -149,8 +136,9 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     for _, row in data.iterrows():
         reasons = [] # Changed to list to hold multiple reasons
 
-        for check_func, flag_name in validations:
-            validation_df = check_func(data=data, book_category_codes=book_category_codes, valid_category_codes_fas=config_data['category_fas']['ID'].tolist(), perfumes_data=config_data['perfumes'], blacklisted_words=blacklisted_words, sensitive_brand_words=sensitive_brand_words) # Pass all configs as needed
+        for check_func, flag_name, func_kwargs in validations: # Unpack arguments from validations list
+            kwargs = {'data': data, **func_kwargs} # Construct keyword arguments including 'data'
+            validation_df = check_func(**kwargs) # Pass only relevant kwargs to each check_func
             if not validation_df.empty and row['PRODUCT_SET_SID'] in validation_df['PRODUCT_SET_SID'].values:
                 reason_details = reasons_dict.get(flag_name, ("", "", "")) # Renamed flags to reasons_dict
                 reason_code, reason_message, comment = reason_details
