@@ -3,12 +3,12 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import time
-import re  # Import the 're' module for regular expressions
+import re
 
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
-# Function to load blacklisted words from a file
+# Function to load blacklisted words from a file (No changes needed)
 def load_blacklisted_words():
     try:
         with open('blacklisted.txt', 'r') as f:
@@ -20,7 +20,7 @@ def load_blacklisted_words():
         st.error(f"Error loading blacklisted words: {e}")
         return []
 
-# Function to load book category codes from file
+# Function to load book category codes from file (No changes needed)
 def load_book_category_codes():
     try:
         book_cat_df = pd.read_excel('Books_cat.xlsx')
@@ -32,7 +32,7 @@ def load_book_category_codes():
         st.error(f"Error loading Books_cat.xlsx: {e}")
         return []
 
-# Function to load sensitive brand words from Excel file
+# Function to load sensitive brand words from Excel file (No changes needed)
 def load_sensitive_brand_words():
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
@@ -44,7 +44,19 @@ def load_sensitive_brand_words():
         st.error(f"Error loading sensitive_brands.xlsx: {e}")
         return []
 
-# Load and validate configuration files (excluding flags.xlsx)
+# Function to load approved book sellers from Excel file (NEW FUNCTION)
+def load_approved_book_sellers():
+    try:
+        approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
+        return approved_sellers_df['SellerName'].astype(str).tolist()
+    except FileNotFoundError:
+        st.warning("Books_Approved_Sellers.xlsx file not found! Book seller approval check will not be applied.")
+        return []
+    except Exception as e:
+        st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
+        return []
+
+# Load and validate configuration files (excluding flags.xlsx) (No changes needed)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
@@ -64,7 +76,7 @@ def load_config_files():
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Validation check functions (modularized)
+# Validation check functions (modularized) - No changes needed for these tests
 def check_missing_color(data, book_category_codes):
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
@@ -85,46 +97,48 @@ def check_single_word_name(data, book_category_codes):
 def check_generic_brand_issues(data, valid_category_codes_fas):
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
 
-
 def check_brand_in_name(data):
     return data[data.apply(lambda row:
         isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
         row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
 
-def check_duplicate_products(data): # MODIFIED Function
-    """
-    Checks for duplicate products based on NAME, BRAND, SELLER_NAME, and COLOR.
-    Products are considered duplicates only if NAME, BRAND, SELLER_NAME, and COLOR are the same.
-    """
+def check_duplicate_products(data):
     return data[data.duplicated(subset=['NAME', 'BRAND', 'SELLER_NAME', 'COLOR'], keep=False)]
 
-
-def check_sensitive_brands(data, sensitive_brand_words): # Optimized Function
+def check_sensitive_brands(data, sensitive_brand_words): # Optimized Function (No changes needed)
     if not sensitive_brand_words or data.empty:
         return pd.DataFrame()
 
     sensitive_regex_words = [r'\b' + re.escape(word.lower()) + r'\b' for word in sensitive_brand_words]
-    sensitive_brands_regex = '|'.join(sensitive_regex_words) # Regex for sensitive BRAND/NAME words
+    sensitive_brands_regex = '|'.join(sensitive_regex_words)
 
     mask_name = data['NAME'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False)
     mask_brand = data['BRAND'].str.lower().str.contains(sensitive_brands_regex, regex=True, na=False)
 
-    combined_mask = mask_name | mask_brand # Rows where sensitive words are found in NAME OR BRAND
-
+    combined_mask = mask_name | mask_brand
     return data[combined_mask]
 
+# New validation function for approved book sellers (NEW FUNCTION)
+def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers):
+    book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)] # Filter for book categories
+    if book_data.empty:
+        return pd.DataFrame() # No books, return empty DataFrame
 
-def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words): # Added book_category_codes
+    # Check if SellerName is NOT in approved list for book data
+    unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
+    return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
+
+
+def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers): # Added approved_book_sellers
     validations = [
         (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}), # Specify arguments for each function
         (check_missing_brand_or_name, "Missing BRAND or NAME", {}), # No extra arguments needed
         (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
         (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
-        # (check_perfume_price_issues, "Perfume price issue", {'perfumes_data': config_data['perfumes']}), # Perfume check removed for now
         (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words}), # New Validation
-        # (check_blacklisted_words, "Blacklisted word in NAME", {'blacklisted_words': blacklisted_words}), # Blacklisted check removed for now
         (check_brand_in_name, "BRAND name repeated in NAME", {}),
         (check_duplicate_products, "Duplicate product", {}),
+        (check_seller_approved_for_books, "Seller Approve to sell books",  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}), # New Validation
     ]
 
     final_report_rows = []
@@ -155,7 +169,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
             'Reason': report_reason_message, # Use joined reason messages
-            'Comment': comment if comment else "See rejection reasons documentation for details" # Default comment if no comment from Excel
+            'Comment': comment if comment else "See rejection reasons documentation for details" # Default comment from Excel
         })
 
     final_report_df = pd.DataFrame(final_report_rows)
@@ -179,6 +193,11 @@ print("\nLoaded Book Category Codes (from Books_cat.xlsx) at app start:\n", book
 sensitive_brand_words = load_sensitive_brand_words() # Load sensitive brand words
 print("\nLoaded Sensitive Brand Words (from sensitive_brands.xlsx) at app start:\n", sensitive_brand_words)
 
+# Load approved book sellers (NEW - load approved sellers)
+approved_book_sellers = load_approved_book_sellers()
+print("\nLoaded Approved Book Sellers (from Books_Approved_Sellers.xlsx) at app start:\n", approved_book_sellers)
+
+
 # Load reasons dictionary from reasons.xlsx
 reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
 reasons_dict = {}
@@ -201,7 +220,7 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 if uploaded_file is not None:
     try:
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1')
-        print("CSV file successfully read by pandas.") # <----- ADDED LOGGING
+        print("CSV file successfully read by pandas.")
 
         if data.empty:
             st.warning("The uploaded file is empty.")
@@ -210,8 +229,8 @@ if uploaded_file is not None:
         st.write("CSV file loaded successfully. Preview of data:")
         st.dataframe(data.head(10))
 
-        print("Calling validate_products function...") # <----- ADDED LOGGING
-        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words)
+        # Validation and report generation - pass sensitive_brand_words & book_category_codes & approved_book_sellers
+        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers) # Added approved_book_sellers
 
         # Split into approved and rejected - No change
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
@@ -226,17 +245,16 @@ if uploaded_file is not None:
             st.metric("Rejected Products", len(rejected_df))
             st.metric("Rejection Rate", f"{(len(rejected_df)/len(data)*100):.1f}%")
 
-        # Validation results expanders - Updated to include "Sensitive Brand Issues"
+        # Validation results expanders - Updated to include "Sensitive Brand Issues" and "Seller Approve to sell books"
         validation_results = [
             ("Missing COLOR", check_missing_color(data, book_category_codes)),
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words)), # New expander
-            # Removed Blacklisted Words expander
-            # ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
             ("Brand in Name", check_brand_in_name(data)),
-            ("Duplicate Products", check_duplicate_products(data)), # Using the modified duplicate check
+            ("Duplicate Products", check_duplicate_products(data)),
+            ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # New expander
         ]
 
         for title, df in validation_results:
@@ -289,3 +307,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
+        print(f"Exception details: {e}") # Also print to console for full traceback
