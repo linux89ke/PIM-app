@@ -7,11 +7,18 @@ import time  # Import time module for timing
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
+# --- Timing of Initialization ---
+start_time_init = time.time()
+
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
+    start_time = time.time()
     try:
         with open('blacklisted.txt', 'r') as f:
-            return [line.strip() for line in f.readlines()]
+            words = [line.strip() for line in f.readlines()]
+        end_time = time.time()
+        print(f"load_blacklisted_words took: {end_time - start_time:.4f} seconds") # Timing
+        return words
     except FileNotFoundError:
         st.error("blacklisted.txt file not found!")
         return []
@@ -21,9 +28,13 @@ def load_blacklisted_words():
 
 # Function to load book category codes from file
 def load_book_category_codes():
+    start_time = time.time()
     try:
         book_cat_df = pd.read_excel('Books_cat.xlsx') # Load from Excel
-        return book_cat_df['CategoryCode'].astype(str).tolist()  # Extract CategoryCode column as string list
+        codes = book_cat_df['CategoryCode'].astype(str).tolist()  # Extract CategoryCode column as string list
+        end_time = time.time()
+        print(f"load_book_category_codes took: {end_time - start_time:.4f} seconds") # Timing
+        return codes
     except FileNotFoundError:
         st.warning("Books_cat.xlsx file not found! Book category exemptions will not be applied.")
         return []
@@ -33,9 +44,13 @@ def load_book_category_codes():
 
 # Function to load sensitive brand words from Excel file (No changes needed)
 def load_sensitive_brand_words():
+    start_time = time.time()
     try:
         sensitive_brands_df = pd.read_excel('sensitive_brands.xlsx')
-        return sensitive_brands_df['BrandWords'].astype(str).tolist()
+        words = sensitive_brands_df['BrandWords'].astype(str).tolist()
+        end_time = time.time()
+        print(f"load_sensitive_brand_words took: {end_time - start_time:.4f} seconds") # Timing
+        return words
     except FileNotFoundError:
         st.warning("sensitive_brands.xlsx file not found! Sensitive brand check will not be applied.")
         return []
@@ -45,6 +60,7 @@ def load_sensitive_brand_words():
 
 # Load and validate configuration files (excluding flags.xlsx)
 def load_config_files():
+    start_time = time.time()
     config_files = {
         'check_variation': 'check_variation.xlsx',
         'category_fas': 'category_FAS.xlsx',
@@ -61,9 +77,48 @@ def load_config_files():
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
+    end_time = time.time()
+    print(f"load_config_files took: {end_time - start_time:.4f} seconds") # Timing
     return data
 
-# Validation check functions (modularized)
+# Load configuration files
+config_data = load_config_files()
+
+# Load blacklisted words
+blacklisted_words = load_blacklisted_words()
+
+# Load book category codes
+book_category_codes = load_book_category_codes()
+print("\nLoaded Book Category Codes (from Books_cat.xlsx) at app start:\n", book_category_codes)
+
+# Load sensitive brand words
+sensitive_brand_words = load_sensitive_brand_words() # Load sensitive brand words
+print("\nLoaded Sensitive Brand Words (from sensitive_brands.xlsx) at app start:\n", sensitive_brand_words)
+
+# Load reasons dictionary from reasons.xlsx
+reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
+start_time_reasons_dict = time.time()
+reasons_dict = {}
+if not reasons_df.empty:
+    for _, row in reasons_df.iterrows():
+        reason_text = row['CODE - REJECTION_REASON']
+        reason_parts = reason_text.split(' - ', 1)
+        code = reason_parts[0]
+        message = row['CODE - REJECTION_REASON'] #MESSAGE
+        comment = "See rejection reasons documentation for details"
+        reasons_dict[f"{code} - {message}"] = (code, message, comment)
+else:
+    st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
+end_time_reasons_dict = time.time()
+print(f"Processing reasons_dict took: {end_time_reasons_dict - start_time_reasons_dict:.4f} seconds") # Timing
+
+end_time_init = time.time()
+print(f"Total Initialization Time: {end_time_init - start_time_init:.4f} seconds") # Total init time
+
+# --- End Timing of Initialization ---
+
+
+# Validation check functions (modularized) - No changes needed for these tests
 def check_missing_color(data, book_category_codes):
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
@@ -104,7 +159,14 @@ def check_sensitive_brands(data, sensitive_brand_words): # New check function
 
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words): # Added book_category_codes
     validations = [
-        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}), # <---- ONLY check_missing_color
+        (check_missing_color, "Missing COLOR", {'book_category_codes': book_category_codes}), # Specify arguments for each function
+        (check_missing_brand_or_name, "Missing BRAND or NAME", {}), # No extra arguments needed
+        (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
+        (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
+        (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words}), # New Validation
+        (check_blacklisted_words, "Blacklisted word in NAME", {'blacklisted_words': blacklisted_words}),
+        (check_brand_in_name, "BRAND name repeated in NAME", {}),
+        (check_duplicate_products, "Duplicate product", {}),
     ]
 
     final_report_rows = []
@@ -145,34 +207,6 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 # Initialize the app
 st.title("Product Validation Tool")
 
-# Load configuration files
-config_data = load_config_files()
-
-# Load blacklisted words
-blacklisted_words = load_blacklisted_words()
-
-# Load book category codes
-book_category_codes = load_book_category_codes()
-print("\nLoaded Book Category Codes (from Books_cat.xlsx) at app start:\n", book_category_codes)
-
-# Load sensitive brand words
-sensitive_brand_words = load_sensitive_brand_words() # Load sensitive brand words
-print("\nLoaded Sensitive Brand Words (from sensitive_brands.xlsx) at app start:\n", sensitive_brand_words)
-
-# Load reasons dictionary from reasons.xlsx
-reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
-reasons_dict = {}
-if not reasons_df.empty:
-    for _, row in reasons_df.iterrows():
-        reason_text = row['CODE - REJECTION_REASON']
-        reason_parts = reason_text.split(' - ', 1)
-        code = reason_parts[0]
-        message = row['CODE - REJECTION_REASON'] #MESSAGE
-        comment = "See rejection reasons documentation for details"
-        reasons_dict[f"{code} - {message}"] = (code, message, comment)
-else:
-    st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
-
 
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
@@ -208,7 +242,13 @@ if uploaded_file is not None:
         # Validation results expanders - Updated to include "Sensitive Brand Issues"
         validation_results = [
             ("Missing COLOR", check_missing_color(data, book_category_codes)),
-            # Removed other validation expanders to focus on single check
+            ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
+            ("Single-word NAME", check_single_word_name(data, book_category_codes)),
+            ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
+            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words)), # New expander
+            ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
+            ("Brand in Name", check_brand_in_name(data)),
+            ("Duplicate Products", check_duplicate_products(data)),
         ]
 
         for title, df in validation_results:
