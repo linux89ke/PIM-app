@@ -44,7 +44,7 @@ def load_sensitive_brand_words():
         st.error(f"Error loading sensitive_brands.xlsx: {e}")
         return []
 
-# Function to load approved book sellers from Excel file (NEW FUNCTION)
+# Function to load approved book sellers from Excel file (No changes needed)
 def load_approved_book_sellers():
     try:
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
@@ -76,7 +76,7 @@ def load_config_files():
             st.error(f"❌ Error loading {filename}: {e}")
     return data
 
-# Validation check functions (modularized) - No changes needed for these tests
+# Validation check functions (modularized) - Modified "Missing COLOR" and "Single-word NAME" functions
 def check_missing_color(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
@@ -88,7 +88,7 @@ def check_missing_brand_or_name(data):
 def check_single_word_name(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)] # Only check non-books
     flagged_non_book_single_word_names = non_book_data[
-        (non_book_data['NAME'].str.split().str.len() == 1) & (non_book_data['BRAND'] != 'Jumia Book')
+        (non_book_data['NAME'].str.split().str.len() == 1)
     ]
     return flagged_non_book_single_word_names
 
@@ -136,7 +136,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         (check_missing_brand_or_name, "Missing BRAND or NAME", {}),
         (check_single_word_name, "Single-word NAME", {'book_category_codes': book_category_codes}),
         (check_generic_brand_issues, "Generic BRAND Issues", {'valid_category_codes_fas': config_data['category_fas']['ID'].tolist()}),
-        (check_sensitive_brands, "Sensitive Brand", {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Pass book_category_codes here
+        (check_sensitive_brands, "Sensitive Brand Issues", {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Pass book_category_codes here
         (check_brand_in_name, "BRAND name repeated in NAME", {}),
         (check_duplicate_products, "Duplicate product", {}),
         (check_seller_approved_for_books, "Seller Approve to sell books",  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}),
