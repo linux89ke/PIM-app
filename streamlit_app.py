@@ -255,12 +255,60 @@ seller_names_input = st.sidebar.text_area("Enter Seller Names (one per line)")
 filtered_sellers = [seller.strip() for seller in seller_names_input.splitlines() if seller.strip()]
 seller_filter_button = st.sidebar.button("Filter by Sellers")
 
+# --- Sidebar Download Buttons ---
+st.sidebar.header("Download Reports")
+current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date in sidebar scope
+
+final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons") # final_report_df not defined yet, will be defined after file upload
+st.sidebar.download_button(
+    label="Final Export",
+    data=final_report_excel,
+    file_name=f"Final_Report_{current_date}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons") # rejected_df not defined yet
+st.sidebar.download_button(
+    label="Rejected Export",
+    data=rejected_excel,
+    file_name=f"Rejected_Products_{current_date}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons") # approved_df not defined yet
+st.sidebar.download_button(
+    label="Approved Export",
+    data=approved_excel,
+    file_name=f"Approved_Products_{current_date}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+full_data_excel = to_excel_full_data(data.copy(), final_report_df) # final_report_df and data not defined yet
+st.sidebar.download_button(
+    label="Full Data Export",
+    data=full_data_excel,
+    file_name=f"Full_Data_Export_{current_date}.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+if seller_filter_button and filtered_sellers and not data.empty: # data and seller_filter_button not defined yet in sidebar scope
+    filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # final_report_df and data not defined yet
+    st.sidebar.download_button(
+        label="Filtered Seller Export",
+        data=filtered_seller_excel,
+        file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+elif seller_filter_button and filtered_sellers and data.empty:
+    st.sidebar.write("No data to export for selected sellers.")
+
+
 # File upload section
 uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Process uploaded file
 if uploaded_file is not None:
-    current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date here, before try block
+    current_date = datetime.now().strftime("%Y-%m-%d")
     try:
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str})
         print("CSV file successfully read by pandas.")
@@ -284,6 +332,15 @@ if uploaded_file is not None:
         # Split into approved and rejected - No change
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
+
+        # Update sidebar download buttons with processed dataframes
+        final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
+        rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
+        approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
+        full_data_excel = to_excel_full_data(data.copy(), final_report_df)
+        if seller_filter_button and filtered_sellers and not data.empty:
+             filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df)
+
 
         # Display results metrics - No change
         col1, col2 = st.columns(2)
@@ -332,56 +389,6 @@ if uploaded_file is not None:
             output.seek(0)
             return output
 
-
-        # Download buttons - No change
-        col1, col2, col3, col4, col5 = st.columns(5) # Added one more column
-
-        with col1:
-            final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Final Export",
-                data=final_report_excel,
-                file_name=f"Final_Report_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col2:
-            rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Rejected Export",
-                data=rejected_excel,
-                file_name=f"Rejected_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col3:
-            approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
-            st.download_button(
-                label="Approved Export",
-                data=approved_excel,
-                file_name=f"Approved_Products_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col4: # --- New "Full Data Export" button ---
-            full_data_excel = to_excel_full_data(data.copy(), final_report_df) # Create full data excel
-            st.download_button(
-                label="Full Data Export",
-                data=full_data_excel,
-                file_name=f"Full_Data_Export_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        with col5: # --- New "Filtered Seller Data Export" button ---
-            if seller_filter_button and filtered_sellers and not data.empty:
-                filtered_seller_excel = to_excel_full_data(data.copy(), final_report_df) # Reuse full data export for filtered data
-                st.download_button(
-                    label="Filtered Seller Export",
-                    data=filtered_seller_excel,
-                    file_name=f"Seller_Filtered_Data_{current_date}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            elif seller_filter_button and filtered_sellers and data.empty:
-                st.write("No data to export for selected sellers.")
 
 
     except Exception as e:
