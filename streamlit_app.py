@@ -92,8 +92,57 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
     brand_in_name_issues = check_brand_in_name(data)
     duplicate_products = check_duplicate_products(data)
 
-    # Define flags directly in code
+    # Define flags and rejection reasons directly in code
     flags = {
+        "Brand NOT Allowed": ("1000001", "Brand NOT Allowed", "Brand is not permitted"),
+        "Brand Name Repeated in Product Name": ("1000002", "Kindly Ensure Brand Name Is Not Repeated In Product Name", "Remove redundant brand name from product name"),
+        "Restricted Brand": ("1000003", "Restricted Brand", "Brand is restricted"),
+        "Wrong Category": ("1000004", "Wrong Category", "Category is incorrect"),
+        "Confirm Actual Product Colour": ("1000005", "Kindly confirm the actual product colour", "Verify and correct the product color"),
+        "Wrong Description": ("1000006", "Wrong description", "Product description is inaccurate"),
+        "Other Reason": ("1000007", "Other Reason", "Unspecified reason, check comments"),
+        "Improve Product Name Description": ("1000008", "Kindly Improve Product Name Description", "Enhance product name for clarity and detail"),
+        "Improve Product Name and Description": ("1000009", "Kindly improve product name description, product description", "Improve both name and description"),
+        "Product Weight Format": ("1000010", "Product Weight in .kg only eg 1, 0.5", "Format product weight correctly in kg"),
+        "Provide Product Model Number": ("1000011", "Kindly Provide Product's Model Number", "Add the product model number"),
+        "Provide Health/Food Regulation Registration": ("1000012", "Kindly Provide Product's Health/Food Regulation Registration", "Provide necessary health/food regulation details"),
+        "Provide Product Warranty Details": ("1000013", "Kindly Provide Product Warranty Details", "Include product warranty information"),
+        "Request Brand Creation": ("1000014", "Kindly request for the creation of this product's actual brand", "Request brand creation for accurate branding"),
+        "Fundamentals Of A Product CANNOT Be Changed": ("1000015", "Fundamentals Of A Product CANNOT Be Changed; Brand/UPC/MPN", "Cannot change fundamental product attributes"),
+        "Proof of NG manufacture or assembly required": ("1000016", "Proof of NG manufacture or assembly required", "Provide proof of local manufacture or assembly"),
+        "Product Description Narrative Paragraph 1": ("1000017", "Kindly Ensure Product Description Is a Narrative, Paragraph 1", "Ensure description is narrative paragraph 1"),
+        "Product Description Narrative Paragraph 2": ("1000018", "Kindly Ensure Product Description Is a Narrative, Paragraph 2", "Ensure description is narrative paragraph 2"),
+        "Return Rate Too High": ("1000019", "Return Rate of the item is too high (Not Authorized)", "Item return rate exceeds threshold"),
+        "Rejection Rate Too High": ("1000020", "Return and rejection rate is greater than 3% (Not Authorized)", "Item rejection rate exceeds threshold"),
+        "Over 3 Failed Deliveries": ("1000021", "Over 3 failed deliveries -Size and Quality (Not Authorized)", "Item has excessive delivery failures"),
+        "Too Many Bad Reviews": ("1000022", "Item has received greater than 3 bad reviews (Not Authorized)", "Item has too many negative reviews"),
+        "Confirmation of Counterfeit": ("1000023", "Confirmation of counterfeit product by Jumia technical team", "Product confirmed as counterfeit"),
+        "No License to Sell": ("1000024", "Product does not have a license to be sold via Jumia (Not Authorized)", "Seller lacks license to sell this product on Jumia"),
+        "Out of Stock Too Often": ("1000025", "Product was out of stock on greater than 3 occasions (Not Authorized)", "Item is frequently out of stock"),
+        "Failed QC Too Often": ("1000026", "Product has failed QC greater than 3 times within 1 week - Not Authorized", "Item has repeatedly failed quality control"),
+        "Low Content Score": ("1000027", "Product has low content score", "Product content score is too low"),
+        "Contact Seller Support Possibility 1": ("1000028", "Kindly Contact Jumia Seller Support To Confirm Possibility Of Resolving This Issue", "Contact seller support for issue resolution possibility 1"),
+        "Contact Seller Support Verify Possibility 2": ("1000029", "Kindly Contact Jumia Seller Support To Verify This Product's Authenticity", "Contact seller support to verify product authenticity"),
+        "Suspected Counterfeit/Fake Product": ("1000030", "Suspected Counterfeit/Fake Product.Please Contact Seller Support For Guidance", "Suspected counterfeit, contact seller support"),
+        "Review & Update Price/Confirm The Price": ("1000031", "Kindly Review & Update This Product's Price or Confirm The Price", "Review and update/confirm product price"),
+        "Mismatch Product Images & Description": ("1000032", "The Product Images & Product Description Do Not Match. Kindly Correct Urgently", "Product images and description are inconsistent"),
+        "Keywords Inappropriate": ("1000033", "Keywords in your content/ Product name / description has been rejected", "Inappropriate keywords used in content"),
+        "Infringing Images": ("1000034", "Listing of infringing images on the Jumia platform is prohibited", "Listing contains infringing images"),
+        "Confirm Actual Product Weight": ("1000035", "Kindly Confirm Actual Product Weight", "Verify and correct product weight"),
+        "Confirm Actual Product Size": ("1000036", "Kindly confirm the actual product size", "Verify and correct product size"),
+        "UK Sizes Only": ("1000037", "UK Sizes Only eg 8, 10, 12 etc", "UK sizes are not allowed, use EU or other sizes"),
+        "Ensure ALL Sizes as Variation": ("1000038", "Kindly Ensure ALL Sizes Of This Product Are Created As Variations", "Create all sizes as variations of the product"),
+        "Product Poorly Created Variation": ("1000039", "Product Poorly Created. Each Variation Of This Product Should Be Well Created", "Improve creation of product variations"),
+        "Image Corrupt": ("1000040", "Image corrupt", "Product image file is corrupt"),
+        "Wrong Image": ("1000041", "Wrong Image, To Many Things Displayed", "Incorrect image or too many elements in image"),
+        "Follow Image Guideline": ("1000042", "Kindly follow our product image upload guideline.", "Adhere to product image upload guidelines"),
+        "Add More Descriptive Images": ("1000043", "Kindly add more descriptive images showing different angles", "Add more images showing different angles"),
+        "Improve Image Quality - Stretched": ("1000044", "Kindly Improve Image Quality; Image looks stretched", "Improve image quality, image appears stretched"),
+        "Improve Image Quality - Blurry": ("1000045", "Kindly Improve Image Quality; Image Is Blurry", "Improve image quality, image is blurry"),
+        "Improve Image Quality - Poorly Edited": ("1000046", "Kindly Improve Image Quality; Image Poorly Edited", "Improve image quality, image is poorly edited"),
+        "Poor Image Quality/Editing - Use Studio Value": ("1000047", "Poor Image Quality/Editing - Consider using our Studio Value", "Improve image quality, consider using Studio Value service"),
+        "Images Without Watermark": ("1000048", "Kindly Ensure ALL Product Images Are Without Watermarks", "Remove watermarks from all product images"),
+        "Price Too High": ("1000049", "Price too high", "Product price is too high"),
         "Missing COLOR": ("MC", "Missing Color", "Color is mandatory"),
         "Missing BRAND or NAME": ("BNM", "Missing Brand or Name", "Brand and Name are essential"),
         "Single-word NAME": ("SWN", "Single-word Name", "Name should be descriptive"),
@@ -101,7 +150,8 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
         "Perfume price issue": ("PPI", "Perfume Price Issue", "Price below configured threshold"),
         "Blacklisted word in NAME": ("BLW", "Blacklisted word in NAME", "Inappropriate word used"),
         "BRAND name repeated in NAME": ("BRN", "BRAND name repeated in NAME", "Redundant brand name in product name"),
-        "Duplicate product": ("DUP", "Duplicate product", "Product is a duplicate listing")
+        "Duplicate product": ("DUP", "Duplicate product", "Product is a duplicate listing"),
+        "Long Product Name": ("LPN", "Product Name Too Long", "Keep product names concise") # Example new flag - already in your code
     }
 
     final_report_rows = []
@@ -114,10 +164,11 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
             (missing_brand_or_name, "Missing BRAND or NAME"),
             (single_word_name, "Single-word NAME"),
             (generic_brand_issues, "Generic BRAND Issues"),
-            (flagged_perfumes, "Perfume price issue"),
+            (perfume_price_issues, "Perfume price issue"),
             (flagged_blacklisted, "Blacklisted word in NAME"),
             (brand_in_name_issues, "BRAND name repeated in NAME"),
-            (duplicate_products, "Duplicate product")
+            (duplicate_products, "Duplicate product"),
+            (check_long_product_name(data), "Long Product Name") # Include the new flag here
         ]
 
         for validation_df, flag_name in validations:
@@ -127,14 +178,16 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict):
                 break
 
         status = 'Rejected' if reason else 'Approved'
-        reason_code, reason_message, comment = reason_details if reason_details else ("", "", "")
+        reason_code, reason_message, comment = flags.get(reason, ("", "", "")) if reason else ("", "", "")
         detailed_reason = f"{reason_code} - {reason_message}" if reason_code and reason_message else ""
+
+        report_reason_message = reason_message if reason_message else reason # Fallback to flag name if no message
 
         final_report_rows.append({
             'ProductSetSid': row['PRODUCT_SET_SID'],
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': status,
-            'Reason': detailed_reason,
+            'Reason': report_reason_message, # Use the message for final report
             'Comment': comment
         })
 
@@ -204,7 +257,8 @@ if uploaded_file is not None:
             ("Perfume Price Issues", check_perfume_price_issues(data, config_data['perfumes'])),
             ("Blacklisted Words", check_blacklisted_words(data, blacklisted_words)),
             ("Brand in Name", check_brand_in_name(data)),
-            ("Duplicate Products", check_duplicate_products(data))
+            ("Duplicate Products", check_duplicate_products(data)),
+            ("Long Product Name", check_long_product_name(data)) # Include the new flag here
         ]
 
         for title, df in validation_results:
