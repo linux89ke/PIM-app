@@ -93,10 +93,32 @@ def load_config_files():
         try:
             df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
             data[key] = df
+            print(f"✅ Loaded {filename} successfully into data['{key}']") # Success message
         except FileNotFoundError:
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
+
+    print("\n--- Debugging perfumes.xlsx loading ---") # Debugging section
+    if 'perfumes' in data:
+        print("✅ 'perfumes' key exists in data")
+        print(f"Type of data['perfumes']: {type(data['perfumes'])}") # Check the type
+        if isinstance(data['perfumes'], pd.DataFrame):
+            if data['perfumes'].empty:
+                print("⚠️ data['perfumes'] DataFrame is EMPTY")
+            else:
+                print("✅ data['perfumes'] DataFrame is NOT empty")
+                print(f"Columns in data['perfumes']: {data['perfumes'].columns.tolist()}") # Print column names
+                if 'BRAND' in data['perfumes'].columns:
+                    print("✅ 'BRAND' column FOUND in data['perfumes']")
+                else:
+                    print("❌ 'BRAND' column NOT FOUND in data['perfumes']")
+        else:
+            print("❌ data['perfumes'] is NOT a DataFrame")
+    else:
+        print("❌ 'perfumes' key NOT FOUND in data. 'perfumes.xlsx' likely NOT loaded.")
+    print("--- Debugging section end ---\n")
+
 
     if 'perfumes' in data and not data['perfumes'].empty: # Extract perfume brands if perfumes.xlsx loaded
         data['perfume_brands'] = data['perfumes']['BRAND'].str.strip().lower().unique().tolist()
