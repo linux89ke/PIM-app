@@ -61,14 +61,14 @@ def load_approved_book_sellers():
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
         return []
 
-# Function to load perfume category codes from file (NEW)
+# Function to load perfume category codes from file (NEW - Modified to return empty list on FileNotFoundError)
 def load_perfume_category_codes():
     try:
         with open('Perfume_cat.txt', 'r') as f:
             return [line.strip() for line in f.readlines()]
     except FileNotFoundError:
         st.warning("Perfume_cat.txt file not found! Perfume category filtering for price check will not be applied.")
-        return []
+        return [] # Return an empty list if the file is not found
     except Exception as e:
         st.error(f"Error loading Perfume_cat.txt: {e}")
         return []
@@ -146,9 +146,9 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
 
-def check_perfume_price(data, perfumes_df, perfume_category_codes): # Updated to accept perfume_category_codes
-    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes: # Check if perfume_category_codes is also loaded
-        return pd.DataFrame()
+def check_perfume_price(data, perfumes_df, perfume_category_codes): # Updated to accept perfume_category_codes and skip if empty cat codes
+    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes: # Check if perfume_category_codes is empty or None
+        return pd.DataFrame() # Return empty DataFrame if perfumes_df is missing OR perfume_category_codes is empty
 
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)] # Filter by perfume category codes
 
@@ -465,7 +465,7 @@ if uploaded_file is not None:
             ("Duplicate Products", check_duplicate_products(data)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Missing COLOR", check_missing_color(data, book_category_codes)),
-            ("Brand in Name", check_brand_in_name(data)),
+            ("BRAND name repeated in NAME", check_brand_in_name(data)),
         ]
 
         for title, df in validation_results:
