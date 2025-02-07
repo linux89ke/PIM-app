@@ -80,6 +80,7 @@ def load_perfume_category_codes():
 
 
 # Function to load configuration files (excluding flags.xlsx) (Modified to extract perfume brands)
+# Function to load configuration files (excluding flags.xlsx) (Modified to extract perfume brands and remove spaces from keys/columns)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
@@ -97,15 +98,19 @@ def load_config_files():
             else:
                 df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
 
-            data[key] = df
-            print(f"✅ Loaded {filename} successfully into data['{key}']") # Success message
+            # Strip spaces from DataFrame column names
+            df.columns = df.columns.str.strip()
+
+            # Store DataFrame with stripped key (dictionary key)
+            data[key.strip()] = df # Strip spaces from the dictionary key as well
+            print(f"✅ Loaded {filename} successfully into data['{key.strip()}']") # Success message with stripped key
         except FileNotFoundError:
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
 
     print("\n--- Debugging perfumes.xlsx loading ---") # Debugging section
-    if 'perfumes' in data:
+    if 'perfumes' in data: # Use stripped key 'perfumes'
         print("✅ 'perfumes' key exists in data")
         print(f"Type of data['perfumes']: {type(data['perfumes'])}") # Check the type
         if isinstance(data['perfumes'], pd.DataFrame):
@@ -114,7 +119,7 @@ def load_config_files():
             else:
                 print("✅ data['perfumes'] DataFrame is NOT empty")
                 print(f"Columns in data['perfumes']: {data['perfumes'].columns.tolist()}") # Print column names
-                if 'BRAND' in data['perfumes'].columns:
+                if 'BRAND' in data['perfumes'].columns: # Check for stripped column name 'BRAND'
                     print("✅ 'BRAND' column FOUND in data['perfumes']")
                 else:
                     print("❌ 'BRAND' column NOT FOUND in data['perfumes']")
@@ -125,8 +130,8 @@ def load_config_files():
     print("--- Debugging section end ---\n")
 
 
-    if 'perfumes' in data and not data['perfumes'].empty: # Extract perfume brands if perfumes.xlsx loaded
-        data['perfume_brands'] = data['perfumes']['BRAND'].str.strip().lower().unique().tolist()
+    if 'perfumes' in data and not data['perfumes'].empty: # Extract perfume brands if perfumes.xlsx loaded (use stripped key 'perfumes')
+        data['perfume_brands'] = data['perfumes']['BRAND'].str.strip().lower().unique().tolist() # Access column with stripped name 'BRAND'
     else:
         data['perfume_brands'] = [] # If perfumes.xlsx not loaded or empty, brand list is empty
 
