@@ -189,7 +189,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'FLAG': flag # Include the FLAG column here
         })
 
-    final_report_df = pd.DataFrame(final_report_df)
+    final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df
 
 # --- Export functions (no changes needed) ---
@@ -300,6 +300,7 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 # Process uploaded file
 if uploaded_file is not None:
     current_date = datetime.now().strftime("%Y-%m-%d")
+    process_success = False # Initialize process_success flag
     try:
         data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str, 'PRODUCT_SET_SID': str, 'PARENTSKU': str})
         print("CSV file successfully read by pandas.")
@@ -312,6 +313,7 @@ if uploaded_file is not None:
 
         # Validation and report generation
         final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers)
+        process_success = True # Set process_success to True after successful validation
 
         # Split into approved and rejected
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
@@ -465,5 +467,9 @@ if uploaded_file is not None:
 
 
     except Exception as e:
+        process_success = False # Ensure process_success is False in case of exception
         st.error(f"Error processing the uploaded file: {e}")
         print(f"Exception details: {e}") # Also print to console for full traceback
+
+    if not process_success: # Conditionally display message if processing failed
+        st.error("File processing failed. Please check the file and try again.")
