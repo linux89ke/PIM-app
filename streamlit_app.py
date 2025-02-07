@@ -331,21 +331,7 @@ if uploaded_file is not None:
         for seller in seller_options[1:]:
             rej_count = rejected_sku_counts.get(seller, 0)
             app_count = approved_sku_counts.get(seller, 0)
-            st.sidebar.write(f"{seller}: Rej: {rej_count}, App: {app_count}")
-
-        # Filter data based on seller selection
-        if 'All Sellers' in selected_sellers or not selected_sellers or selected_sellers == ['All Sellers']: # Handle 'All Sellers' or no selection
-            seller_data = data.copy()
-            seller_final_report_df = final_report_df.copy()
-            seller_rejected_df = rejected_df.copy()
-            seller_approved_df = approved_df.copy()
-            seller_label_filename = "All_Sellers" # Filename label for all sellers
-        else: # Specific sellers selected
-            seller_data = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
-            seller_final_report_df = final_report_df[final_report_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
-            seller_rejected_df = rejected_df[rejected_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
-            seller_approved_df = approved_df[approved_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
-            seller_label_filename = "_".join(selected_sellers) # Filename label for selected sellers, joined by underscore
+            st.sidebar.write(f"{seller}: **Rej**: {rej_count}, **App**: {app_count}") # **Rej** and **App** are now bold
 
 
         st.sidebar.subheader("Seller Data Exports")
@@ -354,7 +340,7 @@ if uploaded_file is not None:
         st.sidebar.download_button(
             label="Seller Final Export",
             data=final_report_excel,
-            file_name=f"Final_Report_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
+            file_name=f"Final_Report_{current_date}_{seller_label_filename}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -362,7 +348,7 @@ if uploaded_file is not None:
         st.sidebar.download_button(
             label="Seller Rejected Export",
             data=rejected_excel,
-            file_name=f"Rejected_Products_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
+            file_name=f"Rejected_Products_{current_date}_{seller_label_filename}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -370,7 +356,7 @@ if uploaded_file is not None:
         st.sidebar.download_button(
             label="Seller Approved Export",
             data=approved_excel,
-            file_name=f"Approved_Products_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
+            file_name=f"Approved_Products_{current_date}_{seller_label_filename}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -378,7 +364,7 @@ if uploaded_file is not None:
         st.sidebar.download_button(
             label="Seller Full Data Export",
             data=seller_full_data_excel,
-            file_name=f"Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
+            file_name=f"Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
