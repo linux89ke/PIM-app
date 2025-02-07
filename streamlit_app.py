@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # --- Constants for column names ---
-PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"]
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"] # VERIFY THIS DEFINITION AGAIN
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
 
@@ -240,12 +240,12 @@ def to_excel_seller_data(seller_data, seller_final_report_df):
 # --- Modified export function to include RejectionReasons sheet ---
 def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # Modified to take reasons_df directly
     output = BytesIO()
-    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top
+    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top - ENSURE THIS IS USED
     rejection_reasons_cols = REJECTION_REASONS_COLS # Use constant defined at the top
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not df1.empty: # Check if df1 is not empty before trying to select columns
-            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
+            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name) # ENSURE df1[productsets_cols] IS USED
         else:
             df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
 
@@ -408,6 +408,8 @@ if uploaded_file is not None:
             ("Duplicate Products", check_duplicate_products(data)), # Use original data
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # Use original data
         ]
+
+        st.dataframe(final_report_df.head()) # DEBUG: Display first few rows of final_report_df in the app
 
         for title, df in validation_results: # Use original data for main page validation results
             with st.expander(f"{title} ({len(df)} products)"):
