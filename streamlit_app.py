@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # --- Constants for column names ---
-PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"] # VERIFY THIS DEFINITION AGAIN
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # MODIFIED: FLAG removed from PRODUCTSETS_COLS
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
 
@@ -240,7 +240,7 @@ def to_excel_seller_data(seller_data, seller_final_report_df):
 # --- Modified export function to include RejectionReasons sheet ---
 def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # Modified to take reasons_df directly
     output = BytesIO()
-    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top - ENSURE THIS IS USED
+    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top - MODIFIED PRODUCTSETS_COLS
     rejection_reasons_cols = REJECTION_REASONS_COLS # Use constant defined at the top
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -409,7 +409,6 @@ if uploaded_file is not None:
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # Use original data
         ]
 
-        st.dataframe(final_report_df.head()) # DEBUG: Display first few rows of final_report_df in the app
 
         for title, df in validation_results: # Use original data for main page validation results
             with st.expander(f"{title} ({len(df)} products)"):
