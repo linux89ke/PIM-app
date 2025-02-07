@@ -79,7 +79,7 @@ def load_perfume_category_codes():
         return []
 
 
-# Function to load configuration files (excluding flags.xlsx) (No changes needed)
+# Function to load configuration files (excluding flags.xlsx) (Modified to extract perfume brands)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
@@ -97,6 +97,12 @@ def load_config_files():
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
+
+    if 'perfumes' in data and not data['perfumes'].empty: # Extract perfume brands if perfumes.xlsx loaded
+        data['perfume_brands'] = data['perfumes']['BRAND'].str.strip().lower().unique().tolist()
+    else:
+        data['perfume_brands'] = [] # If perfumes.xlsx not loaded or empty, brand list is empty
+
     return data
 
 # Validation check functions (modularized) - No changes needed for these tests except data type fix in load_csv
@@ -151,14 +157,20 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
 
-def check_perfume_price(data, perfumes_df, perfume_category_codes):
-    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes:
+def check_perfume_price(data, perfumes_df, perfume_category_codes, perfume_brands): # Added perfume_brands parameter
+    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes or not perfume_brands: # Check perfume_brands too
         return pd.DataFrame()
 
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)]
 
     if perfume_data.empty:
         return pd.DataFrame()
+
+    # --- Filter perfume_data by brands from perfumes.xlsx ---
+    perfume_data = perfume_data[perfume_data['BRAND'].str.strip().lower().isin(perfume_brands)]
+    if perfume_data.empty: # After brand filter, if empty, return
+        return pd.DataFrame()
+
 
     flagged_perfumes = []
     for index, row in perfume_data.iterrows():
@@ -175,9 +187,6 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
         for p_index, perfume_row in perfumes_df.iterrows():
             ref_brand = str(perfume_row['BRAND']).strip().lower() # Convert to string
             ref_product_name = str(perfume_row['PRODUCT_NAME']).strip().lower() # Convert to string
-            print(f"Debugging: ref_brand type: {type(ref_brand)}, value: {ref_brand}") # Debugging
-            print(f"Debugging: ref_product_name type: {type(ref_product_name)}, value: {ref_product_name}") # Debugging
-
 
             if seller_brand_name == ref_brand and ref_product_name in seller_product_name: # Check for containment
                 matched_perfume_row = perfume_row
@@ -188,9 +197,6 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
                 ref_brand = str(perfume_row['BRAND']).strip().lower() # Convert to string
                 ref_keyword = str(perfume_row['KEYWORD']).strip().lower() # Convert to string
                 ref_product_name = str(perfume_row['PRODUCT_NAME']).strip().lower() # Still need product name for reference
-                print(f"Debugging: ref_brand (keyword section) type: {type(ref_brand)}, value: {ref_brand}") # Debugging
-                print(f"Debugging: ref_keyword type: {type(ref_keyword)}, value: {ref_keyword}") # Debugging
-
 
                 if seller_brand_name == ref_brand and (ref_keyword in seller_product_name or ref_product_name in seller_product_name): # Check for keyword or product name containment
                     matched_perfume_row = perfume_row # Use this row for price check
@@ -199,11 +205,11 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
 
         if matched_perfume_row is not None: # If we found a match (either by PRODUCT_NAME or KEYWORD)
             reference_price_dollar = matched_perfume_row['PRICE']
-            price_tolerance_percentage = 0.20 # 20% tolerance
-            lower_bound = reference_price_dollar * (1 - price_tolerance_percentage)
-            upper_bound = reference_price_dollar * (1 + price_tolerance_percentage)
 
-            if not (lower_bound <= seller_price <= upper_bound):
+            # --- Modified Price Check Logic ---
+            price_difference = reference_price_dollar - (seller_price / 129) # Calculate dollar difference (assuming rate of 129)
+
+            if price_difference >= 30: # Flag if seller price is $30 or more cheaper
                 flagged_perfumes.append(row)
 
     return pd.DataFrame(flagged_perfumes)
@@ -213,7 +219,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     validations = [
         ("Sensitive Brand Issues", check_sensitive_brands, {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Priority 1
         ("Seller Approve to sell books", check_seller_approved_for_books,  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}), # Priority 2
-        ("Perfume Price Check", check_perfume_price, {'perfumes_df': config_data.get('perfumes', pd.DataFrame()), 'perfume_category_codes': perfume_category_codes}), # Priority 3 - New Price Check, pass perfume_category_codes
+        ("Perfume Price Check", check_perfume_price, {'perfumes_df': config_data.get('perfumes', pd.DataFrame()), 'perfume_category_codes': perfume_category_codes, 'perfume_brands': config_data.get('perfume_brands', [])}), # Priority 3 - New Price Check, pass perfume_category_codes and brands
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}), # Priority 4
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}), # Priority 5
         ("Duplicate product", check_duplicate_products, {}), # Priority 6
@@ -225,7 +231,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     flag_reason_comment_mapping = { # Define mapping here
         "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical", "Please contact vendor support for sale of..."),
         "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale", "Kindly Contact Jumia Seller Support To Confirm Possibil"),
-        "Perfume Price Check": ("1000029 - Perfume Price Check Issue", "Perfume price is outside the acceptable range. Please review and adjust."), # New Price Check Reason
+        "Perfume Price Check": ("1000030 - Perfume Price Too Low", "Perfume price is significantly cheaper (over $30) than reference price. Please review and adjust if necessary."), # Updated Reason and Comment for low price
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", ""), # Blank comment here
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", ""), # Blank comment here
         "Duplicate product": ("1000007 - Other Reason", "Product is duplicated"),
@@ -484,13 +490,13 @@ if uploaded_file is not None:
         validation_results = [
             ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)),
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)),
-            ("Perfume Price Check", check_perfume_price(data, config_data.get('perfumes', pd.DataFrame()), perfume_category_codes)), # Pass perfume_category_codes here
+            ("Perfume Price Check", check_perfume_price(data, config_data.get('perfumes', pd.DataFrame()), perfume_category_codes, config_data.get('perfume_brands', []))), # Pass perfume_brands list
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
             ("Duplicate Products", check_duplicate_products(data)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Missing COLOR", check_missing_color(data, book_category_codes)),
-            ("BRAND name repeated in NAME", check_brand_in_name(data)),
+            ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ]
 
         for title, df in validation_results:
