@@ -386,8 +386,8 @@ if uploaded_file is not None:
         )
 
 
-        # --- Main page remains for overall metrics and validation results ---
-        st.header("Overall Product Validation Results") # Header for main page
+        # --- Main page remains for overall metrics and validation results (as it was originally) ---
+        st.header("Product Validation Results") # Back to original header
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Total Products", len(data)) # Use original data
