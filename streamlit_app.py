@@ -355,7 +355,7 @@ if uploaded_file is not None:
 
         final_report_excel = to_excel(seller_final_report_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_final_report_df
         st.sidebar.download_button(
-            label="Final Export",
+            label="Seller Final Export", # Changed label to differentiate
             data=final_report_excel,
             file_name=f"Final_Report_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -363,7 +363,7 @@ if uploaded_file is not None:
 
         rejected_excel = to_excel(seller_rejected_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_rejected_df
         st.sidebar.download_button(
-            label="Rejected Export",
+            label="Seller Rejected Export", # Changed label to differentiate
             data=rejected_excel,
             file_name=f"Rejected_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -371,7 +371,7 @@ if uploaded_file is not None:
 
         approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_approved_df
         st.sidebar.download_button(
-            label="Approved Export",
+            label="Seller Approved Export", # Changed label to differentiate
             data=approved_excel,
             file_name=f"Approved_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -379,7 +379,7 @@ if uploaded_file is not None:
 
         seller_full_data_excel = to_excel_seller_data(seller_data, seller_final_report_df) # Use seller_data and seller_final_report_df
         st.sidebar.download_button(
-            label="Seller Data Export",
+            label="Seller Full Data Export", # Changed label to differentiate
             data=seller_full_data_excel,
             file_name=f"Seller_Data_Export_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -413,8 +413,55 @@ if uploaded_file is not None:
             with st.expander(f"{title} ({len(df)} products)"):
                 if not df.empty:
                     st.dataframe(df)
+                    flag_excel = to_excel_flag_data(df.copy(), title) # Create flag-specific download - RE-ADDED HERE
+                    st.download_button( # RE-ADDED HERE
+                        label=f"Export {title} Data", # RE-ADDED HERE
+                        data=flag_excel, # RE-ADDED HERE
+                        file_name=f"{title.replace(' ', '_')}_Products_{current_date}.xlsx", # RE-ADDED HERE
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # RE-ADDED HERE
+                    )
                 else:
                     st.write("No issues found")
+
+        # --- RE-ADDING MAIN PAGE DOWNLOAD BUTTONS BELOW VALIDATION EXPANDERS ---
+        st.header("Overall Data Exports") # Header for main page downloads
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            final_report_excel = to_excel(final_report_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Final Export",
+                data=final_report_excel,
+                file_name=f"Final_Report_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col2:
+            rejected_excel = to_excel(rejected_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Rejected Export",
+                data=rejected_excel,
+                file_name=f"Rejected_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col3:
+            approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
+            st.download_button(
+                label="Approved Export",
+                data=approved_excel,
+                file_name=f"Approved_Products_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+        with col4: # --- "Full Data Export" button ---
+            full_data_excel = to_excel_full_data(data.copy(), final_report_df)
+            st.download_button(
+                label="Full Data Export",
+                data=full_data_excel,
+                file_name=f"Full_Data_Export_{current_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 
     except Exception as e:
