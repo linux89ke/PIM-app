@@ -321,11 +321,12 @@ if uploaded_file is not None:
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-        # Calculate rejected SKU counts per seller for sidebar
-        rejected_sku_counts = rejected_df['ParentSKU'].groupby(data['SELLER_NAME']).count().sort_values(ascending=False) # Group by SELLER_NAME from original data
+        # Calculate rejected and approved SKU counts per seller for sidebar
+        rejected_sku_counts = rejected_df['ParentSKU'].groupby(data['SELLER_NAME']).count().sort_values(ascending=False)
+        approved_sku_counts = approved_df['ParentSKU'].groupby(data['SELLER_NAME']).count()
 
-        # --- Sidebar for Seller Selection ---
-        st.sidebar.header("Seller Filters")
+        # --- Sidebar for Seller Selection and Seller-Specific Downloads ---
+        st.sidebar.header("Seller Filters & Exports")
         seller_options = ['All Sellers'] + list(rejected_sku_counts.index) # Seller names from rejected counts
         selected_seller = st.sidebar.radio("Select Seller", seller_options, index=0) # Default to 'All Sellers'
 
@@ -342,86 +343,79 @@ if uploaded_file is not None:
             seller_approved_df = approved_df.copy()
 
 
-        # Display Rejected SKU Counts in Sidebar
-        st.sidebar.subheader("Rejected SKU Counts by Seller")
-        for seller, count in rejected_sku_counts.items():
-            st.sidebar.write(f"{seller}: {count}")
+        # Display Seller Metrics in Sidebar
+        st.sidebar.subheader("Seller SKU Metrics")
+        for seller in seller_options[1:]: # Iterate through sellers, skip 'All Sellers'
+            rej_count = rejected_sku_counts.get(seller, 0) # Get rejected count, default 0 if seller not in rejected counts
+            app_count = approved_sku_counts.get(seller, 0) # Get approved count, default 0
+            st.sidebar.write(f"{seller}: Rej: {rej_count}, App: {app_count}")
 
-        # Display results metrics - No change, but use filtered data
+
+        st.sidebar.subheader("Seller Data Exports") # Subheader for exports in sidebar
+
+        final_report_excel = to_excel(seller_final_report_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_final_report_df
+        st.sidebar.download_button(
+            label="Final Export",
+            data=final_report_excel,
+            file_name=f"Final_Report_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        rejected_excel = to_excel(seller_rejected_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_rejected_df
+        st.sidebar.download_button(
+            label="Rejected Export",
+            data=rejected_excel,
+            file_name=f"Rejected_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_approved_df
+        st.sidebar.download_button(
+            label="Approved Export",
+            data=approved_excel,
+            file_name=f"Approved_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        seller_full_data_excel = to_excel_seller_data(seller_data, seller_final_report_df) # Use seller_data and seller_final_report_df
+        st.sidebar.download_button(
+            label="Seller Data Export",
+            data=seller_full_data_excel,
+            file_name=f"Seller_Data_Export_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+
+        # --- Main page remains for overall metrics and validation results ---
+        st.header("Overall Product Validation Results") # Header for main page
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Total Products", len(seller_data)) # Use seller_data
-            st.metric("Approved Products", len(seller_approved_df)) # Use seller_approved_df
+            st.metric("Total Products", len(data)) # Use original data
+            st.metric("Approved Products", len(approved_df)) # Use original approved_df
         with col2:
-            st.metric("Rejected Products", len(seller_rejected_df)) # Use seller_rejected_df
-            rejection_rate = (len(seller_rejected_df)/len(seller_data)*100) if len(seller_data) > 0 else 0 # Prevent ZeroDivisionError
+            st.metric("Rejected Products", len(rejected_df)) # Use original rejected_df
+            rejection_rate = (len(rejected_df)/len(data)*100) if len(data) > 0 else 0
             st.metric("Rejection Rate", f"{rejection_rate:.1f}%")
 
-        # Validation results expanders - Updated to include "Sensitive Brand Issues" and "Seller Approve to sell books" - Use filtered data
+        # Validation results expanders - Use original data for main page validation results
         validation_results = [
-            ("Missing COLOR", check_missing_color(seller_data, book_category_codes)), # Use seller_data
-            ("Missing BRAND or NAME", check_missing_brand_or_name(seller_data)), # Use seller_data
-            ("Single-word NAME", check_single_word_name(seller_data, book_category_codes)), # Use seller_data
-            ("Generic BRAND Issues", check_generic_brand_issues(seller_data, config_data['category_fas']['ID'].tolist())), # Use seller_data
-            ("Sensitive Brand Issues", check_sensitive_brands(seller_data, sensitive_brand_words, book_category_codes)), # Use seller_data
-            ("Brand in Name", check_brand_in_name(seller_data)), # Use seller_data
-            ("Duplicate Products", check_duplicate_products(seller_data)), # Use seller_data
-            ("Seller Approve to sell books", check_seller_approved_for_books(seller_data, book_category_codes, approved_book_sellers)), # Use seller_data
+            ("Missing COLOR", check_missing_color(data, book_category_codes)), # Use original data
+            ("Missing BRAND or NAME", check_missing_brand_or_name(data)), # Use original data
+            ("Single-word NAME", check_single_word_name(data, book_category_codes)), # Use original data
+            ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())), # Use original data
+            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)), # Use original data
+            ("Brand in Name", check_brand_in_name(data)), # Use original data
+            ("Duplicate Products", check_duplicate_products(data)), # Use original data
+            ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # Use original data
         ]
 
-        for title, df in validation_results:
+        for title, df in validation_results: # Use original data for main page validation results
             with st.expander(f"{title} ({len(df)} products)"):
                 if not df.empty:
                     st.dataframe(df)
-                    flag_excel = to_excel_flag_data(df.copy(), title) # Create flag-specific download
-                    st.download_button(
-                        label=f"Export {title} Data",
-                        data=flag_excel,
-                        file_name=f"{title.replace(' ', '_')}_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
                 else:
                     st.write("No issues found")
 
-
-        # Download buttons - No change, but use filtered data for Rejected and Approved
-        col1, col2, col3, col4 = st.columns(4) # Added one more column
-
-        with col1:
-            final_report_excel = to_excel(seller_final_report_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_final_report_df
-            st.download_button(
-                label="Final Export",
-                data=final_report_excel,
-                file_name=f"Final_Report_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col2:
-            rejected_excel = to_excel(seller_rejected_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_rejected_df
-            st.download_button(
-                label="Rejected Export",
-                data=rejected_excel,
-                file_name=f"Rejected_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col3:
-            approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_approved_df
-            st.download_button(
-                label="Approved Export",
-                data=approved_excel,
-                file_name=f"Approved_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-        with col4: # --- New "Seller Data Export" button ---
-            seller_full_data_excel = to_excel_seller_data(seller_data, seller_final_report_df) # Use seller_data and seller_final_report_df
-            st.download_button(
-                label="Seller Data Export",
-                data=seller_full_data_excel,
-                file_name=f"Seller_Data_Export_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
 
     except Exception as e:
         st.error(f"Error processing the uploaded file: {e}")
