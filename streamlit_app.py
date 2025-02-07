@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # --- Constants for column names ---
-PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # MODIFIED: FLAG removed from PRODUCTSETS_COLS
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"]
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
 
@@ -192,69 +192,65 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df
 
-# --- New function to export full data ---
+# --- Export functions (no changes needed) ---
 def to_excel_full_data(data, final_report_df):
     output = BytesIO()
     merged_df = pd.merge(data[FULL_DATA_COLS[:-1]], final_report_df[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how="left")
-    merged_df['FLAG'] = merged_df['FLAG'].fillna('') # Fill NaN flags with blank strings
-    productsets_cols = FULL_DATA_COLS # Use full_data_cols for ProductSets sheet columns order
+    merged_df['FLAG'] = merged_df['FLAG'].fillna('')
+    productsets_cols = FULL_DATA_COLS
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not merged_df.empty:
             merged_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
-            merged_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if merged_df is empty
+            merged_df.to_excel(writer, index=False, sheet_name="ProductSets")
     output.seek(0)
     return output
 
-# --- New function to export flag-specific data ---
 def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
-    flag_df['FLAG'] = flag_name # Set FLAG column for the specific flag
+    flag_df['FLAG'] = flag_name
     productsets_cols = FULL_DATA_COLS
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not flag_df.empty:
             flag_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
-            flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
+            flag_df.to_excel(writer, index=False, sheet_name="ProductSets")
         output.seek(0)
         return output
 
-# --- New function to export seller-specific full data ---
 def to_excel_seller_data(seller_data, seller_final_report_df):
     output = BytesIO()
     merged_df = pd.merge(seller_data[FULL_DATA_COLS[:-1]], seller_final_report_df[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how="left")
-    merged_df['FLAG'] = merged_df['FLAG'].fillna('') # Fill NaN flags with blank strings
-    productsets_cols = FULL_DATA_COLS # Use full_data_cols for ProductSets sheet columns order
+    merged_df['FLAG'] = merged_df['FLAG'].fillna('')
+    productsets_cols = FULL_DATA_COLS
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not merged_df.empty:
             merged_df[productsets_cols].to_excel(writer, index=False, sheet_name="ProductSets")
         else:
-            merged_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if merged_df is empty
-    output.seek(0)
-    return output
+            merged_df.to_excel(writer, index=False, sheet_name="ProductSets")
+        output.seek(0)
+        return output
 
 
-# --- Modified export function to include RejectionReasons sheet ---
-def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # Modified to take reasons_df directly
+def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
     output = BytesIO()
-    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top - MODIFIED PRODUCTSETS_COLS
-    rejection_reasons_cols = REJECTION_REASONS_COLS # Use constant defined at the top
+    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top
+    rejection_reasons_cols = REJECTION_REASONS_COLS
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        if not df1.empty: # Check if df1 is not empty before trying to select columns
-            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name) # ENSURE df1[productsets_cols] IS USED
+        if not df1.empty:
+            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
         else:
-            df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
+            df1.to_excel(writer, index=False, sheet_name=sheet1_name)
 
-        if not reasons_df.empty: # Check if reasons_df is not empty before writing
-            # Check if the columns exist in reasons_df before trying to select them
+        if not reasons_df.empty:
             available_rejection_reasons_cols = [col for col in rejection_reasons_cols if col in reasons_df.columns]
             reasons_df[available_rejection_reasons_cols].to_excel(writer, index=False, sheet_name=sheet2_name)
         else:
-            pd.DataFrame(columns=rejection_reasons_cols).to_excel(writer, index=False, sheet_name=sheet2_name) # Write empty RejectionReasons sheet if reasons_df is empty
+            pd.DataFrame(columns=rejection_reasons_cols).to_excel(writer, index=False, sheet_name=sheet2_name)
 
     output.seek(0)
     return output
@@ -274,7 +270,7 @@ book_category_codes = load_book_category_codes()
 print("\nLoaded Book Category Codes (from Books_cat.xlsx) at app start:\n", book_category_codes)
 
 # Load sensitive brand words
-sensitive_brand_words = load_sensitive_brand_words() # Load sensitive brand words
+sensitive_brand_words = load_sensitive_brand_words()
 print("\nLoaded Sensitive Brand Words (from sensitive_brands.xlsx) at app start:\n", sensitive_brand_words)
 
 # Load approved book sellers (NEW - load approved sellers)
@@ -283,7 +279,7 @@ print("\nLoaded Approved Book Sellers (from Books_Approved_Sellers.xlsx) at app 
 
 
 # Load reasons dictionary from reasons.xlsx - still load for RejectionReasons sheet
-reasons_df = config_data.get('reasons', pd.DataFrame()) # Load reasons.xlsx
+reasons_df = config_data.get('reasons', pd.DataFrame())
 reasons_dict = {}
 if not reasons_df.empty:
     for _, row in reasons_df.iterrows():
@@ -302,9 +298,9 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Process uploaded file
 if uploaded_file is not None:
-    current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date once here
+    current_date = datetime.now().strftime("%Y-%m-%d")
     try:
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str, 'PRODUCT_SET_SID': str, 'PARENTSKU': str}) # Ensure PRODUCT_SET_SID & PARENTSKU are string
+        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str, 'PRODUCT_SET_SID': str, 'PARENTSKU': str})
         print("CSV file successfully read by pandas.")
 
         if data.empty:
@@ -314,10 +310,10 @@ if uploaded_file is not None:
         st.write("CSV file loaded successfully. Preview of data:")
         st.dataframe(data.head(10))
 
-        # Validation and report generation - pass sensitive_brand_words & book_category_codes & approved_book_sellers
-        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers) # Added approved_book_sellers
+        # Validation and report generation
+        final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers)
 
-        # Split into approved and rejected - No change
+        # Split into approved and rejected
         approved_df = final_report_df[final_report_df['Status'] == 'Approved']
         rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
@@ -325,107 +321,106 @@ if uploaded_file is not None:
         rejected_sku_counts = rejected_df['ParentSKU'].groupby(data['SELLER_NAME']).count().sort_values(ascending=False)
         approved_sku_counts = approved_df['ParentSKU'].groupby(data['SELLER_NAME']).count()
 
-        # --- Sidebar for Seller Selection and Seller-Specific Downloads ---
-        st.sidebar.header("Seller Filters & Exports")
-        seller_options = ['All Sellers'] + list(rejected_sku_counts.index) # Seller names from rejected counts
-        selected_seller = st.sidebar.radio("Select Seller", seller_options, index=0) # Default to 'All Sellers'
+        # --- Sidebar for Seller Options ---
+        st.sidebar.header("Seller Options")
+        seller_options = ['All Sellers'] + list(rejected_sku_counts.index)
+        selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers']) # Multi-select
+
+        # Display Seller Metrics in Sidebar
+        st.sidebar.subheader("Seller SKU Metrics")
+        for seller in seller_options[1:]:
+            rej_count = rejected_sku_counts.get(seller, 0)
+            app_count = approved_sku_counts.get(seller, 0)
+            st.sidebar.write(f"{seller}: Rej: {rej_count}, App: {app_count}")
 
         # Filter data based on seller selection
-        if selected_seller != 'All Sellers':
-            seller_data = data[data['SELLER_NAME'] == selected_seller].copy() # Filter original data
-            seller_final_report_df = final_report_df[final_report_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy() # Filter report
-            seller_rejected_df = rejected_df[rejected_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy() # Filter rejected
-            seller_approved_df = approved_df[approved_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy() # Filter approved
-        else: # 'All Sellers' selected, use original DataFrames
+        if 'All Sellers' in selected_sellers or not selected_sellers or selected_sellers == ['All Sellers']: # Handle 'All Sellers' or no selection
             seller_data = data.copy()
             seller_final_report_df = final_report_df.copy()
             seller_rejected_df = rejected_df.copy()
             seller_approved_df = approved_df.copy()
+            seller_label_filename = "All_Sellers" # Filename label for all sellers
+        else: # Specific sellers selected
+            seller_data = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
+            seller_final_report_df = final_report_df[final_report_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_rejected_df = rejected_df[rejected_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_approved_df = approved_df[approved_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_label_filename = "_".join(selected_sellers) # Filename label for selected sellers, joined by underscore
 
 
-        # Display Seller Metrics in Sidebar
-        st.sidebar.subheader("Seller SKU Metrics")
-        for seller in seller_options[1:]: # Iterate through sellers, skip 'All Sellers'
-            rej_count = rejected_sku_counts.get(seller, 0) # Get rejected count, default 0 if seller not in rejected counts
-            app_count = approved_sku_counts.get(seller, 0) # Get approved count, default 0
-            st.sidebar.write(f"{seller}: Rej: {rej_count}, App: {app_count}")
+        st.sidebar.subheader("Seller Data Exports")
 
-
-        st.sidebar.subheader("Seller Data Exports") # Subheader for exports in sidebar
-
-        final_report_excel = to_excel(seller_final_report_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_final_report_df
+        final_report_excel = to_excel(seller_final_report_df, reasons_df, "ProductSets", "RejectionReasons")
         st.sidebar.download_button(
-            label="Seller Final Export", # Changed label to differentiate
+            label="Seller Final Export",
             data=final_report_excel,
-            file_name=f"Final_Report_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            file_name=f"Final_Report_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        rejected_excel = to_excel(seller_rejected_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_rejected_df
+        rejected_excel = to_excel(seller_rejected_df, reasons_df, "ProductSets", "RejectionReasons")
         st.sidebar.download_button(
-            label="Seller Rejected Export", # Changed label to differentiate
+            label="Seller Rejected Export",
             data=rejected_excel,
-            file_name=f"Rejected_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            file_name=f"Rejected_Products_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons") # Use seller_approved_df
+        approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons")
         st.sidebar.download_button(
-            label="Seller Approved Export", # Changed label to differentiate
+            label="Seller Approved Export",
             data=approved_excel,
-            file_name=f"Approved_Products_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            file_name=f"Approved_Products_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        seller_full_data_excel = to_excel_seller_data(seller_data, seller_final_report_df) # Use seller_data and seller_final_report_df
+        seller_full_data_excel = to_excel_seller_data(seller_data, seller_final_report_df)
         st.sidebar.download_button(
-            label="Seller Full Data Export", # Changed label to differentiate
+            label="Seller Full Data Export",
             data=seller_full_data_excel,
-            file_name=f"Seller_Data_Export_{current_date}_{selected_seller.replace(' ', '_')}.xlsx", # Include seller name in filename
+            file_name=f"Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", # Use seller_label_filename
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
 
-        # --- Main page remains for overall metrics and validation results (as it was originally) ---
-        st.header("Product Validation Results") # Back to original header
+        # --- Main page remains for overall metrics and validation results ---
+        st.header("Product Validation Results")
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Total Products", len(data)) # Use original data
-            st.metric("Approved Products", len(approved_df)) # Use original approved_df
+            st.metric("Total Products", len(data))
+            st.metric("Approved Products", len(approved_df))
         with col2:
-            st.metric("Rejected Products", len(rejected_df)) # Use original rejected_df
+            st.metric("Rejected Products", len(rejected_df))
             rejection_rate = (len(rejected_df)/len(data)*100) if len(data) > 0 else 0
             st.metric("Rejection Rate", f"{rejection_rate:.1f}%")
 
-        # Validation results expanders - Use original data for main page validation results
         validation_results = [
-            ("Missing COLOR", check_missing_color(data, book_category_codes)), # Use original data
-            ("Missing BRAND or NAME", check_missing_brand_or_name(data)), # Use original data
-            ("Single-word NAME", check_single_word_name(data, book_category_codes)), # Use original data
-            ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())), # Use original data
-            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)), # Use original data
-            ("Brand in Name", check_brand_in_name(data)), # Use original data
-            ("Duplicate Products", check_duplicate_products(data)), # Use original data
-            ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)), # Use original data
+            ("Missing COLOR", check_missing_color(data, book_category_codes)),
+            ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
+            ("Single-word NAME", check_single_word_name(data, book_category_codes)),
+            ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
+            ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)),
+            ("Brand in Name", check_brand_in_name(data)),
+            ("Duplicate Products", check_duplicate_products(data)),
+            ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)),
         ]
 
-
-        for title, df in validation_results: # Use original data for main page validation results
+        for title, df in validation_results:
             with st.expander(f"{title} ({len(df)} products)"):
                 if not df.empty:
                     st.dataframe(df)
-                    flag_excel = to_excel_flag_data(df.copy(), title) # Create flag-specific download - RE-ADDED HERE
-                    st.download_button( # RE-ADDED HERE
-                        label=f"Export {title} Data", # RE-ADDED HERE
-                        data=flag_excel, # RE-ADDED HERE
-                        file_name=f"{title.replace(' ', '_')}_Products_{current_date}.xlsx", # RE-ADDED HERE
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" # RE-ADDED HERE
+                    flag_excel = to_excel_flag_data(df.copy(), title)
+                    st.download_button(
+                        label=f"Export {title} Data",
+                        data=flag_excel,
+                        file_name=f"{title.replace(' ', '_')}_Products_{current_date}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
                 else:
                     st.write("No issues found")
 
-        # --- RE-ADDING MAIN PAGE DOWNLOAD BUTTONS BELOW VALIDATION EXPANDERS ---
-        st.header("Overall Data Exports") # Header for main page downloads
+        # --- Main page download buttons ---
+        st.header("Overall Data Exports")
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
