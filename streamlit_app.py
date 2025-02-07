@@ -237,6 +237,7 @@ def to_excel_seller_data(seller_data, seller_final_report_df):
 
 def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
     output = BytesIO()
+    # Initialize seller_final_report_df, seller_rejected_df, seller_approved_df for default "All Sellers" case
     productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top
     rejection_reasons_cols = REJECTION_REASONS_COLS
 
@@ -325,6 +326,23 @@ if uploaded_file is not None:
         st.sidebar.header("Seller Options")
         seller_options = ['All Sellers'] + list(rejected_sku_counts.index)
         selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers']) # Multi-select
+
+        # Initialize seller-specific dataframes with ALL data (for default 'All Sellers' case)
+        seller_data = data.copy()
+        seller_final_report_df = final_report_df.copy()
+        seller_rejected_df = rejected_df.copy()
+        seller_approved_df = approved_df.copy()
+        seller_label_filename = "All_Sellers" # Default filename label
+
+        # Filter data based on seller selection
+        if 'All Sellers' not in selected_sellers and selected_sellers and selected_sellers != ['All Sellers']: # Modified condition - more robust
+            seller_data = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
+            seller_final_report_df = final_report_df[final_report_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_rejected_df = rejected_df[rejected_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_approved_df = approved_df[approved_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
+            seller_label_filename = "_".join(selected_sellers) # Filename label for selected sellers
+        # Else: keep the initialized "All Sellers" dataframes
+
 
         # Display Seller Metrics in Sidebar
         st.sidebar.subheader("Seller SKU Metrics")
