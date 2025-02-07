@@ -2,11 +2,16 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 from datetime import datetime
-import time
 import re
 
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
+
+# --- Constants for column names ---
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"] # Corrected PRODUCTSETS_COLS
+REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
+FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
+
 
 # Function to load blacklisted words from a file (No changes needed)
 def load_blacklisted_words():
@@ -26,7 +31,7 @@ def load_book_category_codes():
         book_cat_df = pd.read_excel('Books_cat.xlsx')
         return book_cat_df['CategoryCode'].astype(str).tolist()
     except FileNotFoundError:
-        st.warning("Books_cat.xlsx file not found! Book category exemptions will not be applied.")
+        st.warning("Books_cat.xlsx file not found! Book category exemptions for missing color, single-word name, and sensitive brand checks will not be applied.")
         return []
     except Exception as e:
         st.error(f"Error loading Books_cat.xlsx: {e}")
@@ -50,7 +55,7 @@ def load_approved_book_sellers():
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
         return approved_sellers_df['SellerName'].astype(str).tolist()
     except FileNotFoundError:
-        st.warning("Books_Approved_Sellers.xlsx file not found! Book seller approval check will not be applied.")
+        st.warning("Books_Approved_Sellers.xlsx file not found! Book seller approval check for books will not be applied.")
         return []
     except Exception as e:
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
@@ -190,10 +195,9 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 # --- New function to export full data ---
 def to_excel_full_data(data, final_report_df):
     output = BytesIO()
-    full_data_cols = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
-    merged_df = pd.merge(data[full_data_cols[:-1]], final_report_df[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how="left")
+    merged_df = pd.merge(data[FULL_DATA_COLS[:-1]], final_report_df[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how="left")
     merged_df['FLAG'] = merged_df['FLAG'].fillna('') # Fill NaN flags with blank strings
-    productsets_cols = full_data_cols # Use full_data_cols for ProductSets sheet columns order
+    productsets_cols = FULL_DATA_COLS # Use full_data_cols for ProductSets sheet columns order
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not merged_df.empty:
@@ -206,9 +210,8 @@ def to_excel_full_data(data, final_report_df):
 # --- New function to export flag-specific data ---
 def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
-    full_data_cols = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
     flag_df['FLAG'] = flag_name # Set FLAG column for the specific flag
-    productsets_cols = full_data_cols
+    productsets_cols = FULL_DATA_COLS
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         if not flag_df.empty:
@@ -217,6 +220,29 @@ def to_excel_flag_data(flag_df, flag_name):
             flag_df.to_excel(writer, index=False, sheet_name="ProductSets") # Write empty df if flag_df is empty
         output.seek(0)
         return output
+
+
+# --- Modified export function to include RejectionReasons sheet ---
+def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # Modified to take reasons_df directly
+    output = BytesIO()
+    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top (Corrected definition now)
+    rejection_reasons_cols = REJECTION_REASONS_COLS # Use constant defined at the top
+
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        if not df1.empty: # Check if df1 is not empty before trying to select columns
+            df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
+        else:
+            df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
+
+        if not reasons_df.empty: # Check if reasons_df is not empty before writing
+            # Check if the columns exist in reasons_df before trying to select them
+            available_rejection_reasons_cols = [col for col in rejection_reasons_cols if col in reasons_df.columns]
+            reasons_df[available_rejection_reasons_cols].to_excel(writer, index=False, sheet_name=sheet2_name)
+        else:
+            pd.DataFrame(columns=rejection_reasons_cols).to_excel(writer, index=False, sheet_name=sheet2_name) # Write empty RejectionReasons sheet if reasons_df is empty
+
+    output.seek(0)
+    return output
 
 
 # Initialize the app
@@ -253,7 +279,7 @@ if not reasons_df.empty:
         comment = row['COMMENT'] if 'COMMENT' in row else "" # Get comment, use empty string if column missing or value is NaN
         reasons_dict[f"{code} - {message}"] = (code, message, comment)
 else:
-    st.warning("reasons.xlsx file could not be loaded, detailed reasons in reports will be unavailable.")
+    st.warning("reasons.xlsx file could not be loaded, Rejection Reasons sheet in exports will be unavailable.")
 
 
 # File upload section
@@ -261,9 +287,9 @@ uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
 # Process uploaded file
 if uploaded_file is not None:
-    current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date here, before try block
+    current_date = datetime.now().strftime("%Y-%m-%d") # Define current_date once here
     try:
-        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str})
+        data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype={'CATEGORY_CODE': str, 'PRODUCT_SET_SID': str}) # Ensure PRODUCT_SET_SID is string
         print("CSV file successfully read by pandas.")
 
         if data.empty:
@@ -315,21 +341,8 @@ if uploaded_file is not None:
                 else:
                     st.write("No issues found")
 
-        # Export functions - Modified to select and order columns for ProductSets sheet
-        def to_excel(df1, df2, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
-            output = BytesIO()
-            productsets_cols = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment"] # Desired columns order
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                if not df1.empty: # Check if df1 is not empty before trying to select columns
-                    df1[productsets_cols].to_excel(writer, index=False, sheet_name=sheet1_name)
-                else:
-                    df1.to_excel(writer, index=False, sheet_name=sheet1_name) # Write empty df if df1 is empty
-            output.seek(0)
-            return output
-
 
         # Download buttons - No change
-        # current_date = datetime.now().strftime("%Y-%m-%d") # Moved current_date definition before try block
 
         col1, col2, col3, col4 = st.columns(4) # Added one more column
 
@@ -361,7 +374,7 @@ if uploaded_file is not None:
             )
 
         with col4: # --- New "Full Data Export" button ---
-            full_data_excel = to_excel_full_data(data.copy(), final_report_df) # Create full data excel
+            full_data_excel = to_excel_full_data(data.copy(), final_report_df)
             st.download_button(
                 label="Full Data Export",
                 data=full_data_excel,
