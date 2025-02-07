@@ -92,6 +92,11 @@ def load_config_files():
     for key, filename in config_files.items():
         try:
             df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
+            if filename == 'perfumes.xlsx': # Apply dtype only to perfumes.xlsx
+                df = pd.read_excel(filename, dtype={'BRAND': str}).rename(columns=lambda x: x.strip())
+            else:
+                df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
+
             data[key] = df
             print(f"✅ Loaded {filename} successfully into data['{key}']") # Success message
         except FileNotFoundError:
@@ -481,11 +486,11 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons")
+        approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
         st.sidebar.download_button(
             label="Seller Approved Export",
             data=approved_excel,
-            file_name=f"Approved_Products_{current_date}_{seller_label_filename}.xlsx",
+            file_name=f"Approved_Products_{current_date}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -518,7 +523,7 @@ if uploaded_file is not None:
             ("Duplicate Products", check_duplicate_products(data)),
             ("Generic BRAND Issues", check_generic_brand_issues(data, config_data['category_fas']['ID'].tolist())),
             ("Missing COLOR", check_missing_color(data, book_category_codes)),
-            ("BRAND name repeated in NAME", check_brand_in_name, {}),
+            ("BRAND name repeated in NAME", check_brand_in_name(data)),
         ]
 
         for title, df in validation_results:
