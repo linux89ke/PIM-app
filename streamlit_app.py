@@ -7,8 +7,8 @@ import re
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
-# --- Constants for column names (Optional improvement, for maintainability) ---
-PRODUCTSETS_COLS = ["PRODUCT_SET_SID", "PARENT_SKU", "STATUS", "REASON", "COMMENT", "FLAG", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS"]
+# --- Constants for column names ---
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"] # Corrected PRODUCTSETS_COLS
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
 
@@ -225,7 +225,7 @@ def to_excel_flag_data(flag_df, flag_name):
 # --- Modified export function to include RejectionReasons sheet ---
 def to_excel(df1, reasons_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"): # Modified to take reasons_df directly
     output = BytesIO()
-    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top
+    productsets_cols = PRODUCTSETS_COLS # Use constant defined at the top (Corrected definition now)
     rejection_reasons_cols = REJECTION_REASONS_COLS # Use constant defined at the top
 
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
