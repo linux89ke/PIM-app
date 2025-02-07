@@ -189,7 +189,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'FLAG': flag # Include the FLAG column here
         })
 
-    final_report_df = pd.DataFrame(final_report_rows)
+    final_report_df = pd.DataFrame(final_report_df)
     return final_report_df
 
 # --- Export functions (no changes needed) ---
@@ -308,8 +308,7 @@ if uploaded_file is not None:
             st.warning("The uploaded file is empty.")
             st.stop()
 
-        st.write("CSV file loaded successfully. Preview of data:")
-        st.dataframe(data.head(10))
+        st.write("CSV file loaded successfully.") # Removed dataframe preview
 
         # Validation and report generation
         final_report_df = validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers)
@@ -341,6 +340,7 @@ if uploaded_file is not None:
             seller_rejected_df = rejected_df[rejected_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
             seller_approved_df = approved_df[approved_df['ProductSetSid'].isin(seller_data['PRODUCT_SET_SID'])].copy()
             seller_label_filename = "_".join(selected_sellers) # Filename label for selected sellers
+
         # Else: keep the initialized "All Sellers" dataframes
 
 
