@@ -79,8 +79,7 @@ def load_perfume_category_codes():
         return []
 
 
-# Function to load configuration files (excluding flags.xlsx) (Modified to extract perfume brands)
-# Function to load configuration files (excluding flags.xlsx) (Modified to extract perfume brands and remove spaces from keys/columns)
+# Function to load configuration files (excluding flags.xlsx) (No changes needed)
 def load_config_files():
     config_files = {
         'check_variation': 'check_variation.xlsx',
@@ -93,48 +92,11 @@ def load_config_files():
     for key, filename in config_files.items():
         try:
             df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
-            if filename == 'perfumes.xlsx': # Apply dtype only to perfumes.xlsx
-                df = pd.read_excel(filename, dtype={'BRAND': str}).rename(columns=lambda x: x.strip())
-            else:
-                df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
-
-            # Strip spaces from DataFrame column names
-            df.columns = df.columns.str.strip()
-
-            # Store DataFrame with stripped key (dictionary key)
-            data[key.strip()] = df # Strip spaces from the dictionary key as well
-            print(f"✅ Loaded {filename} successfully into data['{key.strip()}']") # Success message with stripped key
+            data[key] = df
         except FileNotFoundError:
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
         except Exception as e:
             st.error(f"❌ Error loading {filename}: {e}")
-
-    print("\n--- Debugging perfumes.xlsx loading ---") # Debugging section
-    if 'perfumes' in data: # Use stripped key 'perfumes'
-        print("✅ 'perfumes' key exists in data")
-        print(f"Type of data['perfumes']: {type(data['perfumes'])}") # Check the type
-        if isinstance(data['perfumes'], pd.DataFrame):
-            if data['perfumes'].empty:
-                print("⚠️ data['perfumes'] DataFrame is EMPTY")
-            else:
-                print("✅ data['perfumes'] DataFrame is NOT empty")
-                print(f"Columns in data['perfumes']: {data['perfumes'].columns.tolist()}") # Print column names
-                if 'BRAND' in data['perfumes'].columns: # Check for stripped column name 'BRAND'
-                    print("✅ 'BRAND' column FOUND in data['perfumes']")
-                else:
-                    print("❌ 'BRAND' column NOT FOUND in data['perfumes']")
-        else:
-            print("❌ data['perfumes'] is NOT a DataFrame")
-    else:
-        print("❌ 'perfumes' key NOT FOUND in data. 'perfumes.xlsx' likely NOT loaded.")
-    print("--- Debugging section end ---\n")
-
-
-    if 'perfumes' in data and not data['perfumes'].empty: # Extract perfume brands if perfumes.xlsx loaded (use stripped key 'perfumes')
-        data['perfume_brands'] = data['perfumes']['BRAND'].str.strip().lower().unique().tolist() # Access column with stripped name 'BRAND'
-    else:
-        data['perfume_brands'] = [] # If perfumes.xlsx not loaded or empty, brand list is empty
-
     return data
 
 # Validation check functions (modularized) - No changes needed for these tests except data type fix in load_csv
@@ -189,20 +151,14 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask] # Return DataFrame of unapproved book sellers
 
-def check_perfume_price(data, perfumes_df, perfume_category_codes, perfume_brands): # Added perfume_brands parameter
-    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes or not perfume_brands: # Check perfume_brands too
+def check_perfume_price(data, perfumes_df, perfume_category_codes):
+    if perfumes_df is None or perfumes_df.empty or not perfume_category_codes:
         return pd.DataFrame()
 
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)]
 
     if perfume_data.empty:
         return pd.DataFrame()
-
-    # --- Filter perfume_data by brands from perfumes.xlsx ---
-    perfume_data = perfume_data[perfume_data['BRAND'].str.strip().lower().isin(perfume_brands)]
-    if perfume_data.empty: # After brand filter, if empty, return
-        return pd.DataFrame()
-
 
     flagged_perfumes = []
     for index, row in perfume_data.iterrows():
@@ -244,6 +200,7 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes, perfume_brand
             if price_difference >= 30: # Flag if seller price is $30 or more cheaper
                 flagged_perfumes.append(row)
 
+
     return pd.DataFrame(flagged_perfumes)
 
 
@@ -251,7 +208,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     validations = [
         ("Sensitive Brand Issues", check_sensitive_brands, {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}), # Priority 1
         ("Seller Approve to sell books", check_seller_approved_for_books,  {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}), # Priority 2
-        ("Perfume Price Check", check_perfume_price, {'perfumes_df': config_data.get('perfumes', pd.DataFrame()), 'perfume_category_codes': perfume_category_codes, 'perfume_brands': config_data.get('perfume_brands', [])}), # Priority 3 - New Price Check, pass perfume_category_codes and brands
+        ("Perfume Price Check", check_perfume_price, {'perfumes_df': config_data.get('perfumes', pd.DataFrame()), 'perfume_category_codes': perfume_category_codes}), # Priority 3 - New Price Check, pass perfume_category_codes
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}), # Priority 4
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}), # Priority 5
         ("Duplicate product", check_duplicate_products, {}), # Priority 6
@@ -491,11 +448,11 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        approved_excel = to_excel(approved_df, reasons_df, "ProductSets", "RejectionReasons")
+        approved_excel = to_excel(seller_approved_df, reasons_df, "ProductSets", "RejectionReasons")
         st.sidebar.download_button(
             label="Seller Approved Export",
             data=approved_excel,
-            file_name=f"Approved_Products_{current_date}.xlsx",
+            file_name=f"Approved_Products_{current_date}_{seller_label_filename}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -522,7 +479,7 @@ if uploaded_file is not None:
         validation_results = [
             ("Sensitive Brand Issues", check_sensitive_brands(data, sensitive_brand_words, book_category_codes)),
             ("Seller Approve to sell books", check_seller_approved_for_books(data, book_category_codes, approved_book_sellers)),
-            ("Perfume Price Check", check_perfume_price(data, config_data.get('perfumes', pd.DataFrame()), perfume_category_codes, config_data.get('perfume_brands', []))), # Pass perfume_brands list
+            ("Perfume Price Check", check_perfume_price(data, config_data.get('perfumes', pd.DataFrame()), perfume_category_codes)), # Pass perfume_category_codes here
             ("Single-word NAME", check_single_word_name(data, book_category_codes)),
             ("Missing BRAND or NAME", check_missing_brand_or_name(data)),
             ("Duplicate Products", check_duplicate_products(data)),
