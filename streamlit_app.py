@@ -219,8 +219,8 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 
     flag_reason_comment_mapping = { # Define mapping here
         "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical", "Please contact vendor support for sale of..."),
-        "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale", "Kindly Contact Jumia Seller Support To Confirm Possibil"),
-        "Perfume Price Check": ("1000030 - Perfume Price Too Low", "Perfume price is significantly cheaper (over $30) than reference price. Please review and adjust if necessary."), # Updated Reason and Comment for low price
+        "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", "Kindly Contact Jumia Seller Support To Confirm Possibility of selling this book"),
+        "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", " Kindly raise a claim"), # Updated Reason and Comment for low price
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", ""), # Blank comment here
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", ""), # Blank comment here
         "Duplicate product": ("1000007 - Other Reason", "Product is duplicated"),
