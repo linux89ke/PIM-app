@@ -65,11 +65,7 @@ def load_approved_book_sellers():
 # Function to load perfume category codes from file
 def load_perfume_category_codes():
     try:
-        # print("Attempting to load Perfume_cat.txt...")
-        # print(f"Current working directory: {os.getcwd()}")
-        # print(f"Files in current directory: {os.listdir()}")
         with open('Perfume_cat.txt', 'r') as f:
-            # print("Perfume_cat.txt loaded successfully!")
             return [line.strip() for line in f.readlines()]
     except FileNotFoundError:
         st.warning("Perfume_cat.txt file not found! Perfume category filtering for price check will not be applied.")
@@ -194,12 +190,12 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
                 break
         if matched_perfume_row is None:
              for _, perfume_row in perfumes_df.iterrows():
-                 ref_brand = str(perfume_row['BRAND']).strip().lower()
-                 ref_keyword = str(perfume_row['KEYWORD']).strip().lower()
-                 ref_product_name = str(perfume_row['PRODUCT_NAME']).strip().lower() # Still need for context
-                 if seller_brand_name == ref_brand and (ref_keyword in seller_product_name or ref_product_name in seller_product_name):
-                     matched_perfume_row = perfume_row
-                     break
+                ref_brand = str(perfume_row['BRAND']).strip().lower()
+                ref_keyword = str(perfume_row['KEYWORD']).strip().lower()
+                ref_product_name = str(perfume_row['PRODUCT_NAME']).strip().lower() # Still need for context
+                if seller_brand_name == ref_brand and (ref_keyword in seller_product_name or ref_product_name in seller_product_name):
+                    matched_perfume_row = perfume_row
+                    break
         if matched_perfume_row is not None:
             reference_price_dollar = matched_perfume_row['PRICE']
             price_difference = reference_price_dollar - (seller_price / 129) # Assuming rate of 129
@@ -227,14 +223,14 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
     ]
 
     flag_reason_comment_mapping = {
-        "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical", "Please contact vendor support for sale of..."),
+        "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)", "Please contact vendor support for sale of..."),
         "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", "Kindly Contact Jumia Seller Support To Confirm Possibility of selling this book"),
-        "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", " Kindly raise a claim"),
-        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", ""),
-        "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", ""),
+        "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", "Kindly raise a claim"),
+        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "Kindly Improve Product Name Description"),
+        "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
         "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Kindly use Fashion for Fashion items"),
         "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
-        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", ""),
+        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Kindly Ensure Brand Name Is Not Repeated In Product Name"),
         "Duplicate product": ("1000007 - Other Reason", "Product is duplicated"),
     }
 
@@ -265,32 +261,54 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             validation_results_dfs[flag_name] = pd.DataFrame(columns=data.columns) # Fallback to empty DF with original columns
 
     final_report_rows = []
-    for _, row in data.iterrows():
-        rejection_reason = ""
-        comment = ""
-        status = 'Approved'
-        flag = ""
+    processed_sids = set() # Keep track of SIDs that have been assigned a reason
 
-        current_product_sid = row.get('PRODUCT_SET_SID')
-        if current_product_sid is None: # Should not happen if CSV is well-formed
+    for flag_name, _, _ in validations:
+        validation_df = validation_results_dfs.get(flag_name, pd.DataFrame())
+        if validation_df.empty or 'PRODUCT_SET_SID' not in validation_df.columns:
             continue
+        
+        rejection_reason, comment = flag_reason_comment_mapping.get(flag_name, ("Unknown Reason", "No comment defined."))
+        
+        # Get the original row data for the flagged products
+        flagged_sids_df = pd.merge(
+            validation_df[['PRODUCT_SET_SID']],
+            data,
+            on='PRODUCT_SET_SID',
+            how='left'
+        )
 
-        for flag_name, _, _ in validations:
-            validation_df = validation_results_dfs.get(flag_name, pd.DataFrame())
-            if not validation_df.empty and 'PRODUCT_SET_SID' in validation_df.columns and \
-               current_product_sid in validation_df['PRODUCT_SET_SID'].astype(str).values: # Ensure type match for comparison
-                rejection_reason, comment = flag_reason_comment_mapping.get(flag_name, ("Unknown Reason", "No comment defined."))
-                status = 'Rejected'
-                flag = flag_name
-                break
-        final_report_rows.append({
-            'ProductSetSid': current_product_sid,
+        for _, row in flagged_sids_df.iterrows():
+            current_product_sid = row.get('PRODUCT_SET_SID')
+            if current_product_sid in processed_sids:
+                continue # Skip if already processed by a higher-priority rule
+            
+            processed_sids.add(current_product_sid)
+            final_report_rows.append({
+                'ProductSetSid': current_product_sid,
+                'ParentSKU': row.get('PARENTSKU', ''),
+                'Status': 'Rejected',
+                'Reason': rejection_reason,
+                'Comment': comment,
+                'FLAG': flag_name
+            })
+            
+    # Add all the approved products that were not processed
+    all_sids = set(data['PRODUCT_SET_SID'].astype(str).unique())
+    approved_sids = all_sids - processed_sids
+    
+    approved_data = data[data['PRODUCT_SET_SID'].isin(approved_sids)]
+    
+    for _, row in approved_data.iterrows():
+         final_report_rows.append({
+            'ProductSetSid': row.get('PRODUCT_SET_SID'),
             'ParentSKU': row.get('PARENTSKU', ''),
-            'Status': status,
-            'Reason': rejection_reason,
-            'Comment': comment,
-            'FLAG': flag
+            'Status': 'Approved',
+            'Reason': "",
+            'Comment': "",
+            'FLAG': ""
         })
+        
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df, validation_results_dfs
 
@@ -485,7 +503,7 @@ if uploaded_file is not None:
         # Display Seller Metrics in Sidebar
         st.sidebar.subheader("Seller SKU Metrics")
         if 'SELLER_NAME' in data.columns and 'report_with_seller' in locals() and not report_with_seller.empty:
-             # Iterate over unique sellers present in the data if specific sellers were chosen, or all sellers if 'All Sellers'
+              # Iterate over unique sellers present in the data if specific sellers were chosen, or all sellers if 'All Sellers'
             sellers_to_display = selected_sellers if 'All Sellers' not in selected_sellers and selected_sellers else seller_options[1:]
             for seller in sellers_to_display:
                 if seller == 'All Sellers': continue # Skip 'All Sellers' for individual metrics
