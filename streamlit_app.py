@@ -1,4 +1,3 @@
-
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -398,10 +397,9 @@ def to_excel_full_data(data_df, final_report_df):
 
             # Categories Summary
             try:
-                category_column = 'CATEGORY_CODE' if 'CATEGORY_CODE' in merged_df.columns else 'CATEGORY' if 'CATEGORY' in merged_df.columns else None
-                if category_column and not merged_df[category_column].isna().all():
+                if 'CATEGORY' in merged_df.columns and not merged_df['CATEGORY'].isna().all():
                     category_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                         .groupby(category_column)
+                                         .groupby('CATEGORY')
                                          .size()
                                          .reset_index(name='Rejected Products'))
                     category_rejections = category_rejections.sort_values('Rejected Products', ascending=False)
@@ -409,9 +407,9 @@ def to_excel_full_data(data_df, final_report_df):
                     sellers_data_rows.append(pd.DataFrame([['', '', '']]))
                     sellers_data_rows.append(pd.DataFrame([['Categories Summary', '', '']]))
                     sellers_data_rows.append(category_rejections.rename(
-                        columns={category_column: 'Category', 'Rejected Products': 'Number of Rejected Products'}))
+                        columns={'CATEGORY': 'Category', 'Rejected Products': 'Number of Rejected Products'}))
                 else:
-                    sellers_data_rows.append(pd.DataFrame([['Categories Summary', 'No valid CATEGORY or CATEGORY_CODE data available', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Categories Summary', 'No valid CATEGORY data available', '']]))
             except Exception as e:
                 sellers_data_rows.append(pd.DataFrame([['Categories Summary', f'Error: {str(e)}', '']]))
 
