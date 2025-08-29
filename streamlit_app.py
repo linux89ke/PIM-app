@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -378,4 +377,3 @@ if uploaded_file and not final_report_df.empty:
     sellers.append("All Sellers")
     selected_sellers = st.sidebar.multiselect("Select Sellers", sellers, default="All Sellers")
     # Add seller-specific exports as needed
-```
