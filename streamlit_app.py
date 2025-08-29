@@ -341,64 +341,123 @@ def to_excel_full_data(data_df, final_report_df):
         if 'FLAG' in merged_df.columns:
             merged_df['FLAG'] = merged_df['FLAG'].fillna('')
         
-        # Sellers Data sheet
-        sellers_data_rows = []
-        
-        # Sellers Summary
-        try:
-            if 'SELLER_NAME' in merged_df.columns and not merged_df['SELLER_NAME'].isna().all():
-                seller_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                   .groupby('SELLER_NAME')
-                                   .size()
-                                   .reset_index(name='Rejected Products'))
-                sellers_data_rows.append(pd.DataFrame([['', '']]))
-                sellers_data_rows.append(pd.DataFrame([['Sellers Summary', '']]))
-                sellers_data_rows.append(seller_rejections.rename(
-                    columns={'SELLER_NAME': 'Seller', 'Rejected Products': 'Number of Rejected Products'}))
-            else:
-                sellers_data_rows.append(pd.DataFrame([['Sellers Summary', 'No valid SELLER_NAME data available']]))
-        except Exception as e:
-            sellers_data_rows.append(pd.DataFrame([['Sellers Summary', f'Error: {str(e)}']]))
-
-        # Categories Summary
-        try:
-            category_column = 'CATEGORY_CODE' if 'CATEGORY_CODE' in merged_df.columns else 'CATEGORY' if 'CATEGORY' in merged_df.columns else None
-            if category_column and not merged_df[category_column].isna().all():
-                category_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                     .groupby(category_column)
-                                     .size()
-                                     .reset_index(name='Rejected Products'))
-                sellers_data_rows.append(pd.DataFrame([['', '']]))
-                sellers_data_rows.append(pd.DataFrame([['Categories Summary', '']]))
-                sellers_data_rows.append(category_rejections.rename(
-                    columns={category_column: 'Category', 'Rejected Products': 'Number of Rejected Products'}))
-            else:
-                sellers_data_rows.append(pd.DataFrame([['Categories Summary', 'No valid CATEGORY or CATEGORY_CODE data available']]))
-        except Exception as e:
-            sellers_data_rows.append(pd.DataFrame([['Categories Summary', f'Error: {str(e)}']]))
-
-        # Rejection Reasons Summary
-        try:
-            if 'Reason' in merged_df.columns and not merged_df['Reason'].isna().all():
-                reason_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                   .groupby('Reason')
-                                   .size()
-                                   .reset_index(name='Rejected Products'))
-                sellers_data_rows.append(pd.DataFrame([['', '']]))
-                sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', '']]))
-                sellers_data_rows.append(reason_rejections.rename(
-                    columns={'Reason': 'Rejection Reason', 'Rejected Products': 'Number of Rejected Products'}))
-            else:
-                sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', 'No valid Reason data available']]))
-        except Exception as e:
-            sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', f'Error: {str(e)}']]))
-
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Write ProductSets sheet
             to_excel_base(merged_df, "ProductSets", FULL_DATA_COLS, writer)
+
+            # Get workbook and worksheet for Sellers Data
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('Sellers Data')
+            header_format = workbook.add_format({
+                'bold': True,
+                'bg_color': '#D3D3D3',
+                'border': 1,
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True
+            })
+            cell_format = workbook.add_format({
+                'border': 1,
+                'align': 'left',
+                'valign': 'vcenter'
+            })
+            number_format = workbook.add_format({
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter'
+            })
+            high_rejection_format = workbook.add_format({
+                'bg_color': '#FF9999',
+                'border': 1,
+                'align': 'right',
+                'valign': 'vcenter'
+            })
+
+            # Sellers Data sheet
+            sellers_data_rows = []
             start_row = 0
+
+            # Sellers Summary
+            try:
+                if 'SELLER_NAME' in merged_df.columns and not merged_df['SELLER_NAME'].isna().all():
+                    seller_rejections = (merged_df[merged_df['Status'] == 'Rejected']
+                                       .groupby('SELLER_NAME')
+                                       .size()
+                                       .reset_index(name='Rejected Products'))
+                    seller_rejections = seller_rejections.sort_values('Rejected Products', ascending=False)
+                    seller_rejections.insert(0, 'Rank', range(1, len(seller_rejections) + 1))
+                    sellers_data_rows.append(pd.DataFrame([['', '', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Sellers Summary', '', '']]))
+                    sellers_data_rows.append(seller_rejections.rename(
+                        columns={'SELLER_NAME': 'Seller', 'Rejected Products': 'Number of Rejected Products'}))
+                else:
+                    sellers_data_rows.append(pd.DataFrame([['Sellers Summary', 'No valid SELLER_NAME data available', '']]))
+            except Exception as e:
+                sellers_data_rows.append(pd.DataFrame([['Sellers Summary', f'Error: {str(e)}', '']]))
+
+            # Categories Summary
+            try:
+                category_column = 'CATEGORY_CODE' if 'CATEGORY_CODE' in merged_df.columns else 'CATEGORY' if 'CATEGORY' in merged_df.columns else None
+                if category_column and not merged_df[category_column].isna().all():
+                    category_rejections = (merged_df[merged_df['Status'] == 'Rejected']
+                                         .groupby(category_column)
+                                         .size()
+                                         .reset_index(name='Rejected Products'))
+                    category_rejections = category_rejections.sort_values('Rejected Products', ascending=False)
+                    category_rejections.insert(0, 'Rank', range(1, len(category_rejections) + 1))
+                    sellers_data_rows.append(pd.DataFrame([['', '', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Categories Summary', '', '']]))
+                    sellers_data_rows.append(category_rejections.rename(
+                        columns={category_column: 'Category', 'Rejected Products': 'Number of Rejected Products'}))
+                else:
+                    sellers_data_rows.append(pd.DataFrame([['Categories Summary', 'No valid CATEGORY or CATEGORY_CODE data available', '']]))
+            except Exception as e:
+                sellers_data_rows.append(pd.DataFrame([['Categories Summary', f'Error: {str(e)}', '']]))
+
+            # Rejection Reasons Summary
+            try:
+                if 'Reason' in merged_df.columns and not merged_df['Reason'].isna().all():
+                    reason_rejections = (merged_df[merged_df['Status'] == 'Rejected']
+                                       .groupby('Reason')
+                                       .size()
+                                       .reset_index(name='Rejected Products'))
+                    reason_rejections = reason_rejections.sort_values('Rejected Products', ascending=False)
+                    reason_rejections.insert(0, 'Rank', range(1, len(reason_rejections) + 1))
+                    sellers_data_rows.append(pd.DataFrame([['', '', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', '', '']]))
+                    sellers_data_rows.append(reason_rejections.rename(
+                        columns={'Reason': 'Rejection Reason', 'Rejected Products': 'Number of Rejected Products'}))
+                else:
+                    sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', 'No valid Reason data available', '']]))
+            except Exception as e:
+                sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', f'Error: {str(e)}', '']]))
+
+            # Write Sellers Data sheet with formatting
             for df in sellers_data_rows:
-                df.to_excel(writer, sheet_name='Sellers Data', startrow=start_row, index=False)
+                if df.empty or len(df.columns) < 2:
+                    continue
+                if 'Rank' in df.columns:
+                    # Write headers
+                    for col_num, col_name in enumerate(df.columns):
+                        worksheet.write(start_row, col_num, col_name, header_format)
+                    # Write data
+                    for row_num, row_data in enumerate(df.values, start=start_row + 1):
+                        for col_num, value in enumerate(row_data):
+                            format_to_use = number_format if col_num > 0 else cell_format
+                            if col_num == 2 and isinstance(value, (int, float)) and value > 10:
+                                format_to_use = high_rejection_format
+                            worksheet.write(row_num, col_num, value, format_to_use)
+                else:
+                    # Write section headers or error messages
+                    worksheet.write(start_row, 0, df.iloc[0, 0], header_format)
+                    if len(df.columns) > 1 and pd.notna(df.iloc[0, 1]):
+                        worksheet.write(start_row, 1, df.iloc[0, 1], cell_format)
                 start_row += len(df) + 1
+
+            # Adjust column widths
+            worksheet.set_column('A:A', 30)  # Wider column for Seller/Category/Reason
+            worksheet.set_column('B:B', 10)  # Rank column
+            worksheet.set_column('C:C', 20)  # Number of Rejected Products
 
         output.seek(0)
         return output
