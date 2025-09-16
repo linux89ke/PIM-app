@@ -4,7 +4,6 @@ from io import BytesIO
 from datetime import datetime
 import re
 import os
-import plotly.express as px  # Add this import for advanced charts
 
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
@@ -40,7 +39,7 @@ def load_book_category_codes():
         book_cat_df = pd.read_excel('Books_cat.xlsx')
         return book_cat_df['CategoryCode'].astype(str).tolist()
     except FileNotFoundError:
-        st.warning("Books_cat.xlsx file not found! Book category exemptions for missing color, single-word name, and sensitive brand checks will not be applied.")
+        st.warning("Books_cat.xlsx file not found! Book category exemptions will not be applied.")
         return []
     except Exception as e:
         st.error(f"Error loading Books_cat.xlsx: {e}")
@@ -64,7 +63,7 @@ def load_approved_book_sellers():
         approved_sellers_df = pd.read_excel('Books_Approved_Sellers.xlsx')
         return approved_sellers_df['SellerName'].astype(str).tolist()
     except FileNotFoundError:
-        st.warning("Books_Approved_Sellers.xlsx file not found! Book seller approval check for books will not be applied.")
+        st.warning("Books_Approved_Sellers.xlsx file not found! Book seller approval check will not be applied.")
         return []
     except Exception as e:
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
@@ -76,7 +75,7 @@ def load_perfume_category_codes():
         with open('Perfume_cat.txt', 'r') as f:
             return [line.strip() for line in f.readlines()]
     except FileNotFoundError:
-        st.warning("Perfume_cat.txt file not found! Perfume category filtering for price check will not be applied.")
+        st.warning("Perfume_cat.txt file not found! Perfume price check will not be applied.")
         return []
     except Exception as e:
         st.error(f"Error loading Perfume_cat.txt: {e}")
@@ -99,7 +98,7 @@ def load_config_files():
             st.warning(f"{filename} file not found, functionality related to this file will be limited.")
             data[key] = pd.DataFrame()
         except Exception as e:
-            st.error(f"❌ Error loading {filename}: {e}")
+            st.error(f"Error loading {filename}: {e}")
             data[key] = pd.DataFrame()
     return data
 
@@ -195,7 +194,7 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
                 matched_perfume_row = perfume_row
                 break
         if matched_perfume_row is None:
-             for _, perfume_row in perfumes_df.iterrows():
+            for _, perfume_row in perfumes_df.iterrows():
                 ref_brand = str(perfume_row['BRAND']).strip().lower()
                 ref_keyword = str(perfume_row['KEYWORD']).strip().lower()
                 ref_product_name = str(perfume_row['PRODUCT_NAME']).strip().lower()
@@ -207,11 +206,10 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
             price_difference = reference_price_dollar - (seller_price / 129)
             if price_difference >= 30:
                 flagged_perfumes_list.append(row.to_dict())
-    
+
     if flagged_perfumes_list:
         return pd.DataFrame(flagged_perfumes_list)
-    else:
-        return pd.DataFrame(columns=data.columns)
+    return pd.DataFrame(columns=data.columns)
 
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country):
     validations = [
@@ -232,13 +230,13 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 
     flag_reason_comment_mapping = {
         "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)", "Please contact vendor support for sale of..."),
-        "Seller Approve to sell books": ("Seller not allowed to sell product", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing. This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."""),
-        "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", """Please contact Jumia Seller Support to raise a claim and begin the process of verifying the authenticity of this product. Confirming the product’s authenticity is mandatory for listing approval and helps maintain customer trust and platform standards."""),
-        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color. If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
+        "Seller Approve to sell books": ("Seller not allowed to sell product", "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing."),
+        "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", "Please contact Jumia Seller Support to raise a claim and verify the authenticity of this product."),
+        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "Kindly update the product title using this format: Name – Type of the Products – Color."),
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
-        "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", """Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"""),
+        "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
         "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
-        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", """Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field. If you include it in both fields, it will show up twice in the product title on the website"""),
+        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Please do not write the brand name in the Product Name field."),
         "Duplicate product": ("Duplicate products", "kindly note product was rejected because its a duplicate product"),
     }
 
@@ -253,7 +251,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
                 current_kwargs['valid_category_codes_fas'] = []
         else:
             current_kwargs.update(func_kwargs)
-        
+
         try:
             result_df = check_func(**current_kwargs)
             if not result_df.empty and 'PRODUCT_SET_SID' not in result_df.columns and 'PRODUCT_SET_SID' in data.columns:
@@ -272,9 +270,9 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         validation_df = validation_results_dfs.get(flag_name, pd.DataFrame())
         if validation_df.empty or 'PRODUCT_SET_SID' not in validation_df.columns:
             continue
-        
+
         rejection_reason, comment = flag_reason_comment_mapping.get(flag_name, ("Unknown Reason", "No comment defined."))
-        
+
         flagged_sids_df = pd.merge(
             validation_df[['PRODUCT_SET_SID']],
             data,
@@ -286,7 +284,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             current_product_sid = row.get('PRODUCT_SET_SID')
             if current_product_sid in processed_sids:
                 continue
-            
+
             processed_sids.add(current_product_sid)
             final_report_rows.append({
                 'ProductSetSid': current_product_sid,
@@ -296,14 +294,14 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
                 'Comment': comment,
                 'FLAG': flag_name
             })
-            
+
     all_sids = set(data['PRODUCT_SET_SID'].astype(str).unique())
     approved_sids = all_sids - processed_sids
-    
+
     approved_data = data[data['PRODUCT_SET_SID'].isin(approved_sids)]
-    
+
     for _, row in approved_data.iterrows():
-         final_report_rows.append({
+        final_report_rows.append({
             'ProductSetSid': row.get('PRODUCT_SET_SID'),
             'ParentSKU': row.get('PARENTSKU', ''),
             'Status': 'Approved',
@@ -311,7 +309,7 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
             'Comment': "",
             'FLAG': ""
         })
-        
+
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df, validation_results_dfs
 
@@ -346,10 +344,10 @@ def to_excel_full_data(data_df, final_report_df):
             merged_df.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged_df.columns:
             merged_df.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
-        
+
         if 'FLAG' in merged_df.columns:
             merged_df['FLAG'] = merged_df['FLAG'].fillna('')
-        
+
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             # Write ProductSets sheet
             to_excel_base(merged_df, "ProductSets", FULL_DATA_COLS, writer)
@@ -390,9 +388,9 @@ def to_excel_full_data(data_df, final_report_df):
             try:
                 if 'SELLER_NAME' in merged_df.columns and not merged_df['SELLER_NAME'].isna().all():
                     seller_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                       .groupby('SELLER_NAME')
-                                       .size()
-                                       .reset_index(name='Rejected Products'))
+                                        .groupby('SELLER_NAME')
+                                        .size()
+                                        .reset_index(name='Rejected Products'))
                     seller_rejections = seller_rejections.sort_values('Rejected Products', ascending=False)
                     seller_rejections.insert(0, 'Rank', range(1, len(seller_rejections) + 1))
                     sellers_data_rows.append(pd.DataFrame([['', '', '']]))
@@ -426,9 +424,9 @@ def to_excel_full_data(data_df, final_report_df):
             try:
                 if 'Reason' in merged_df.columns and not merged_df['Reason'].isna().all():
                     reason_rejections = (merged_df[merged_df['Status'] == 'Rejected']
-                                       .groupby('Reason')
-                                       .size()
-                                       .reset_index(name='Rejected Products'))
+                                        .groupby('Reason')
+                                        .size()
+                                        .reset_index(name='Rejected Products'))
                     reason_rejections = reason_rejections.sort_values('Rejected Products', ascending=False)
                     reason_rejections.insert(0, 'Rank', range(1, len(reason_rejections) + 1))
                     sellers_data_rows.append(pd.DataFrame([['', '', '']]))
@@ -445,10 +443,8 @@ def to_excel_full_data(data_df, final_report_df):
                 if df.empty or len(df.columns) < 2:
                     continue
                 if 'Rank' in df.columns:
-                    # Write headers
                     for col_num, col_name in enumerate(df.columns):
                         worksheet.write(start_row, col_num, col_name, header_format)
-                    # Write data
                     for row_num, row_data in enumerate(df.values, start=start_row + 1):
                         for col_num, value in enumerate(row_data):
                             format_to_use = number_format if col_num > 0 else cell_format
@@ -456,16 +452,14 @@ def to_excel_full_data(data_df, final_report_df):
                                 format_to_use = high_rejection_format
                             worksheet.write(row_num, col_num, value, format_to_use)
                 else:
-                    # Write section headers or error messages
                     worksheet.write(start_row, 0, df.iloc[0, 0], header_format)
                     if len(df.columns) > 1 and pd.notna(df.iloc[0, 1]):
                         worksheet.write(start_row, 1, df.iloc[0, 1], cell_format)
                 start_row += len(df) + 1
 
-            # Adjust column widths
-            worksheet.set_column('A:A', 30)  # Wider column for Seller/Category/Reason
-            worksheet.set_column('B:B', 10)  # Rank column
-            worksheet.set_column('C:C', 20)  # Number of Rejected Products
+            worksheet.set_column('A:A', 30)
+            worksheet.set_column('B:B', 10)
+            worksheet.set_column('C:C', 20)
 
         output.seek(0)
         return output
@@ -523,15 +517,11 @@ if not reasons_df_from_config.empty:
 tab1, tab2 = st.tabs(["Daily Validation", "Weekly Analysis"])
 
 with tab1:
-    # ** Add country selector **
     country = st.selectbox("Select Country", ["Kenya", "Uganda"])
-
-    # --- File upload section ---
     uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
 
     if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
-        # ** Define file prefix based on country selection **
         file_prefix = "KE" if country == "Kenya" else "UG"
         process_success = False
         try:
@@ -558,7 +548,6 @@ with tab1:
 
             st.write("CSV file loaded successfully.")
 
-            # --- Validation and report generation ---
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
                 book_category_codes, sensitive_brand_words,
@@ -569,7 +558,6 @@ with tab1:
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
-            # --- Sidebar for Seller Options ---
             st.sidebar.header("Seller Options")
             seller_options = ['All Sellers']
             if 'SELLER_NAME' in data.columns and 'ProductSetSid' in final_report_df.columns and 'PRODUCT_SET_SID' in data.columns:
@@ -603,7 +591,7 @@ with tab1:
                     seller_label_filename = "_".join(s.replace(" ", "_").replace("/", "_") for s in selected_sellers)
                 else:
                     st.sidebar.warning("SELLER_NAME column missing, cannot filter by seller.")
-            
+
             seller_rejected_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Rejected']
             seller_approved_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Approved']
 
@@ -746,8 +734,9 @@ with tab2:
             
             # Rejection Trends Chart
             if 'Rejected' in status_counts.columns:
-                fig_rej = px.line(status_counts.reset_index(), x='Date', y='Rejected', title="Daily Rejected Products Trend")
-                st.plotly_chart(fig_rej, use_container_width=True)
+                st.subheader("Daily Rejected Products Trend")
+                rejection_trend = status_counts[['Rejected']].reset_index()
+                st.line_chart(rejection_trend.set_index('Date')['Rejected'])
             
             # Rejection Reasons Over Time
             st.subheader("Rejection Reasons Over Time")
@@ -756,9 +745,10 @@ with tab2:
                 reasons_over_time = rejected_df.groupby(['Date', 'FLAG']).size().unstack(fill_value=0)
                 st.dataframe(reasons_over_time)
                 
-                fig_reasons = px.bar(reasons_over_time.reset_index().melt(id_vars='Date', var_name='FLAG', value_name='Count'),
-                                     x='Date', y='Count', color='FLAG', title="Rejections by Reason and Date")
-                st.plotly_chart(fig_reasons, use_container_width=True)
+                st.subheader("Rejections by Reason and Date")
+                reasons_melted = reasons_over_time.reset_index().melt(id_vars='Date', var_name='FLAG', value_name='Count')
+                reasons_pivot = reasons_melted.pivot_table(index='Date', columns='FLAG', values='Count', fill_value=0)
+                st.area_chart(reasons_pivot)
             else:
                 st.info("No rejection data available for analysis.")
             
@@ -770,6 +760,7 @@ with tab2:
                 st.dataframe(seller_status.head(10))  # Show top 10 for brevity
                 
                 # Top Sellers by Rejections
+                st.subheader("Top Sellers by Rejections")
                 top_reject_sellers = rejected_df.groupby('SELLER_NAME').size().sort_values(ascending=False).head(10)
                 st.bar_chart(top_reject_sellers)
             else:
