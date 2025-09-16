@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -913,4 +912,3 @@ with tab2:
             st.warning("No summary data found in the 'Sellers Data' sheets of uploaded files.")
     else:
         st.info("Upload one or more Excel files to start the weekly analysis.")
-```
