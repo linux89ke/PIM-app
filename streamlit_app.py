@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -796,4 +795,3 @@ with tab2:
             st.warning("No valid data found in the uploaded files. Ensure they contain a 'ProductSets' sheet with a 'Status' column.")
     else:
         st.info("Upload one or more Excel files to start the weekly analysis.")
-```
