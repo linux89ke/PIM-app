@@ -334,7 +334,7 @@ def to_excel_full_data(data_df, final_report_df):
             final_report_df_copy[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]],
             left_on="PRODUCT_SET_SID",
             right_on="ProductSetSid",
-            how="left"
+            how='left'
         )
         if merged_df.empty:
             st.error("Merged DataFrame is empty. Verify PRODUCT_SET_SID values match.")
@@ -602,8 +602,8 @@ if not reasons_df_from_config.empty:
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
 
 with tab1:
-    country = st.selectbox("Select Country", ["Kenya", "Uganda"])
-    uploaded_file = st.file_uploader("Upload your CSV file", type='csv')
+    country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
+    uploaded_file = st.file_uploader("Upload your CSV file", type='csv', key="daily_file")
 
     if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -616,6 +616,7 @@ with tab1:
                 'PARENTSKU': str,
             }
             raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=dtype_spec)
+            st.write(f"Loaded CSV with {len(raw_data)} rows.")
             
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'GLOBAL_PRICE', 'GLOBAL_SALE_PRICE', 'PARENTSKU']
             data = raw_data.copy()
@@ -628,10 +629,10 @@ with tab1:
                     data[col] = data[col].astype(str).fillna('')
 
             if data.empty:
-                st.warning("The uploaded file is empty or became empty after initial processing.")
+                st.error("The uploaded CSV file is empty or became empty after initial processing. Please verify the file contains data and uses the correct format (semicolon-separated, with required columns).")
                 st.stop()
 
-            st.write("CSV file loaded successfully.")
+            st.write(f"Processed {len(data)} products after cleaning.")
 
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
@@ -663,7 +664,7 @@ with tab1:
                 if not report_with_seller.empty:
                     seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
 
-            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'])
+            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="daily_sellers")
 
             seller_data_filtered = data.copy()
             seller_final_report_df_filtered = final_report_df.copy()
@@ -768,7 +769,7 @@ with tab1:
 
 with tab2:
     st.subheader("Weekly Analysis")
-    uploaded_files = st.file_uploader("Upload multiple Excel files for the week", type=['xlsx'], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload multiple Excel files for the week", type=['xlsx'], accept_multiple_files=True, key="weekly_files")
     
     if uploaded_files:
         all_sellers_dfs = []
@@ -809,7 +810,35 @@ with tab2:
                 weekly_sellers['Percentage'] = (weekly_sellers['Rejected Products'] / weekly_sellers['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Sellers by Rejected Products (Weekly)")
                 st.dataframe(weekly_sellers)
-                st.bar_chart(weekly_sellers.set_index('Seller')['Rejected Products'])
+                
+                # Create chart
+                chart_data = {
+                    "type": "bar",
+                    "data": {
+                        "labels": weekly_sellers['Seller'].tolist(),
+                        "datasets": [{
+                            "label": "Rejected Products",
+                            "data": weekly_sellers['Rejected Products'].tolist(),
+                            "backgroundColor": ["#4CAF50", "#2196F3", "#FFC107", "#F44336", "#9C27B0"],
+                            "borderColor": ["#388E3C", "#1976D2", "#FFA000", "#D32F2F", "#7B1FA2"],
+                            "borderWidth": 1
+                        }]
+                    },
+                    "options": {
+                        "scales": {
+                            "y": {
+                                "beginAtZero": True,
+                                "title": {"display": True, "text": "Number of Rejected Products"}
+                            },
+                            "x": {
+                                "title": {"display": True, "text": "Seller"}
+                            }
+                        }
+                    }
+                }
+                st.markdown("**Chart: Top 5 Sellers by Rejected Products**")
+                st.json(chart_data, expanded=False)
+            
             else:
                 st.warning("No seller data parsed.")
             
@@ -821,7 +850,35 @@ with tab2:
                 weekly_categories['Percentage'] = (weekly_categories['Rejected Products'] / weekly_categories['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Categories by Rejected Products (Weekly)")
                 st.dataframe(weekly_categories)
-                st.bar_chart(weekly_categories.set_index('Category')['Rejected Products'])
+                
+                # Create chart
+                chart_data = {
+                    "type": "bar",
+                    "data": {
+                        "labels": weekly_categories['Category'].tolist(),
+                        "datasets": [{
+                            "label": "Rejected Products",
+                            "data": weekly_categories['Rejected Products'].tolist(),
+                            "backgroundColor": ["#4CAF50", "#2196F3", "#FFC107", "#F44336", "#9C27B0"],
+                            "borderColor": ["#388E3C", "#1976D2", "#FFA000", "#D32F2F", "#7B1FA2"],
+                            "borderWidth": 1
+                        }]
+                    },
+                    "options": {
+                        "scales": {
+                            "y": {
+                                "beginAtZero": True,
+                                "title": {"display": True, "text": "Number of Rejected Products"}
+                            },
+                            "x": {
+                                "title": {"display": True, "text": "Category"}
+                            }
+                        }
+                    }
+                }
+                st.markdown("**Chart: Top 5 Categories by Rejected Products**")
+                st.json(chart_data, expanded=False)
+            
             else:
                 st.warning("No category data parsed.")
             
@@ -833,7 +890,35 @@ with tab2:
                 weekly_reasons['Percentage'] = (weekly_reasons['Rejected Products'] / weekly_reasons['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Rejection Reasons (Weekly)")
                 st.dataframe(weekly_reasons)
-                st.bar_chart(weekly_reasons.set_index('Rejection Reason')['Rejected Products'])
+                
+                # Create chart
+                chart_data = {
+                    "type": "bar",
+                    "data": {
+                        "labels": weekly_reasons['Rejection Reason'].tolist(),
+                        "datasets": [{
+                            "label": "Rejected Products",
+                            "data": weekly_reasons['Rejected Products'].tolist(),
+                            "backgroundColor": ["#4CAF50", "#2196F3", "#FFC107", "#F44336", "#9C27B0"],
+                            "borderColor": ["#388E3C", "#1976D2", "#FFA000", "#D32F2F", "#7B1FA2"],
+                            "borderWidth": 1
+                        }]
+                    },
+                    "options": {
+                        "scales": {
+                            "y": {
+                                "beginAtZero": True,
+                                "title": {"display": True, "text": "Number of Rejected Products"}
+                            },
+                            "x": {
+                                "title": {"display": True, "text": "Rejection Reason"}
+                            }
+                        }
+                    }
+                }
+                st.markdown("**Chart: Top 5 Rejection Reasons**")
+                st.json(chart_data, expanded=False)
+            
             else:
                 st.warning("No reasons data parsed.")
             
@@ -866,8 +951,32 @@ with tab2:
                 if len(set(dates)) > 1:
                     if 'aggregated_sellers' in locals():
                         daily_trend = aggregated_sellers.groupby('Date')['Rejected Products'].sum().reset_index()
-                        st.line_chart(daily_trend.set_index('Date')['Rejected Products'])
-                        st.caption("Daily Rejection Trend")
+                        chart_data = {
+                            "type": "line",
+                            "data": {
+                                "labels": daily_trend['Date'].astype(str).tolist(),
+                                "datasets": [{
+                                    "label": "Rejected Products",
+                                    "data": daily_trend['Rejected Products'].tolist(),
+                                    "fill": False,
+                                    "borderColor": "#2196F3",
+                                    "tension": 0.1
+                                }]
+                            },
+                            "options": {
+                                "scales": {
+                                    "y": {
+                                        "beginAtZero": True,
+                                        "title": {"display": True, "text": "Number of Rejected Products"}
+                                    },
+                                    "x": {
+                                        "title": {"display": True, "text": "Date"}
+                                    }
+                                }
+                            }
+                        }
+                        st.markdown("**Chart: Daily Rejection Trend**")
+                        st.json(chart_data, expanded=False)
             
             # Recommendations
             st.subheader("Recommendations")
@@ -915,8 +1024,8 @@ with tab2:
 
 with tab3:
     st.subheader("Data Lake Validation")
-    country = st.selectbox("Select Country", ["Kenya", "Uganda", "All Countries"])
-    uploaded_file = st.file_uploader("Upload your Data Lake Excel file", type='xlsx')
+    country = st.selectbox("Select Country", ["Kenya", "Uganda", "All Countries"], key="data_lake_country")
+    uploaded_file = st.file_uploader("Upload your Data Lake Excel file", type='xlsx', key="data_lake_file")
 
     if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -925,6 +1034,11 @@ with tab3:
         try:
             # Read the Excel file, Sheet1
             raw_data = pd.read_excel(uploaded_file, sheet_name='Sheet1')
+            st.write(f"Loaded Excel file with {len(raw_data)} rows.")
+
+            if raw_data.empty:
+                st.error("The uploaded Excel file is empty. Please verify that the file contains data in 'Sheet1'.")
+                st.stop()
 
             # Map columns from Data Lake format to expected format
             column_mapping = {
@@ -935,9 +1049,13 @@ with tab3:
                 'dsc_category_name': 'CATEGORY',
                 'cod_category_code': 'CATEGORY_CODE',
                 'color': 'COLOR',
+                'image1': 'MAIN_IMAGE',
+                'list_variations': 'VARIATION',
                 'cod_parent_sku': 'PARENTSKU',
                 'dsc_shop_seller_name': 'SELLER_NAME',
-                # Note: No direct mapping for GLOBAL_PRICE, GLOBAL_SALE_PRICE, MAIN_IMAGE, etc. - will be NA
+                'list_seller_skus': 'SELLER_SKU',
+                'dsc_shop_tax_class': 'TAX_CLASS'
+                # Note: GLOBAL_PRICE and GLOBAL_SALE_PRICE are not present in the provided data, will be NA
             }
 
             # Rename columns
@@ -946,6 +1064,13 @@ with tab3:
             # Filter by country if not "All Countries"
             if country != "All Countries" and 'ACTIVE_STATUS_COUNTRY' in data.columns:
                 data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(country, na=False, case=False)]
+                st.write(f"Filtered to {len(data)} products for {country}.")
+                if data.empty:
+                    st.error(f"No products found for {country}. Possible reasons:\n"
+                             f"- The 'dsc_shop_active_country' column does not contain '{country}'.\n"
+                             f"- All rows were filtered out due to missing or invalid data.\n"
+                             f"Available countries in data: {', '.join(raw_data['dsc_shop_active_country'].dropna().unique())}")
+                    st.stop()
 
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'PARENTSKU']
             for col in essential_input_cols:
@@ -957,10 +1082,14 @@ with tab3:
                     data[col] = data[col].astype(str).fillna('')
 
             if data.empty:
-                st.warning("The uploaded file is empty or became empty after processing/filtering.")
+                st.error("The DataFrame is empty after processing. Possible reasons:\n"
+                         "- The file contains no valid data after column mapping.\n"
+                         "- All rows were filtered out by the country selection.\n"
+                         "- Required columns are missing or empty.\n"
+                         f"Available columns: {', '.join(raw_data.columns)}")
                 st.stop()
 
-            st.write(f"Excel file loaded successfully. Processed {len(data)} products for {country}.")
+            st.write(f"Processed {len(data)} products after cleaning.")
 
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
@@ -992,7 +1121,7 @@ with tab3:
                 if not report_with_seller.empty:
                     seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
 
-            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'])
+            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="data_lake_sellers")
 
             seller_data_filtered = data.copy()
             seller_final_report_df_filtered = final_report_df.copy()
@@ -1029,16 +1158,40 @@ with tab3:
 
             st.sidebar.subheader(f"Exports for: {seller_label_filename.replace('_', ' ')}")
             seller_final_excel = to_excel(seller_final_report_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Final Export", data=seller_final_excel, file_name=f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Final Export",
+                data=seller_final_excel,
+                file_name=f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="data_lake_final_export"
+            )
             
             seller_rejected_excel = to_excel(seller_rejected_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Rejected Export", data=seller_rejected_excel, file_name=f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Rejected Export",
+                data=seller_rejected_excel,
+                file_name=f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="data_lake_rejected_export"
+            )
 
             seller_approved_excel = to_excel(seller_approved_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Approved Export", data=seller_approved_excel, file_name=f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Approved Export",
+                data=seller_approved_excel,
+                file_name=f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="data_lake_approved_export"
+            )
 
             seller_full_excel = to_excel_seller_data(seller_data_filtered, seller_final_report_df_filtered)
-            st.sidebar.download_button(label="Seller Full Data Export", data=seller_full_excel, file_name=f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Full Data Export",
+                data=seller_full_excel,
+                file_name=f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="data_lake_full_export"
+            )
 
             st.header("Overall Product Validation Results")
             col1, col2 = st.columns(2)
@@ -1063,7 +1216,7 @@ with tab3:
                             data=flag_excel_export,
                             file_name=f"{file_prefix}_{safe_title}_Products_{current_date}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"download_flag_{safe_title}"
+                            key=f"data_lake_flag_{safe_title}"
                         )
                     else:
                         st.write("No issues found for this check.")
@@ -1072,22 +1225,51 @@ with tab3:
             col1_main, col2_main, col3_main, col4_main = st.columns(4)
             with col1_main:
                 overall_final_excel = to_excel(final_report_df, reasons_df_from_config)
-                st.download_button(label="Final Export (All)", data=overall_final_excel, file_name=f"{file_prefix}_Final_Report_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Final Export (All)",
+                    data=overall_final_excel,
+                    file_name=f"{file_prefix}_Final_Report_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="data_lake_overall_final"
+                )
             with col2_main:
                 overall_rejected_excel = to_excel(rejected_df, reasons_df_from_config)
-                st.download_button(label="Rejected Export (All)", data=overall_rejected_excel, file_name=f"{file_prefix}_Rejected_Products_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Rejected Export (All)",
+                    data=overall_rejected_excel,
+                    file_name=f"{file_prefix}_Rejected_Products_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="data_lake_overall_rejected"
+                )
             with col3_main:
                 overall_approved_excel = to_excel(approved_df, reasons_df_from_config)
-                st.download_button(label="Approved Export (All)", data=overall_approved_excel, file_name=f"{file_prefix}_Approved_Products_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Approved Export (All)",
+                    data=overall_approved_excel,
+                    file_name=f"{file_prefix}_Approved_Products_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="data_lake_overall_approved"
+                )
             with col4_main:
                 overall_full_excel = to_excel_full_data(data.copy(), final_report_df)
-                st.download_button(label="Full Data Export (All)", data=overall_full_excel, file_name=f"{file_prefix}_Full_Data_Export_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Full Data Export (All)",
+                    data=overall_full_excel,
+                    file_name=f"{file_prefix}_Full_Data_Export_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="data_lake_overall_full"
+                )
 
         except Exception as e:
             process_success = False
             st.error(f"An unexpected error occurred processing the file: {e}")
             import traceback
             st.error(f"Traceback: {traceback.format_exc()}")
+            st.error("Possible issues:\n"
+                     "- The Excel file may not have a 'Sheet1' or may be corrupted.\n"
+                     "- Required columns (e.g., cod_productset_sid, dsc_name) may be missing or incorrectly formatted.\n"
+                     "- The file may be too large or contain invalid data types.\n"
+                     "Please verify the file structure and try again.")
 
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
