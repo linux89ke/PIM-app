@@ -1,3 +1,4 @@
+```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -490,6 +491,91 @@ def to_excel(report_df, reasons_config_df, sheet1_name="ProductSets", sheet2_nam
     output.seek(0)
     return output
 
+# Function to parse summary tables from Sellers Data sheet
+def parse_sellers_data_sheet(sellers_sheet, date):
+    # sellers_sheet is pd.read_excel(..., header=None)
+    all_sellers = []
+    all_categories = []
+    all_reasons = []
+    
+    # Find section headers
+    section_starts = {}
+    for idx in range(len(sellers_sheet)):
+        row = sellers_sheet.iloc[idx]
+        if pd.isna(row[0]):
+            continue
+        cell = str(row[0]).strip()
+        if 'Sellers Summary' in cell:
+            section_starts['sellers'] = idx
+        elif 'Categories Summary' in cell:
+            section_starts['categories'] = idx
+        elif 'Rejection Reasons Summary' in cell:
+            section_starts['reasons'] = idx
+    
+    # Parse Sellers
+    if 'sellers' in section_starts:
+        start = section_starts['sellers']
+        end = section_starts.get('categories', len(sellers_sheet))
+        # Find header row with 'Rank'
+        header_idx = None
+        for i in range(start + 1, end):
+            if str(sellers_sheet.iloc[i, 0]).strip() == 'Rank':
+                header_idx = i
+                break
+        if header_idx is not None:
+            data_start = header_idx + 1
+            data_end = end
+            data_rows = sellers_sheet.iloc[data_start:data_end, [0, 1, 2]].dropna(how='all')
+            if not data_rows.empty:
+                data_rows.columns = ['Rank', 'Seller', 'Rejected Products']
+                data_rows['Date'] = date
+                data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
+                all_sellers.append(data_rows)
+    
+    # Parse Categories
+    if 'categories' in section_starts:
+        start = section_starts['categories']
+        end = section_starts.get('reasons', len(sellers_sheet))
+        header_idx = None
+        for i in range(start + 1, end):
+            if str(sellers_sheet.iloc[i, 0]).strip() == 'Rank':
+                header_idx = i
+                break
+        if header_idx is not None:
+            data_start = header_idx + 1
+            data_end = end
+            data_rows = sellers_sheet.iloc[data_start:data_end, [0, 1, 2]].dropna(how='all')
+            if not data_rows.empty:
+                data_rows.columns = ['Rank', 'Category', 'Rejected Products']
+                data_rows['Date'] = date
+                data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
+                all_categories.append(data_rows)
+    
+    # Parse Reasons
+    if 'reasons' in section_starts:
+        start = section_starts['reasons']
+        end = len(sellers_sheet)
+        header_idx = None
+        for i in range(start + 1, end):
+            if str(sellers_sheet.iloc[i, 0]).strip() == 'Rank':
+                header_idx = i
+                break
+        if header_idx is not None:
+            data_start = header_idx + 1
+            data_end = end
+            data_rows = sellers_sheet.iloc[data_start:data_end, [0, 1, 2]].dropna(how='all')
+            if not data_rows.empty:
+                data_rows.columns = ['Rank', 'Rejection Reason', 'Rejected Products']
+                data_rows['Date'] = date
+                data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
+                all_reasons.append(data_rows)
+    
+    sellers_df = pd.concat(all_sellers, ignore_index=True) if all_sellers else pd.DataFrame()
+    categories_df = pd.concat(all_categories, ignore_index=True) if all_categories else pd.DataFrame()
+    reasons_df = pd.concat(all_reasons, ignore_index=True) if all_reasons else pd.DataFrame()
+    
+    return sellers_df, categories_df, reasons_df
+
 # --- Initialize the app ---
 st.title("Product Validation Tool")
 
@@ -686,7 +772,9 @@ with tab2:
     uploaded_files = st.file_uploader("Upload multiple Excel files for the week", type=['xlsx'], accept_multiple_files=True)
     
     if uploaded_files:
-        aggregated_df = pd.DataFrame()
+        all_sellers_dfs = []
+        all_categories_dfs = []
+        all_reasons_dfs = []
         dates = []
         
         for file in uploaded_files:
@@ -696,93 +784,133 @@ with tab2:
                 continue
             
             try:
-                df = pd.read_excel(file, sheet_name='ProductSets')
-                if 'Status' in df.columns:
-                    df['Date'] = date
-                    aggregated_df = pd.concat([aggregated_df, df], ignore_index=True)
-                    dates.append(date)
-                else:
-                    st.warning(f"No 'Status' column in {file.name}")
+                # Read Sellers Data sheet with no header to parse manually
+                sellers_sheet = pd.read_excel(file, sheet_name='Sellers Data', header=None)
+                sellers_df, categories_df, reasons_df = parse_sellers_data_sheet(sellers_sheet, date)
+                
+                if not sellers_df.empty:
+                    all_sellers_dfs.append(sellers_df)
+                if not categories_df.empty:
+                    all_categories_dfs.append(categories_df)
+                if not reasons_df.empty:
+                    all_reasons_dfs.append(reasons_df)
+                
+                dates.append(date)
             except Exception as e:
                 st.error(f"Error reading {file.name}: {e}")
         
-        if not aggregated_df.empty:
-            st.success(f"Aggregated data from {len(dates)} files, covering dates: {sorted(set(dates))}")
+        if all_sellers_dfs or all_categories_dfs or all_reasons_dfs:
+            st.success(f"Parsed data from {len(dates)} files, covering dates: {sorted(set(dates))}")
             
-            # Overall Metrics
-            total_products = len(aggregated_df)
-            rejected = len(aggregated_df[aggregated_df['Status'] == 'Rejected'])
-            approved = len(aggregated_df[aggregated_df['Status'] == 'Approved'])
-            overall_rejection_rate = (rejected / total_products * 100) if total_products > 0 else 0
-            
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total Products (Week)", total_products)
-            with col2:
-                st.metric("Approved Products (Week)", approved)
-            with col3:
-                st.metric("Rejected Products (Week)", rejected)
-            with col4:
-                st.metric("Overall Rejection Rate", f"{overall_rejection_rate:.1f}%")
-            
-            # Daily Summary Table
-            st.subheader("Daily Validation Summary")
-            status_counts = aggregated_df.groupby(['Date', 'Status']).size().unstack(fill_value=0)
-            status_counts['Total'] = status_counts.sum(axis=1)
-            status_counts['Rejection Rate (%)'] = (status_counts['Rejected'] / status_counts['Total'] * 100).round(1)
-            st.dataframe(status_counts)
-            
-            # Rejection Trends Chart
-            if 'Rejected' in status_counts.columns:
-                st.subheader("Daily Rejected Products Trend")
-                rejection_trend = status_counts[['Rejected']].reset_index()
-                st.line_chart(rejection_trend.set_index('Date')['Rejected'])
-            
-            # Rejection Reasons Over Time
-            st.subheader("Rejection Reasons Over Time")
-            rejected_df = aggregated_df[aggregated_df['Status'] == 'Rejected']
-            if not rejected_df.empty and 'FLAG' in rejected_df.columns:
-                reasons_over_time = rejected_df.groupby(['Date', 'FLAG']).size().unstack(fill_value=0)
-                st.dataframe(reasons_over_time)
-                
-                st.subheader("Rejections by Reason and Date")
-                reasons_melted = reasons_over_time.reset_index().melt(id_vars='Date', var_name='FLAG', value_name='Count')
-                reasons_pivot = reasons_melted.pivot_table(index='Date', columns='FLAG', values='Count', fill_value=0)
-                st.area_chart(reasons_pivot)
+            # Aggregate Sellers
+            if all_sellers_dfs:
+                aggregated_sellers = pd.concat(all_sellers_dfs, ignore_index=True)
+                weekly_sellers = aggregated_sellers.groupby('Seller')['Rejected Products'].sum().reset_index()
+                weekly_sellers = weekly_sellers.sort_values('Rejected Products', ascending=False).head(5)
+                weekly_sellers['Percentage'] = (weekly_sellers['Rejected Products'] / weekly_sellers['Rejected Products'].sum() * 100).round(1)
+                st.subheader("Top 5 Sellers by Rejected Products (Weekly)")
+                st.dataframe(weekly_sellers)
+                st.bar_chart(weekly_sellers.set_index('Seller')['Rejected Products'])
             else:
-                st.info("No rejection data available for analysis.")
+                st.warning("No seller data parsed.")
             
-            # Seller Performance Over Time
-            st.subheader("Seller Performance Over Time")
-            if 'SELLER_NAME' in aggregated_df.columns:
-                seller_status = aggregated_df.groupby(['Date', 'SELLER_NAME', 'Status']).size().unstack(fill_value=0)
-                seller_status['Total'] = seller_status.sum(axis=1)
-                st.dataframe(seller_status.head(10))  # Show top 10 for brevity
-                
-                # Top Sellers by Rejections
-                st.subheader("Top Sellers by Rejections")
-                top_reject_sellers = rejected_df.groupby('SELLER_NAME').size().sort_values(ascending=False).head(10)
-                st.bar_chart(top_reject_sellers)
+            # Aggregate Categories
+            if all_categories_dfs:
+                aggregated_categories = pd.concat(all_categories_dfs, ignore_index=True)
+                weekly_categories = aggregated_categories.groupby('Category')['Rejected Products'].sum().reset_index()
+                weekly_categories = weekly_categories.sort_values('Rejected Products', ascending=False).head(5)
+                weekly_categories['Percentage'] = (weekly_categories['Rejected Products'] / weekly_categories['Rejected Products'].sum() * 100).round(1)
+                st.subheader("Top 5 Categories by Rejected Products (Weekly)")
+                st.dataframe(weekly_categories)
+                st.bar_chart(weekly_categories.set_index('Category')['Rejected Products'])
             else:
-                st.warning("No 'SELLER_NAME' column found for seller analysis.")
+                st.warning("No category data parsed.")
             
-            # Export Aggregated Data
+            # Aggregate Reasons
+            if all_reasons_dfs:
+                aggregated_reasons = pd.concat(all_reasons_dfs, ignore_index=True)
+                weekly_reasons = aggregated_reasons.groupby('Rejection Reason')['Rejected Products'].sum().reset_index()
+                weekly_reasons = weekly_reasons.sort_values('Rejected Products', ascending=False).head(5)
+                weekly_reasons['Percentage'] = (weekly_reasons['Rejected Products'] / weekly_reasons['Rejected Products'].sum() * 100).round(1)
+                st.subheader("Top 5 Rejection Reasons (Weekly)")
+                st.dataframe(weekly_reasons)
+                st.bar_chart(weekly_reasons.set_index('Rejection Reason')['Rejected Products'])
+            else:
+                st.warning("No reasons data parsed.")
+            
+            # Deep Analysis
+            st.subheader("Deep Analysis")
+            total_rejections = 0
+            if 'aggregated_sellers' in locals():
+                total_rejections = aggregated_sellers['Rejected Products'].sum()
+            elif 'aggregated_categories' in locals():
+                total_rejections = aggregated_categories['Rejected Products'].sum()
+            
+            if total_rejections > 0:
+                avg_daily_rej = total_rejections / len(set(dates))
+                st.metric("Total Weekly Rejections", total_rejections)
+                st.metric("Average Daily Rejections", f"{avg_daily_rej:.1f}")
+                
+                if 'weekly_sellers' in locals() and not weekly_sellers.empty:
+                    top_seller_pct = weekly_sellers.iloc[0]['Percentage']
+                    st.info(f"The top seller '{weekly_sellers.iloc[0]['Seller']}' accounts for {top_seller_pct:.1f}% of weekly rejections, indicating potential systemic issues in their listings.")
+                
+                if 'weekly_categories' in locals() and not weekly_categories.empty:
+                    top_cat_pct = weekly_categories.iloc[0]['Percentage']
+                    st.info(f"Category '{weekly_categories.iloc[0]['Category']}' has the highest rejections at {top_cat_pct:.1f}%, suggesting category-specific validation rules or training needs.")
+                
+                if 'weekly_reasons' in locals() and not weekly_reasons.empty:
+                    top_reason_pct = weekly_reasons.iloc[0]['Percentage']
+                    st.info(f"Primary rejection reason '{weekly_reasons.iloc[0]['Rejection Reason']}' drives {top_reason_pct:.1f}% of issues; prioritize automated checks or seller education here.")
+                
+                # Trend if multiple dates
+                if len(set(dates)) > 1:
+                    if 'aggregated_sellers' in locals():
+                        daily_trend = aggregated_sellers.groupby('Date')['Rejected Products'].sum().reset_index()
+                        st.line_chart(daily_trend.set_index('Date')['Rejected Products'])
+                        st.caption("Daily Rejection Trend")
+            
+            # Recommendations
+            st.subheader("Recommendations")
+            recs = []
+            if 'weekly_sellers' in locals() and not weekly_sellers.empty:
+                recs.append(f"- Schedule training sessions with top 3 sellers ({', '.join(weekly_sellers.head(3)['Seller'].tolist())}) on listing best practices to reduce duplicates and brand issues.")
+            if 'weekly_categories' in locals() and not weekly_categories.empty:
+                recs.append(f"- Implement category-specific guidelines for high-rejection categories like {', '.join(weekly_categories.head(3)['Category'].tolist())}.")
+            if 'weekly_reasons' in locals() and not weekly_reasons.empty:
+                recs.append(f"- Automate pre-validation for top reasons such as '{weekly_reasons.iloc[0]['Rejection Reason']}' using scripts to flag potential issues before upload.")
+            if total_rejections > 0 and avg_daily_rej > 50:
+                recs.append("- Overall rejection rate is high (>50/day); conduct a platform-wide audit on validation rules and seller onboarding.")
+            else:
+                recs.append("- Rejection trends are stable; continue monitoring but focus on proactive seller support.")
+            
+            for rec in recs:
+                st.write(f"• {rec}")
+            
+            # Export
             st.subheader("Export Aggregated Weekly Data")
-            aggregated_excel = BytesIO()
-            with pd.ExcelWriter(aggregated_excel, engine='xlsxwriter') as writer:
-                aggregated_df.to_excel(writer, sheet_name='Aggregated ProductSets', index=False)
-                status_counts.to_excel(writer, sheet_name='Daily Summary')
-                if 'FLAG' in rejected_df.columns:
-                    reasons_over_time.to_excel(writer, sheet_name='Rejection Reasons Over Time')
-            aggregated_excel.seek(0)
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            st.download_button(
-                label="Download Aggregated Weekly Report",
-                data=aggregated_excel,
-                file_name=f"Weekly_Analysis_Report_{current_date}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            export_dfs = {}
+            if 'weekly_sellers' in locals():
+                export_dfs['Top Sellers'] = weekly_sellers
+            if 'weekly_categories' in locals():
+                export_dfs['Top Categories'] = weekly_categories
+            if 'weekly_reasons' in locals():
+                export_dfs['Top Reasons'] = weekly_reasons
+            if export_dfs:
+                aggregated_excel = BytesIO()
+                with pd.ExcelWriter(aggregated_excel, engine='xlsxwriter') as writer:
+                    for sheet, df in export_dfs.items():
+                        df.to_excel(writer, sheet_name=sheet, index=False)
+                aggregated_excel.seek(0)
+                current_date = datetime.now().strftime("%Y-%m-%d")
+                st.download_button(
+                    label="Download Aggregated Weekly Report",
+                    data=aggregated_excel,
+                    file_name=f"Weekly_Analysis_Report_{current_date}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
         else:
-            st.warning("No valid data found in the uploaded files. Ensure they contain a 'ProductSets' sheet with a 'Status' column.")
+            st.warning("No summary data found in the 'Sellers Data' sheets of uploaded files.")
     else:
         st.info("Upload one or more Excel files to start the weekly analysis.")
+```
