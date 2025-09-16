@@ -13,6 +13,13 @@ PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment",
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
 
+# Country mapping for Data Lake tab
+COUNTRY_MAPPING = {
+    "Kenya": "jumia-ke",
+    "Uganda": "jumia-ug",
+    "All Countries": None  # None indicates no filtering
+}
+
 # Function to extract date from filename
 def extract_date_from_filename(filename):
     pattern = r'(\d{4}-\d{2}-\d{2})'
@@ -701,16 +708,40 @@ with tab1:
 
             st.sidebar.subheader(f"Exports for: {seller_label_filename.replace('_', ' ')}")
             seller_final_excel = to_excel(seller_final_report_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Final Export", data=seller_final_excel, file_name=f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Final Export",
+                data=seller_final_excel,
+                file_name=f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="daily_final_export"
+            )
             
             seller_rejected_excel = to_excel(seller_rejected_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Rejected Export", data=seller_rejected_excel, file_name=f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Rejected Export",
+                data=seller_rejected_excel,
+                file_name=f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="daily_rejected_export"
+            )
 
             seller_approved_excel = to_excel(seller_approved_df_filtered, reasons_df_from_config)
-            st.sidebar.download_button(label="Seller Approved Export", data=seller_approved_excel, file_name=f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Approved Export",
+                data=seller_approved_excel,
+                file_name=f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="daily_approved_export"
+            )
 
             seller_full_excel = to_excel_seller_data(seller_data_filtered, seller_final_report_df_filtered)
-            st.sidebar.download_button(label="Seller Full Data Export", data=seller_full_excel, file_name=f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.sidebar.download_button(
+                label="Seller Full Data Export",
+                data=seller_full_excel,
+                file_name=f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="daily_full_export"
+            )
 
             st.header("Overall Product Validation Results")
             col1, col2 = st.columns(2)
@@ -735,7 +766,7 @@ with tab1:
                             data=flag_excel_export,
                             file_name=f"{file_prefix}_{safe_title}_Products_{current_date}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"download_flag_{safe_title}"
+                            key=f"daily_flag_{safe_title}"
                         )
                     else:
                         st.write("No issues found for this check.")
@@ -744,16 +775,40 @@ with tab1:
             col1_main, col2_main, col3_main, col4_main = st.columns(4)
             with col1_main:
                 overall_final_excel = to_excel(final_report_df, reasons_df_from_config)
-                st.download_button(label="Final Export (All)", data=overall_final_excel, file_name=f"{file_prefix}_Final_Report_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Final Export (All)",
+                    data=overall_final_excel,
+                    file_name=f"{file_prefix}_Final_Report_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="daily_overall_final"
+                )
             with col2_main:
                 overall_rejected_excel = to_excel(rejected_df, reasons_df_from_config)
-                st.download_button(label="Rejected Export (All)", data=overall_rejected_excel, file_name=f"{file_prefix}_Rejected_Products_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Rejected Export (All)",
+                    data=overall_rejected_excel,
+                    file_name=f"{file_prefix}_Rejected_Products_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="daily_overall_rejected"
+                )
             with col3_main:
                 overall_approved_excel = to_excel(approved_df, reasons_df_from_config)
-                st.download_button(label="Approved Export (All)", data=overall_approved_excel, file_name=f"{file_prefix}_Approved_Products_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Approved Export (All)",
+                    data=overall_approved_excel,
+                    file_name=f"{file_prefix}_Approved_Products_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="daily_overall_approved"
+                )
             with col4_main:
                 overall_full_excel = to_excel_full_data(data.copy(), final_report_df)
-                st.download_button(label="Full Data Export (All)", data=overall_full_excel, file_name=f"{file_prefix}_Full_Data_Export_{current_date}_ALL.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    label="Full Data Export (All)",
+                    data=overall_full_excel,
+                    file_name=f"{file_prefix}_Full_Data_Export_{current_date}_ALL.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="daily_overall_full"
+                )
 
         except pd.errors.ParserError as pe:
             process_success = False
@@ -1062,14 +1117,16 @@ with tab3:
             data = raw_data.rename(columns=column_mapping).copy()
 
             # Filter by country if not "All Countries"
-            if country != "All Countries" and 'ACTIVE_STATUS_COUNTRY' in data.columns:
-                data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(country, na=False, case=False)]
-                st.write(f"Filtered to {len(data)} products for {country}.")
+            country_code = COUNTRY_MAPPING[country]
+            if country_code and 'ACTIVE_STATUS_COUNTRY' in data.columns:
+                data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(country_code, na=False, case=False)]
+                st.write(f"Filtered to {len(data)} products for {country} ({country_code}).")
                 if data.empty:
-                    st.error(f"No products found for {country}. Possible reasons:\n"
-                             f"- The 'dsc_shop_active_country' column does not contain '{country}'.\n"
+                    unique_countries = raw_data['dsc_shop_active_country'].dropna().unique()
+                    st.error(f"No products found for {country} ({country_code}). Possible reasons:\n"
+                             f"- The 'dsc_shop_active_country' column does not contain '{country_code}'.\n"
                              f"- All rows were filtered out due to missing or invalid data.\n"
-                             f"Available countries in data: {', '.join(raw_data['dsc_shop_active_country'].dropna().unique())}")
+                             f"Available countries in data: {', '.join(unique_countries) if unique_countries.size > 0 else 'None'}")
                     st.stop()
 
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'PARENTSKU']
