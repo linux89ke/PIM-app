@@ -37,7 +37,7 @@ def load_config_files():
         'sensitive_brands': 'sensitive_brands.xlsx',
         'approved_sellers': 'Books_Approved_Sellers.xlsx',
         'perfume_cat': 'Perfume_cat.txt',
-        'valid_colors': 'color.txt'
+        'valid_colors': 'colors.txt'
     }
     data = {}
     for key, filename in config_files.items():
@@ -46,7 +46,7 @@ def load_config_files():
                 with open(filename, 'r') as f:
                     data[key] = [line.strip().lower() for line in f.readlines() if line.strip()]
                 if key == 'valid_colors' and not data[key]:
-                    st.warning("color.txt is empty; all colors will be considered invalid.")
+                    st.warning("colors.txt is empty; all colors will be considered invalid.")
             else:
                 df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
                 data[key] = df
@@ -67,7 +67,7 @@ def check_missing_color(data, book_category_codes):
     return non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
 
 def check_missing_color_data_lake(data, book_category_codes, valid_colors):
-    """Used for Data Lake tab: checks color against color.txt, falls back to color_family"""
+    """Used for Data Lake tab: checks color against colors.txt, falls back to color_family"""
     if 'CATEGORY_CODE' not in data.columns or 'COLOR' not in data.columns or 'COLOR_FAMILY' not in data.columns:
         st.error("Required columns missing: CATEGORY_CODE, COLOR, or COLOR_FAMILY")
         return pd.DataFrame(columns=data.columns)
