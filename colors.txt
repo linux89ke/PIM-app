@@ -337,4 +337,24 @@ Zebra
 Cowhide
 panda
 atrovirens
+coloured
+neon 
+titanium
+stainless steel
+wood 
+ivory 
+champagne 
+rose gold 
+natural 
+shadow 
+storm 
+onyx 
+platinum 
+jungle 
+coral 
+lilac 
+peach 
+nude
+cream 
+beige
 
