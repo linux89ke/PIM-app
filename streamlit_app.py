@@ -36,14 +36,17 @@ def load_config_files():
         'books_cat': 'Books_cat.xlsx',
         'sensitive_brands': 'sensitive_brands.xlsx',
         'approved_sellers': 'Books_Approved_Sellers.xlsx',
-        'perfume_cat': 'Perfume_cat.txt'
+        'perfume_cat': 'Perfume_cat.txt',
+        'valid_colors': 'color.txt'
     }
     data = {}
     for key, filename in config_files.items():
         try:
             if filename.endswith('.txt'):
                 with open(filename, 'r') as f:
-                    data[key] = [line.strip() for line in f.readlines()]
+                    data[key] = [line.strip().lower() for line in f.readlines() if line.strip()]
+                if key == 'valid_colors' and not data[key]:
+                    st.warning("color.txt is empty; all colors will be considered invalid.")
             else:
                 df = pd.read_excel(filename).rename(columns=lambda x: x.strip())
                 data[key] = df
@@ -57,10 +60,38 @@ def load_config_files():
 
 # Validation check functions
 def check_missing_color(data, book_category_codes):
+    """Used for Daily Validation tab"""
     if 'CATEGORY_CODE' not in data.columns or 'COLOR' not in data.columns:
         return pd.DataFrame(columns=data.columns)
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     return non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
+
+def check_missing_color_data_lake(data, book_category_codes, valid_colors):
+    """Used for Data Lake tab: checks color against color.txt, falls back to color_family"""
+    if 'CATEGORY_CODE' not in data.columns or 'COLOR' not in data.columns or 'COLOR_FAMILY' not in data.columns:
+        st.error("Required columns missing: CATEGORY_CODE, COLOR, or COLOR_FAMILY")
+        return pd.DataFrame(columns=data.columns)
+    
+    non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    
+    # Debug: Count products with valid/invalid color and color_family
+    total_non_book = len(non_book_data)
+    valid_color = non_book_data[non_book_data['COLOR'].str.lower().isin(valid_colors) & pd.notna(non_book_data['COLOR']) & (non_book_data['COLOR'] != '')]
+    valid_color_family = non_book_data[
+        (~non_book_data['COLOR'].str.lower().isin(valid_colors) | non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')) &
+        non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors) & pd.notna(non_book_data['COLOR_FAMILY']) & (non_book_data['COLOR_FAMILY'] != '')
+    ]
+    st.write(f"Debug: {len(valid_color)}/{total_non_book} non-book products have valid COLOR")
+    st.write(f"Debug: {len(valid_color_family)}/{total_non_book} non-book products have invalid COLOR but valid COLOR_FAMILY")
+    
+    # Flag products where both COLOR and COLOR_FAMILY are invalid
+    invalid_color = non_book_data[
+        (non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '') | 
+         ~non_book_data['COLOR'].str.lower().isin(valid_colors)) &
+        (non_book_data['COLOR_FAMILY'].isna() | (non_book_data['COLOR_FAMILY'] == '') | 
+         ~non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors))
+    ]
+    return invalid_color
 
 def check_multicolour_non_watches(data):
     if 'CATEGORY' not in data.columns or 'COLOR' not in data.columns:
@@ -133,9 +164,11 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
                 flagged_perfumes.append(row)
     return pd.DataFrame(flagged_perfumes) if flagged_perfumes else pd.DataFrame(columns=data.columns)
 
-def validate_products(data, config_data, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country):
+def validate_products(data, config_data, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country, is_data_lake=False):
+    valid_colors = config_data.get('valid_colors', [])
     validations = [
-        ("Missing COLOR", check_missing_color, {'book_category_codes': book_category_codes}),
+        ("Missing or Invalid COLOR", check_missing_color_data_lake if is_data_lake else check_missing_color, 
+         {'book_category_codes': book_category_codes, 'valid_colors': valid_colors} if is_data_lake else {'book_category_codes': book_category_codes}),
         ("Multicolour Non-Watches", check_multicolour_non_watches, {}),
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
@@ -150,7 +183,7 @@ def validate_products(data, config_data, book_category_codes, sensitive_brand_wo
         validations = [v for v in validations if v[0] not in ["Sensitive Brand Issues", "Unapproved Book Sellers", "Perfume Price Issues"]]
     
     flag_reason_comment = {
-        "Missing COLOR": ("1000005 - Missing Color", "Add color in the color field"),
+        "Missing or Invalid COLOR": ("1000005 - Missing or Invalid Color", "Add a valid color from the approved list or update color_family"),
         "Multicolour Non-Watches": ("1000006 - Invalid Color", "Multicolour not allowed for non-watch categories"),
         "Missing BRAND or NAME": ("1000001 - Missing Brand/Name", "Brand or Name field is empty"),
         "Single-word NAME": ("1000008 - Improve Name Description", "Update product title with format: Name – Type – Color"),
@@ -375,6 +408,9 @@ sensitive_brand_words = config_data.get('sensitive_brands', pd.DataFrame())['Bra
 approved_book_sellers = config_data.get('approved_sellers', pd.DataFrame())['SellerName'].astype(str).tolist() if not config_data.get('approved_sellers', pd.DataFrame()).empty else []
 perfume_category_codes = config_data.get('perfume_cat', [])
 reasons_df = config_data.get('reasons', pd.DataFrame())
+
+# Debug: Show valid colors
+st.write("Valid colors from color.txt:", config_data.get('valid_colors', []))
 
 # Tabs
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
@@ -644,6 +680,7 @@ with tab3:
                 'dsc_category_name': 'CATEGORY',
                 'cod_category_code': 'CATEGORY_CODE',
                 'color': 'COLOR',
+                'color_family': 'COLOR_FAMILY',
                 'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
                 'image1': 'MAIN_IMAGE',
                 'list_variations': 'VARIATION',
@@ -654,7 +691,7 @@ with tab3:
             }
             df = raw_data.rename(columns=column_mapping)
             
-            required_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'PARENTSKU']
+            required_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'CATEGORY_CODE', 'COLOR', 'COLOR_FAMILY', 'SELLER_NAME', 'PARENTSKU']
             missing_cols = [col for col in required_cols if col not in df.columns]
             if missing_cols:
                 st.error(f"Missing columns: {', '.join(missing_cols)}")
@@ -672,7 +709,7 @@ with tab3:
                     if overlap:
                         st.warning(f"Found {len(overlap)} overlapping SKUs with Daily Validation file.")
                 
-                final_report, validation_results = validate_products(df, config_data, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country)
+                final_report, validation_results = validate_products(df, config_data, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country, is_data_lake=True)
                 approved_df = final_report[final_report['Status'] == 'Approved']
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
                 
