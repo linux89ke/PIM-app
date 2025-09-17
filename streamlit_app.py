@@ -74,34 +74,40 @@ def check_missing_color_data_lake(data, book_category_codes, valid_colors):
     
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     
-    # Debug: Count and inspect products
-    total_non_book = len(non_book_data)
+    # Clean and split colors into individual components
+    def clean_color(color):
+        if pd.isna(color) or color == '':
+            return []
+        color = color.lower().strip()
+        return [c.strip() for c in re.split(r'[/\s-]+', color) if c.strip()]
+    
+    non_book_data['COLOR_CLEAN'] = non_book_data['COLOR'].apply(clean_color)
+    non_book_data['COLOR_FAMILY_CLEAN'] = non_book_data['COLOR_FAMILY'].apply(clean_color)
+    
+    # Check if any cleaned color matches valid_colors
     valid_color = non_book_data[
-        non_book_data['COLOR'].str.lower().isin(valid_colors) & 
-        pd.notna(non_book_data['COLOR']) & 
-        (non_book_data['COLOR'] != '')
+        non_book_data['COLOR_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) &
+        pd.notna(non_book_data['COLOR']) & (non_book_data['COLOR'] != '')
     ]
     valid_color_family = non_book_data[
-        (~non_book_data['COLOR'].str.lower().isin(valid_colors) | 
-         non_book_data['COLOR'].isna() | 
-         (non_book_data['COLOR'] == '')) &
-        non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors) & 
-        pd.notna(non_book_data['COLOR_FAMILY']) & 
-        (non_book_data['COLOR_FAMILY'] != '')
+        (~non_book_data['COLOR_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) | 
+         non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')) &
+        non_book_data['COLOR_FAMILY_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) &
+        pd.notna(non_book_data['COLOR_FAMILY']) & (non_book_data['COLOR_FAMILY'] != '')
     ]
     invalid_color_values = non_book_data[
-        ~non_book_data['COLOR'].str.lower().isin(valid_colors) & 
-        pd.notna(non_book_data['COLOR']) & 
-        (non_book_data['COLOR'] != '')
+        ~non_book_data['COLOR_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) &
+        pd.notna(non_book_data['COLOR']) & (non_book_data['COLOR'] != '')
     ]['COLOR'].unique()
     flagged_data = non_book_data[
-        (non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '') | 
-         ~non_book_data['COLOR'].str.lower().isin(valid_colors)) &
-        (non_book_data['COLOR_FAMILY'].isna() | (non_book_data['COLOR_FAMILY'] == '') | 
-         ~non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors))
+        (~non_book_data['COLOR_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) & 
+         non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')) &
+        (~non_book_data['COLOR_FAMILY_CLEAN'].apply(lambda x: any(c in valid_colors for c in x)) & 
+         non_book_data['COLOR_FAMILY'].isna() | (non_book_data['COLOR_FAMILY'] == ''))
     ][['COLOR', 'COLOR_FAMILY']]
-    st.write(f"Debug: {len(valid_color)}/{total_non_book} non-book products have valid COLOR")
-    st.write(f"Debug: {len(valid_color_family)}/{total_non_book} non-book products have invalid COLOR but valid COLOR_FAMILY")
+    
+    st.write(f"Debug: {len(valid_color)}/{len(non_book_data)} non-book products have valid COLOR")
+    st.write(f"Debug: {len(valid_color_family)}/{len(non_book_data)} non-book products have invalid COLOR but valid COLOR_FAMILY")
     st.write("Invalid COLOR values:", invalid_color_values.tolist())
     st.write("Flagged products' COLOR and COLOR_FAMILY:", flagged_data.to_dict(orient='records') if not flagged_data.empty else "None")
     
@@ -547,8 +553,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": True, "title": {"display": true, "text": "Rejected Products"}},
-                            "x": {"title": {"display": true, "text": "Seller"}}
+                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
+                            "x": {"title": {"display": True, "text": "Seller"}}
                         }
                     }
                 }, expanded=False)
@@ -574,8 +580,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
-                            "x": {"title": {"display": true, "text": "Category"}}
+                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
+                            "x": {"title": {"display": True, "text": "Category"}}
                         }
                     }
                 }, expanded=False)
@@ -601,8 +607,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
-                            "x": {"title": {"display": true, "text": "Rejection Reason"}}
+                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
+                            "x": {"title": {"display": True, "text": "Rejection Reason"}}
                         }
                     }
                 }, expanded=False)
@@ -617,15 +623,15 @@ with tab2:
                         "datasets": [{
                             "label": "Rejected Products",
                             "data": daily_trend['Rejected Products'].tolist(),
-                            "fill": false,
+                            "fill": False,
                             "borderColor": "#2196F3",
                             "tension": 0.1
                         }]
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
-                            "x": {"title": {"display": true, "text": "Date"}}
+                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
+                            "x": {"title": {"display": True, "text": "Date"}}
                         }
                     }
                 }, expanded=False)
@@ -677,7 +683,7 @@ with tab2:
 # Data Lake Tab
 with tab3:
     st.header("Data Lake")
-    country = st.selectbox("Select Country", ["All Countries", "Kenya", "Uganda"], index=1, key="data_lake_country")  # Default to Kenya (index 1)
+    country = st.selectbox("Select Country", ["All Countries", "Kenya", "Uganda"], index=1, key="data_lake_country")  # Default to Kenya
     uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"], key="data_lake_file")
     
     if uploaded_file:
@@ -687,20 +693,20 @@ with tab3:
             st.write("Unique countries:", raw_data['dsc_shop_active_country'].dropna().unique().tolist())
             
             column_mapping = {
-                'cod_productset_sid': 'PRODUCT_SET_SID',
-                'dsc_name': 'NAME',
-                'dsc_brand_name': 'BRAND',
-                'dsc_category_name': 'CATEGORY',
-                'cod_category_code': 'CATEGORY_CODE',
-                'color': 'COLOR',
-                'color_family': 'COLOR_FAMILY',
-                'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
                 'image1': 'MAIN_IMAGE',
-                'list_variations': 'VARIATION',
+                'cod_category_code': 'CATEGORY_CODE',
+                'dsc_shop_tax_class': 'TAX_CLASS',
+                'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
+                'cod_productset_sid': 'PRODUCT_SET_SID',
                 'cod_parent_sku': 'PARENTSKU',
                 'dsc_shop_seller_name': 'SELLER_NAME',
-                'list_seller_skus': 'SELLER_SKU',
-                'dsc_shop_tax_class': 'TAX_CLASS'
+                'dsc_brand_name': 'BRAND',
+                'dsc_name': 'NAME',
+                'dsc_category_name': 'CATEGORY',
+                'color': 'COLOR',
+                'color_family': 'COLOR_FAMILY',
+                'list_variations': 'VARIATION',
+                'list_seller_skus': 'SELLER_SKU'
             }
             df = raw_data.rename(columns=column_mapping)
             df['COLOR'] = df['COLOR'].astype(str).replace('nan', '')
