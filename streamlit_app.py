@@ -74,24 +74,38 @@ def check_missing_color_data_lake(data, book_category_codes, valid_colors):
     
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     
-    # Debug: Count products with valid/invalid color and color_family
+    # Debug: Count and inspect products
     total_non_book = len(non_book_data)
-    valid_color = non_book_data[non_book_data['COLOR'].str.lower().isin(valid_colors) & pd.notna(non_book_data['COLOR']) & (non_book_data['COLOR'] != '')]
-    valid_color_family = non_book_data[
-        (~non_book_data['COLOR'].str.lower().isin(valid_colors) | non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')) &
-        non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors) & pd.notna(non_book_data['COLOR_FAMILY']) & (non_book_data['COLOR_FAMILY'] != '')
+    valid_color = non_book_data[
+        non_book_data['COLOR'].str.lower().isin(valid_colors) & 
+        pd.notna(non_book_data['COLOR']) & 
+        (non_book_data['COLOR'] != '')
     ]
-    st.write(f"Debug: {len(valid_color)}/{total_non_book} non-book products have valid COLOR")
-    st.write(f"Debug: {len(valid_color_family)}/{total_non_book} non-book products have invalid COLOR but valid COLOR_FAMILY")
-    
-    # Flag products where both COLOR and COLOR_FAMILY are invalid
-    invalid_color = non_book_data[
+    valid_color_family = non_book_data[
+        (~non_book_data['COLOR'].str.lower().isin(valid_colors) | 
+         non_book_data['COLOR'].isna() | 
+         (non_book_data['COLOR'] == '')) &
+        non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors) & 
+        pd.notna(non_book_data['COLOR_FAMILY']) & 
+        (non_book_data['COLOR_FAMILY'] != '')
+    ]
+    invalid_color_values = non_book_data[
+        ~non_book_data['COLOR'].str.lower().isin(valid_colors) & 
+        pd.notna(non_book_data['COLOR']) & 
+        (non_book_data['COLOR'] != '')
+    ]['COLOR'].unique()
+    flagged_data = non_book_data[
         (non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '') | 
          ~non_book_data['COLOR'].str.lower().isin(valid_colors)) &
         (non_book_data['COLOR_FAMILY'].isna() | (non_book_data['COLOR_FAMILY'] == '') | 
          ~non_book_data['COLOR_FAMILY'].str.lower().isin(valid_colors))
-    ]
-    return invalid_color
+    ][['COLOR', 'COLOR_FAMILY']]
+    st.write(f"Debug: {len(valid_color)}/{total_non_book} non-book products have valid COLOR")
+    st.write(f"Debug: {len(valid_color_family)}/{total_non_book} non-book products have invalid COLOR but valid COLOR_FAMILY")
+    st.write("Invalid COLOR values:", invalid_color_values.tolist())
+    st.write("Flagged products' COLOR and COLOR_FAMILY:", flagged_data.to_dict(orient='records') if not flagged_data.empty else "None")
+    
+    return flagged_data
 
 def check_multicolour_non_watches(data):
     if 'CATEGORY' not in data.columns or 'COLOR' not in data.columns:
@@ -262,7 +276,6 @@ def to_excel_full_data(data_df, final_report_df):
         header_format = workbook.add_format({'bold': True, 'bg_color': '#D3D3D3', 'border': 1})
         cell_format = workbook.add_format({'border': 1})
         number_format = workbook.add_format({'border': 1, 'align': 'right'})
-        high_rejection_format = workbook.add_format({'bg_color': '#FF9999', 'border': 1, 'align': 'right'})
         
         start_row = 0
         if 'SELLER_NAME' in merged_df.columns:
@@ -410,7 +423,7 @@ perfume_category_codes = config_data.get('perfume_cat', [])
 reasons_df = config_data.get('reasons', pd.DataFrame())
 
 # Debug: Show valid colors
-st.write("Valid colors from color.txt:", config_data.get('valid_colors', []))
+st.write("Valid colors from colors.txt:", config_data.get('valid_colors', []))
 
 # Tabs
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
@@ -471,7 +484,7 @@ with tab1:
                     current_date = datetime.now().strftime("%Y-%m-%d")
                     final_excel = to_excel(filtered_report, reasons_df)
                     rejected_excel = to_excel(filtered_report[filtered_report['Status'] == 'Rejected'], reasons_df)
-                    approved_excel = to_excel(filtered_report[filtered_report['Status'] == 'Approved'], reasons_df)
+                    approved_excel = to_excel(filtered_report[final_report['Status'] == 'Approved'], reasons_df)
                     full_excel = to_excel_full_data(filtered_df, filtered_report)
                     
                     st.markdown(get_download_link(final_excel, f"{file_prefix}_Final_Report_{current_date}_{seller_label}.xlsx", "Download Final Report"), unsafe_allow_html=True)
@@ -534,8 +547,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
-                            "x": {"title": {"display": True, "text": "Seller"}}
+                            "y": {"beginAtZero": True, "title": {"display": true, "text": "Rejected Products"}},
+                            "x": {"title": {"display": true, "text": "Seller"}}
                         }
                     }
                 }, expanded=False)
@@ -561,8 +574,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
-                            "x": {"title": {"display": True, "text": "Category"}}
+                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
+                            "x": {"title": {"display": true, "text": "Category"}}
                         }
                     }
                 }, expanded=False)
@@ -588,8 +601,8 @@ with tab2:
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
-                            "x": {"title": {"display": True, "text": "Rejection Reason"}}
+                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
+                            "x": {"title": {"display": true, "text": "Rejection Reason"}}
                         }
                     }
                 }, expanded=False)
@@ -604,15 +617,15 @@ with tab2:
                         "datasets": [{
                             "label": "Rejected Products",
                             "data": daily_trend['Rejected Products'].tolist(),
-                            "fill": False,
+                            "fill": false,
                             "borderColor": "#2196F3",
                             "tension": 0.1
                         }]
                     },
                     "options": {
                         "scales": {
-                            "y": {"beginAtZero": True, "title": {"display": True, "text": "Rejected Products"}},
-                            "x": {"title": {"display": True, "text": "Date"}}
+                            "y": {"beginAtZero": true, "title": {"display": true, "text": "Rejected Products"}},
+                            "x": {"title": {"display": true, "text": "Date"}}
                         }
                     }
                 }, expanded=False)
@@ -664,7 +677,7 @@ with tab2:
 # Data Lake Tab
 with tab3:
     st.header("Data Lake")
-    country = st.selectbox("Select Country", ["All Countries", "Kenya", "Uganda"], key="data_lake_country")
+    country = st.selectbox("Select Country", ["All Countries", "Kenya", "Uganda"], index=1, key="data_lake_country")  # Default to Kenya (index 1)
     uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"], key="data_lake_file")
     
     if uploaded_file:
@@ -690,6 +703,8 @@ with tab3:
                 'dsc_shop_tax_class': 'TAX_CLASS'
             }
             df = raw_data.rename(columns=column_mapping)
+            df['COLOR'] = df['COLOR'].astype(str).replace('nan', '')
+            df['COLOR_FAMILY'] = df['COLOR_FAMILY'].astype(str).replace('nan', '')
             
             required_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'CATEGORY_CODE', 'COLOR', 'COLOR_FAMILY', 'SELLER_NAME', 'PARENTSKU']
             missing_cols = [col for col in required_cols if col not in df.columns]
@@ -734,7 +749,7 @@ with tab3:
                 current_date = datetime.now().strftime("%Y-%m-%d")
                 final_excel = to_excel(filtered_report, reasons_df)
                 rejected_excel = to_excel(filtered_report[filtered_report['Status'] == 'Rejected'], reasons_df)
-                approved_excel = to_excel(filtered_report[filtered_report['Status'] == 'Approved'], reasons_df)
+                approved_excel = to_excel(filtered_report[final_report['Status'] == 'Approved'], reasons_df)
                 full_excel = to_excel_full_data(filtered_df, filtered_report)
                 
                 st.markdown(get_download_link(final_excel, f"{file_prefix}_Final_Report_{current_date}_{seller_label}.xlsx", "Download Final Report"), unsafe_allow_html=True)
