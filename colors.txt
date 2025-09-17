@@ -1,3 +1,5 @@
+clear
+plastic
 navy
 black
 yellow
@@ -335,3 +337,4 @@ Zebra
 Cowhide
 panda
 atrovirens
+
