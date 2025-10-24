@@ -237,8 +237,8 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
 
     flag_reason_comment_mapping = {
         "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)", "Please contact vendor support for sale of..."),
-        "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
-This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."),
+        "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
+This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."""),
         "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", "Please contact Jumia Seller Support to raise a claim and verify the authenticity of this product."),
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "Kindly update the product title using this format: Name – Type of the Products – Color.
 If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."),
