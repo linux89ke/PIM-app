@@ -245,7 +245,7 @@ This step will help ensure that all necessary requirements and approvals are add
         "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
         "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
         "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"),
-        "Duplicate product": ("Duplicate products", "kindly note product was rejected because its a duplicate product"),
+        "Duplicate product": ("1000007 - Other Reason", "kindly note product was rejected because its a duplicate product"),
     }
 
     validation_results_dfs = {}
