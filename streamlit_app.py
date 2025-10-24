@@ -240,13 +240,11 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
 This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."""),
         "Perfume Price Check": ("1000029 - Kindly Contact Jumia Seller Support To Verify This Product's Authenticity By Raising A Claim", "Please contact Jumia Seller Support to raise a claim and verify the authenticity of this product."),
-        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "Kindly update the product title using this format: Name – Type of the Products – Color.
-If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."),
+        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."),
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
         "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
         "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
-        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.
-If you include it in both fields, it will show up twice in the product title on the website"),
+        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"),
         "Duplicate product": ("Duplicate products", "kindly note product was rejected because its a duplicate product"),
     }
 
