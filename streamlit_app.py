@@ -4,22 +4,18 @@ from io import BytesIO
 from datetime import datetime
 import re
 import os
-
 # Set page config
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
-
 # --- Constants for column names ---
-PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG"]
+PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]  # Added SellerName here
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = ["PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE", "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU", "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG"]
-
 # Country mapping for Data Lake tab
 COUNTRY_MAPPING = {
     "Kenya": "jumia-ke",
     "Uganda": "jumia-ug",
-    "All Countries": None  # None indicates no filtering
+    "All Countries": None # None indicates no filtering
 }
-
 # Function to extract date from filename
 def extract_date_from_filename(filename):
     pattern = r'(\d{4}-\d{2}-\d{2})'
@@ -27,7 +23,6 @@ def extract_date_from_filename(filename):
     if match:
         return pd.to_datetime(match.group(1))
     return None
-
 # Function to load blacklisted words from a file
 def load_blacklisted_words():
     try:
@@ -39,7 +34,6 @@ def load_blacklisted_words():
     except Exception as e:
         st.error(f"Error loading blacklisted words: {e}")
         return []
-
 # Function to load book category codes from file
 def load_book_category_codes():
     try:
@@ -51,7 +45,6 @@ def load_book_category_codes():
     except Exception as e:
         st.error(f"Error loading Books_cat.xlsx: {e}")
         return []
-
 # Function to load sensitive brand words from Excel file
 def load_sensitive_brand_words():
     try:
@@ -63,7 +56,6 @@ def load_sensitive_brand_words():
     except Exception as e:
         st.error(f"Error loading sensitive_brands.xlsx: {e}")
         return []
-
 # Function to load approved book sellers from Excel file
 def load_approved_book_sellers():
     try:
@@ -75,7 +67,6 @@ def load_approved_book_sellers():
     except Exception as e:
         st.error(f"Error loading Books_Approved_Sellers.xlsx: {e}")
         return []
-
 # Function to load perfume category codes from file
 def load_perfume_category_codes():
     try:
@@ -87,7 +78,6 @@ def load_perfume_category_codes():
     except Exception as e:
         st.error(f"Error loading Perfume_cat.txt: {e}")
         return []
-
 # Function to load configuration files
 def load_config_files():
     config_files = {
@@ -108,7 +98,6 @@ def load_config_files():
             st.error(f"Error loading {filename}: {e}")
             data[key] = pd.DataFrame()
     return data
-
 # Validation check functions
 def check_missing_color(data, book_category_codes):
     if 'CATEGORY_CODE' not in data.columns or 'COLOR' not in data.columns:
@@ -116,12 +105,10 @@ def check_missing_color(data, book_category_codes):
     non_book_data = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
     missing_color_non_books = non_book_data[non_book_data['COLOR'].isna() | (non_book_data['COLOR'] == '')]
     return missing_color_non_books
-
 def check_missing_brand_or_name(data):
     if 'BRAND' not in data.columns or 'NAME' not in data.columns:
         return pd.DataFrame(columns=data.columns)
     return data[data['BRAND'].isna() | (data['BRAND'] == '') | data['NAME'].isna() | (data['NAME'] == '')]
-
 def check_single_word_name(data, book_category_codes):
     if 'CATEGORY_CODE' not in data.columns or 'NAME' not in data.columns:
         return pd.DataFrame(columns=data.columns)
@@ -130,40 +117,33 @@ def check_single_word_name(data, book_category_codes):
         non_book_data['NAME'].astype(str).str.split().str.len() == 1
     ]
     return flagged_non_book_single_word_names
-
 def check_generic_brand_issues(data, valid_category_codes_fas):
     if 'CATEGORY_CODE' not in data.columns or 'BRAND' not in data.columns:
         return pd.DataFrame(columns=data.columns)
     if not valid_category_codes_fas:
         return pd.DataFrame(columns=data.columns)
     return data[(data['CATEGORY_CODE'].isin(valid_category_codes_fas)) & (data['BRAND'] == 'Generic')]
-
 def check_brand_in_name(data):
     if 'BRAND' not in data.columns or 'NAME' not in data.columns:
         return pd.DataFrame(columns=data.columns)
     return data[data.apply(lambda row:
         isinstance(row['BRAND'], str) and isinstance(row['NAME'], str) and
         row['BRAND'].lower() in row['NAME'].lower(), axis=1)]
-
 def check_duplicate_products(data):
     subset_cols = [col for col in ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR'] if col in data.columns]
     if len(subset_cols) < 4:
         return pd.DataFrame(columns=data.columns)
     return data[data.duplicated(subset=subset_cols, keep=False)]
-
 def check_sensitive_brands(data, sensitive_brand_words, book_category_codes):
     if 'CATEGORY_CODE' not in data.columns or 'NAME' not in data.columns:
         return pd.DataFrame(columns=data.columns)
     book_data = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     if not sensitive_brand_words or book_data.empty:
         return pd.DataFrame(columns=data.columns)
-
     sensitive_regex_words = [r'\b' + re.escape(word.lower()) + r'\b' for word in sensitive_brand_words]
     sensitive_brands_regex = '|'.join(sensitive_regex_words)
-
     mask_name = book_data['NAME'].astype(str).str.lower().str.contains(sensitive_brands_regex, regex=True, na=False)
     return book_data[mask_name]
-
 def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers):
     if 'CATEGORY_CODE' not in data.columns or 'SELLER_NAME' not in data.columns:
         return pd.DataFrame(columns=data.columns)
@@ -172,27 +152,22 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
         return pd.DataFrame(columns=data.columns)
     unapproved_book_sellers_mask = ~book_data['SELLER_NAME'].isin(approved_book_sellers)
     return book_data[unapproved_book_sellers_mask]
-
 def check_perfume_price(data, perfumes_df, perfume_category_codes):
     required_cols = ['CATEGORY_CODE', 'NAME', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
     if not all(col in data.columns for col in required_cols) or \
        perfumes_df.empty or not perfume_category_codes or \
        not all(col in perfumes_df.columns for col in ['BRAND', 'PRODUCT_NAME', 'KEYWORD', 'PRICE']):
         return pd.DataFrame(columns=data.columns)
-
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)]
     if perfume_data.empty:
         return pd.DataFrame(columns=data.columns)
-
     flagged_perfumes_list = []
     for index, row in perfume_data.iterrows():
         seller_product_name = str(row['NAME']).strip().lower()
         seller_brand_name = str(row['BRAND']).strip().lower()
         seller_price = row['GLOBAL_SALE_PRICE'] if pd.notna(row['GLOBAL_SALE_PRICE']) and row['GLOBAL_SALE_PRICE'] > 0 else row['GLOBAL_PRICE']
-
         if not pd.notna(seller_price) or seller_price <= 0:
             continue
-
         matched_perfume_row = None
         for _, perfume_row in perfumes_df.iterrows():
             ref_brand = str(perfume_row['BRAND']).strip().lower()
@@ -213,11 +188,9 @@ def check_perfume_price(data, perfumes_df, perfume_category_codes):
             price_difference = reference_price_dollar - (seller_price / 129)
             if price_difference >= 30:
                 flagged_perfumes_list.append(row.to_dict())
-
     if flagged_perfumes_list:
         return pd.DataFrame(flagged_perfumes_list)
     return pd.DataFrame(columns=data.columns)
-
 def validate_products(data, config_data, blacklisted_words, reasons_dict, book_category_codes, sensitive_brand_words, approved_book_sellers, perfume_category_codes, country):
     validations = [
         ("Sensitive Brand Issues", check_sensitive_brands, {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}),
@@ -230,11 +203,9 @@ def validate_products(data, config_data, blacklisted_words, reasons_dict, book_c
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Duplicate product", check_duplicate_products, {}),
     ]
-
     if country == "Uganda":
         validations_to_skip = ["Sensitive Brand Issues", "Seller Approve to sell books", "Perfume Price Check"]
         validations = [v for v in validations if v[0] not in validations_to_skip]
-
     flag_reason_comment_mapping = {
         "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)", "Please contact vendor support for sale of..."),
         "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
@@ -249,7 +220,6 @@ If available, please also add key details such as weight, capacity, type, and wa
 If you include it in both fields, it will show up twice in the product title on the website"""),
         "Duplicate product": ("1000007 - Other Reason", "kindly note product was rejected because its a duplicate product"),
     }
-
     validation_results_dfs = {}
     for flag_name, check_func, func_kwargs in validations:
         current_kwargs = {'data': data}
@@ -261,7 +231,6 @@ If you include it in both fields, it will show up twice in the product title on 
                 current_kwargs['valid_category_codes_fas'] = []
         else:
             current_kwargs.update(func_kwargs)
-
         try:
             result_df = check_func(**current_kwargs)
             if not result_df.empty and 'PRODUCT_SET_SID' not in result_df.columns and 'PRODUCT_SET_SID' in data.columns:
@@ -272,29 +241,23 @@ If you include it in both fields, it will show up twice in the product title on 
         except Exception as e:
             st.error(f"Error during validation check '{flag_name}': {e}")
             validation_results_dfs[flag_name] = pd.DataFrame(columns=data.columns)
-
     final_report_rows = []
     processed_sids = set()
-
     for flag_name, _, _ in validations:
         validation_df = validation_results_dfs.get(flag_name, pd.DataFrame())
         if validation_df.empty or 'PRODUCT_SET_SID' not in validation_df.columns:
             continue
-
         rejection_reason, comment = flag_reason_comment_mapping.get(flag_name, ("Unknown Reason", "No comment defined."))
-
         flagged_sids_df = pd.merge(
             validation_df[['PRODUCT_SET_SID']],
             data,
             on='PRODUCT_SET_SID',
             how='left'
         )
-
         for _, row in flagged_sids_df.iterrows():
             current_product_sid = row.get('PRODUCT_SET_SID')
             if current_product_sid in processed_sids:
                 continue
-
             processed_sids.add(current_product_sid)
             final_report_rows.append({
                 'ProductSetSid': current_product_sid,
@@ -302,14 +265,12 @@ If you include it in both fields, it will show up twice in the product title on 
                 'Status': 'Rejected',
                 'Reason': rejection_reason,
                 'Comment': comment,
-                'FLAG': flag_name
+                'FLAG': flag_name,
+                'SellerName': row.get('SELLER_NAME', '')  # Added SellerName here
             })
-
     all_sids = set(data['PRODUCT_SET_SID'].astype(str).unique())
     approved_sids = all_sids - processed_sids
-
     approved_data = data[data['PRODUCT_SET_SID'].isin(approved_sids)]
-
     for _, row in approved_data.iterrows():
         final_report_rows.append({
             'ProductSetSid': row.get('PRODUCT_SET_SID'),
@@ -317,12 +278,11 @@ If you include it in both fields, it will show up twice in the product title on 
             'Status': 'Approved',
             'Reason': "",
             'Comment': "",
-            'FLAG': ""
+            'FLAG': "",
+            'SellerName': row.get('SELLER_NAME', '')  # Added SellerName here
         })
-
     final_report_df = pd.DataFrame(final_report_rows)
     return final_report_df, validation_results_dfs
-
 # --- Export functions ---
 def to_excel_base(df_to_export, sheet_name, columns_to_include, writer):
     df_prepared = df_to_export.copy()
@@ -330,7 +290,6 @@ def to_excel_base(df_to_export, sheet_name, columns_to_include, writer):
         if col not in df_prepared.columns:
             df_prepared[col] = pd.NA
     df_prepared[columns_to_include].to_excel(writer, index=False, sheet_name=sheet_name)
-
 def to_excel_full_data(data_df, final_report_df):
     try:
         output = BytesIO()
@@ -338,10 +297,9 @@ def to_excel_full_data(data_df, final_report_df):
         final_report_df_copy = final_report_df.copy()
         data_df_copy['PRODUCT_SET_SID'] = data_df_copy['PRODUCT_SET_SID'].astype(str).str.strip()
         final_report_df_copy['ProductSetSid'] = final_report_df_copy['ProductSetSid'].astype(str).str.strip()
-
         merged_df = pd.merge(
             data_df_copy,
-            final_report_df_copy[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]],
+            final_report_df_copy[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],  # Added SellerName to merge
             left_on="PRODUCT_SET_SID",
             right_on="ProductSetSid",
             how='left'
@@ -349,19 +307,15 @@ def to_excel_full_data(data_df, final_report_df):
         if merged_df.empty:
             st.error("Merged DataFrame is empty. Verify PRODUCT_SET_SID values match.")
             return output
-
         if 'ProductSetSid_y' in merged_df.columns:
             merged_df.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged_df.columns:
             merged_df.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
-
         if 'FLAG' in merged_df.columns:
             merged_df['FLAG'] = merged_df['FLAG'].fillna('')
-
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             # Write ProductSets sheet
             to_excel_base(merged_df, "ProductSets", FULL_DATA_COLS, writer)
-
             # Get workbook and worksheet for Sellers Data
             workbook = writer.book
             worksheet = workbook.add_worksheet('Sellers Data')
@@ -389,11 +343,9 @@ def to_excel_full_data(data_df, final_report_df):
                 'align': 'right',
                 'valign': 'vcenter'
             })
-
             # Sellers Data sheet
             sellers_data_rows = []
             start_row = 0
-
             # Sellers Summary
             try:
                 if 'SELLER_NAME' in merged_df.columns and not merged_df['SELLER_NAME'].isna().all():
@@ -411,7 +363,6 @@ def to_excel_full_data(data_df, final_report_df):
                     sellers_data_rows.append(pd.DataFrame([['Sellers Summary', 'No valid SELLER_NAME data available', '']]))
             except Exception as e:
                 sellers_data_rows.append(pd.DataFrame([['Sellers Summary', f'Error: {str(e)}', '']]))
-
             # Categories Summary
             try:
                 if 'CATEGORY' in merged_df.columns and not merged_df['CATEGORY'].isna().all():
@@ -429,7 +380,6 @@ def to_excel_full_data(data_df, final_report_df):
                     sellers_data_rows.append(pd.DataFrame([['Categories Summary', 'No valid CATEGORY data available', '']]))
             except Exception as e:
                 sellers_data_rows.append(pd.DataFrame([['Categories Summary', f'Error: {str(e)}', '']]))
-
             # Rejection Reasons Summary
             try:
                 if 'Reason' in merged_df.columns and not merged_df['Reason'].isna().all():
@@ -447,7 +397,6 @@ def to_excel_full_data(data_df, final_report_df):
                     sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', 'No valid Reason data available', '']]))
             except Exception as e:
                 sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', f'Error: {str(e)}', '']]))
-
             # Write Sellers Data sheet with formatting
             for df in sellers_data_rows:
                 if df.empty or len(df.columns) < 2:
@@ -466,17 +415,14 @@ def to_excel_full_data(data_df, final_report_df):
                     if len(df.columns) > 1 and pd.notna(df.iloc[0, 1]):
                         worksheet.write(start_row, 1, df.iloc[0, 1], cell_format)
                 start_row += len(df) + 1
-
             worksheet.set_column('A:A', 30)
             worksheet.set_column('B:B', 10)
             worksheet.set_column('C:C', 20)
-
         output.seek(0)
         return output
     except Exception as e:
         st.error(f"Error generating Full Data Export: {str(e)}")
         return BytesIO()
-
 def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
     df_copy = flag_df.copy()
@@ -485,10 +431,8 @@ def to_excel_flag_data(flag_df, flag_name):
         to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
     output.seek(0)
     return output
-
 def to_excel_seller_data(seller_data_df, seller_final_report_df):
     return to_excel_full_data(seller_data_df, seller_final_report_df)
-
 def to_excel(report_df, reasons_config_df, sheet1_name="ProductSets", sheet2_name="RejectionReasons"):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -499,14 +443,13 @@ def to_excel(report_df, reasons_config_df, sheet1_name="ProductSets", sheet2_nam
             pd.DataFrame(columns=REJECTION_REASONS_COLS).to_excel(writer, index=False, sheet_name=sheet2_name)
     output.seek(0)
     return output
-
 # Function to parse summary tables from Sellers Data sheet
 def parse_sellers_data_sheet(sellers_sheet, date):
     # sellers_sheet is pd.read_excel(..., header=None)
     all_sellers = []
     all_categories = []
     all_reasons = []
-    
+   
     # Find section headers
     section_starts = {}
     for idx in range(len(sellers_sheet)):
@@ -520,7 +463,7 @@ def parse_sellers_data_sheet(sellers_sheet, date):
             section_starts['categories'] = idx
         elif 'Rejection Reasons Summary' in cell:
             section_starts['reasons'] = idx
-    
+   
     # Parse Sellers
     if 'sellers' in section_starts:
         start = section_starts['sellers']
@@ -540,7 +483,7 @@ def parse_sellers_data_sheet(sellers_sheet, date):
                 data_rows['Date'] = date
                 data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
                 all_sellers.append(data_rows)
-    
+   
     # Parse Categories
     if 'categories' in section_starts:
         start = section_starts['categories']
@@ -559,7 +502,7 @@ def parse_sellers_data_sheet(sellers_sheet, date):
                 data_rows['Date'] = date
                 data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
                 all_categories.append(data_rows)
-    
+   
     # Parse Reasons
     if 'reasons' in section_starts:
         start = section_starts['reasons']
@@ -578,16 +521,14 @@ def parse_sellers_data_sheet(sellers_sheet, date):
                 data_rows['Date'] = date
                 data_rows['Rejected Products'] = pd.to_numeric(data_rows['Rejected Products'], errors='coerce')
                 all_reasons.append(data_rows)
-    
+   
     sellers_df = pd.concat(all_sellers, ignore_index=True) if all_sellers else pd.DataFrame()
     categories_df = pd.concat(all_categories, ignore_index=True) if all_categories else pd.DataFrame()
     reasons_df = pd.concat(all_reasons, ignore_index=True) if all_reasons else pd.DataFrame()
-    
+   
     return sellers_df, categories_df, reasons_df
-
 # --- Initialize the app ---
 st.title("Product Validation Tool")
-
 # --- Load configuration files (global) ---
 config_data = load_config_files()
 blacklisted_words = load_blacklisted_words()
@@ -595,7 +536,6 @@ book_category_codes = load_book_category_codes()
 sensitive_brand_words = load_sensitive_brand_words()
 approved_book_sellers = load_approved_book_sellers()
 perfume_category_codes = load_perfume_category_codes()
-
 reasons_df_from_config = config_data.get('reasons', pd.DataFrame())
 reasons_dict_legacy = {}
 if not reasons_df_from_config.empty:
@@ -607,14 +547,11 @@ if not reasons_df_from_config.empty:
             reasons_dict_legacy[f"{code} - {message}"] = (code, message, comment)
         elif isinstance(reason_text, str):
             reasons_dict_legacy[reason_text] = (reason_text, reason_text, comment)
-
 # --- Tabs ---
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
-
 with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     uploaded_file = st.file_uploader("Upload your CSV file", type='csv', key="daily_file")
-
     if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
         file_prefix = "KE" if country == "Kenya" else "UG"
@@ -627,33 +564,27 @@ with tab1:
             }
             raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=dtype_spec)
             st.write(f"Loaded CSV with {len(raw_data)} rows.")
-            
+           
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'GLOBAL_PRICE', 'GLOBAL_SALE_PRICE', 'PARENTSKU']
             data = raw_data.copy()
             for col in essential_input_cols:
                 if col not in data.columns:
                     data[col] = pd.NA
-
             for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE', 'PARENTSKU']:
                 if col in data.columns:
                     data[col] = data[col].astype(str).fillna('')
-
             if data.empty:
                 st.error("The uploaded CSV file is empty or became empty after initial processing. Please verify the file contains data and uses the correct format (semicolon-separated, with required columns).")
                 st.stop()
-
             st.write(f"Processed {len(data)} products after cleaning.")
-
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
                 book_category_codes, sensitive_brand_words,
                 approved_book_sellers, perfume_category_codes, country
             )
             process_success = True
-
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
-
             st.sidebar.header("Seller Options")
             seller_options = ['All Sellers']
             if 'SELLER_NAME' in data.columns and 'ProductSetSid' in final_report_df.columns and 'PRODUCT_SET_SID' in data.columns:
@@ -661,9 +592,8 @@ with tab1:
                 final_report_df_for_join['ProductSetSid'] = final_report_df_for_join['ProductSetSid'].astype(str)
                 data_for_join = data[['PRODUCT_SET_SID', 'SELLER_NAME']].copy()
                 data_for_join['PRODUCT_SET_SID'] = data_for_join['PRODUCT_SET_SID'].astype(str)
-                
+               
                 data_for_join.drop_duplicates(subset=['PRODUCT_SET_SID'], inplace=True)
-
                 report_with_seller = pd.merge(
                     final_report_df_for_join,
                     data_for_join,
@@ -673,13 +603,10 @@ with tab1:
                 )
                 if not report_with_seller.empty:
                     seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
-
             selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="daily_sellers")
-
             seller_data_filtered = data.copy()
             seller_final_report_df_filtered = final_report_df.copy()
             seller_label_filename = "All_Sellers"
-
             if 'All Sellers' not in selected_sellers and selected_sellers:
                 if 'SELLER_NAME' in data.columns:
                     seller_data_filtered = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
@@ -687,16 +614,14 @@ with tab1:
                     seller_label_filename = "_".join(s.replace(" ", "_").replace("/", "_") for s in selected_sellers)
                 else:
                     st.sidebar.warning("SELLER_NAME column missing, cannot filter by seller.")
-
             seller_rejected_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Rejected']
             seller_approved_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Approved']
-
             st.sidebar.subheader("Seller SKU Metrics")
             if 'SELLER_NAME' in data.columns and 'report_with_seller' in locals() and not report_with_seller.empty:
                 sellers_to_display = selected_sellers if 'All Sellers' not in selected_sellers and selected_sellers else seller_options[1:]
                 for seller in sellers_to_display:
                     if seller == 'All Sellers': continue
-                    
+                   
                     current_seller_data = report_with_seller[report_with_seller['SELLER_NAME'] == seller]
                     if 'All Sellers' not in selected_sellers and selected_sellers and seller in selected_sellers:
                         rej_count = current_seller_data[current_seller_data['Status'] == 'Rejected']['ParentSKU'].count()
@@ -708,7 +633,6 @@ with tab1:
                         st.sidebar.write(f"{seller}: **Rej**: {rej_count}, **App**: {app_count}")
             else:
                 st.sidebar.write("Seller metrics unavailable (SELLER_NAME missing or no products).")
-
             st.sidebar.subheader(f"Exports for: {seller_label_filename.replace('_', ' ')}")
             seller_final_excel = to_excel(seller_final_report_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
@@ -718,7 +642,7 @@ with tab1:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="daily_final_export"
             )
-            
+           
             seller_rejected_excel = to_excel(seller_rejected_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
                 label="Seller Rejected Export",
@@ -727,7 +651,6 @@ with tab1:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="daily_rejected_export"
             )
-
             seller_approved_excel = to_excel(seller_approved_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
                 label="Seller Approved Export",
@@ -736,7 +659,6 @@ with tab1:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="daily_approved_export"
             )
-
             seller_full_excel = to_excel_seller_data(seller_data_filtered, seller_final_report_df_filtered)
             st.sidebar.download_button(
                 label="Seller Full Data Export",
@@ -745,7 +667,6 @@ with tab1:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="daily_full_export"
             )
-
             st.header("Overall Product Validation Results")
             col1, col2 = st.columns(2)
             with col1:
@@ -755,13 +676,12 @@ with tab1:
                 st.metric("Rejected Products (Overall)", len(rejected_df))
                 rejection_rate = (len(rejected_df)/len(data)*100) if len(data) > 0 else 0
                 st.metric("Rejection Rate (Overall)", f"{rejection_rate:.1f}%")
-
             for title, df_flagged in individual_flag_dfs.items():
                 with st.expander(f"{title} ({len(df_flagged)} products overall)"):
                     if not df_flagged.empty:
                         display_cols = [col for col in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE', 'COLOR'] if col in df_flagged.columns]
                         st.dataframe(df_flagged[display_cols] if display_cols else df_flagged)
-                        
+                       
                         flag_excel_export = to_excel_flag_data(df_flagged.copy(), title)
                         safe_title = title.replace(' ', '_').replace('/', '_')
                         st.download_button(
@@ -773,7 +693,6 @@ with tab1:
                         )
                     else:
                         st.write("No issues found for this check.")
-
             st.header("Overall Data Exports (All Sellers)")
             col1_main, col2_main, col3_main, col4_main = st.columns(4)
             with col1_main:
@@ -812,7 +731,6 @@ with tab1:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="daily_overall_full"
                 )
-
         except pd.errors.ParserError as pe:
             process_success = False
             st.error(f"Error parsing the CSV file. Please ensure it's a valid CSV with ';' delimiter and UTF-8 or ISO-8859-1 encoding: {pe}")
@@ -821,45 +739,43 @@ with tab1:
             st.error(f"An unexpected error occurred processing the file: {e}")
             import traceback
             st.error(f"Traceback: {traceback.format_exc()}")
-
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
-
 with tab2:
     st.subheader("Weekly Analysis")
     uploaded_files = st.file_uploader("Upload multiple Excel files for the week", type=['xlsx'], accept_multiple_files=True, key="weekly_files")
-    
+   
     if uploaded_files:
         all_sellers_dfs = []
         all_categories_dfs = []
         all_reasons_dfs = []
         dates = []
-        
+       
         for file in uploaded_files:
             date = extract_date_from_filename(file.name)
             if date is None:
                 st.warning(f"Could not extract date from filename: {file.name}")
                 continue
-            
+           
             try:
                 # Read Sellers Data sheet with no header to parse manually
                 sellers_sheet = pd.read_excel(file, sheet_name='Sellers Data', header=None)
                 sellers_df, categories_df, reasons_df = parse_sellers_data_sheet(sellers_sheet, date)
-                
+               
                 if not sellers_df.empty:
                     all_sellers_dfs.append(sellers_df)
                 if not categories_df.empty:
                     all_categories_dfs.append(categories_df)
                 if not reasons_df.empty:
                     all_reasons_dfs.append(reasons_df)
-                
+               
                 dates.append(date)
             except Exception as e:
                 st.error(f"Error reading {file.name}: {e}")
-        
+       
         if all_sellers_dfs or all_categories_dfs or all_reasons_dfs:
             st.success(f"Parsed data from {len(dates)} files, covering dates: {sorted(set(dates))}")
-            
+           
             # Aggregate Sellers
             if all_sellers_dfs:
                 aggregated_sellers = pd.concat(all_sellers_dfs, ignore_index=True)
@@ -868,7 +784,7 @@ with tab2:
                 weekly_sellers['Percentage'] = (weekly_sellers['Rejected Products'] / weekly_sellers['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Sellers by Rejected Products (Weekly)")
                 st.dataframe(weekly_sellers)
-                
+               
                 # Create chart
                 chart_data = {
                     "type": "bar",
@@ -896,10 +812,10 @@ with tab2:
                 }
                 st.markdown("**Chart: Top 5 Sellers by Rejected Products**")
                 st.json(chart_data, expanded=False)
-            
+           
             else:
                 st.warning("No seller data parsed.")
-            
+           
             # Aggregate Categories
             if all_categories_dfs:
                 aggregated_categories = pd.concat(all_categories_dfs, ignore_index=True)
@@ -908,7 +824,7 @@ with tab2:
                 weekly_categories['Percentage'] = (weekly_categories['Rejected Products'] / weekly_categories['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Categories by Rejected Products (Weekly)")
                 st.dataframe(weekly_categories)
-                
+               
                 # Create chart
                 chart_data = {
                     "type": "bar",
@@ -936,10 +852,10 @@ with tab2:
                 }
                 st.markdown("**Chart: Top 5 Categories by Rejected Products**")
                 st.json(chart_data, expanded=False)
-            
+           
             else:
                 st.warning("No category data parsed.")
-            
+           
             # Aggregate Reasons
             if all_reasons_dfs:
                 aggregated_reasons = pd.concat(all_reasons_dfs, ignore_index=True)
@@ -948,7 +864,7 @@ with tab2:
                 weekly_reasons['Percentage'] = (weekly_reasons['Rejected Products'] / weekly_reasons['Rejected Products'].sum() * 100).round(1)
                 st.subheader("Top 5 Rejection Reasons (Weekly)")
                 st.dataframe(weekly_reasons)
-                
+               
                 # Create chart
                 chart_data = {
                     "type": "bar",
@@ -976,10 +892,10 @@ with tab2:
                 }
                 st.markdown("**Chart: Top 5 Rejection Reasons**")
                 st.json(chart_data, expanded=False)
-            
+           
             else:
                 st.warning("No reasons data parsed.")
-            
+           
             # Deep Analysis
             st.subheader("Deep Analysis")
             total_rejections = 0
@@ -987,24 +903,24 @@ with tab2:
                 total_rejections = aggregated_sellers['Rejected Products'].sum()
             elif 'aggregated_categories' in locals():
                 total_rejections = aggregated_categories['Rejected Products'].sum()
-            
+           
             if total_rejections > 0:
                 avg_daily_rej = total_rejections / len(set(dates))
                 st.metric("Total Weekly Rejections", total_rejections)
                 st.metric("Average Daily Rejections", f"{avg_daily_rej:.1f}")
-                
+               
                 if 'weekly_sellers' in locals() and not weekly_sellers.empty:
                     top_seller_pct = weekly_sellers.iloc[0]['Percentage']
                     st.info(f"The top seller '{weekly_sellers.iloc[0]['Seller']}' accounts for {top_seller_pct:.1f}% of weekly rejections, indicating potential systemic issues in their listings.")
-                
+               
                 if 'weekly_categories' in locals() and not weekly_categories.empty:
                     top_cat_pct = weekly_categories.iloc[0]['Percentage']
                     st.info(f"Category '{weekly_categories.iloc[0]['Category']}' has the highest rejections at {top_cat_pct:.1f}%, suggesting category-specific validation rules or training needs.")
-                
+               
                 if 'weekly_reasons' in locals() and not weekly_reasons.empty:
                     top_reason_pct = weekly_reasons.iloc[0]['Percentage']
                     st.info(f"Primary rejection reason '{weekly_reasons.iloc[0]['Rejection Reason']}' drives {top_reason_pct:.1f}% of issues; prioritize automated checks or seller education here.")
-                
+               
                 # Trend if multiple dates
                 if len(set(dates)) > 1:
                     if 'aggregated_sellers' in locals():
@@ -1035,7 +951,7 @@ with tab2:
                         }
                         st.markdown("**Chart: Daily Rejection Trend**")
                         st.json(chart_data, expanded=False)
-            
+           
             # Recommendations
             st.subheader("Recommendations")
             recs = []
@@ -1049,10 +965,10 @@ with tab2:
                 recs.append("- Overall rejection rate is high (>50/day); conduct a platform-wide audit on validation rules and seller onboarding.")
             else:
                 recs.append("- Rejection trends are stable; continue monitoring but focus on proactive seller support.")
-            
+           
             for rec in recs:
                 st.write(f"• {rec}")
-            
+           
             # Export
             st.subheader("Export Aggregated Weekly Data")
             export_dfs = {}
@@ -1079,12 +995,10 @@ with tab2:
             st.warning("No summary data found in the 'Sellers Data' sheets of uploaded files.")
     else:
         st.info("Upload one or more Excel files to start the weekly analysis.")
-
 with tab3:
     st.subheader("Data Lake Validation")
     country = st.selectbox("Select Country", ["Kenya", "Uganda", "All Countries"], key="data_lake_country")
     uploaded_file = st.file_uploader("Upload your Data Lake Excel file", type='xlsx', key="data_lake_file")
-
     if uploaded_file is not None:
         current_date = datetime.now().strftime("%Y-%m-%d")
         file_prefix = "KE" if country == "Kenya" else "UG" if country == "Uganda" else "ALL"
@@ -1093,11 +1007,9 @@ with tab3:
             # Read the Excel file, Sheet1
             raw_data = pd.read_excel(uploaded_file, sheet_name='Sheet1')
             st.write(f"Loaded Excel file with {len(raw_data)} rows.")
-
             if raw_data.empty:
                 st.error("The uploaded Excel file is empty. Please verify that the file contains data in 'Sheet1'.")
                 st.stop()
-
             # Map columns from Data Lake format to expected format
             column_mapping = {
                 'cod_productset_sid': 'PRODUCT_SET_SID',
@@ -1115,10 +1027,8 @@ with tab3:
                 'dsc_shop_tax_class': 'TAX_CLASS'
                 # Note: GLOBAL_PRICE and GLOBAL_SALE_PRICE are not present in the provided data, will be NA
             }
-
             # Rename columns
             data = raw_data.rename(columns=column_mapping).copy()
-
             # Filter by country if not "All Countries"
             country_code = COUNTRY_MAPPING[country]
             if country_code and 'ACTIVE_STATUS_COUNTRY' in data.columns:
@@ -1131,16 +1041,13 @@ with tab3:
 - All rows were filtered out due to missing or invalid data.
 Available countries in data: {', '.join(unique_countries) if unique_countries.size > 0 else 'None'}""")
                     st.stop()
-
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'PARENTSKU']
             for col in essential_input_cols:
                 if col not in data.columns:
                     data[col] = pd.NA
-
             for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE', 'PARENTSKU']:
                 if col in data.columns:
                     data[col] = data[col].astype(str).fillna('')
-
             if data.empty:
                 st.error("""The DataFrame is empty after processing. Possible reasons:
 - The file contains no valid data after column mapping.
@@ -1148,19 +1055,15 @@ Available countries in data: {', '.join(unique_countries) if unique_countries.si
 - Required columns are missing or empty.
 Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 st.stop()
-
             st.write(f"Processed {len(data)} products after cleaning.")
-
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
                 book_category_codes, sensitive_brand_words,
                 approved_book_sellers, perfume_category_codes, country
             )
             process_success = True
-
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
-
             st.sidebar.header("Seller Options")
             seller_options = ['All Sellers']
             if 'SELLER_NAME' in data.columns and 'ProductSetSid' in final_report_df.columns and 'PRODUCT_SET_SID' in data.columns:
@@ -1168,9 +1071,8 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 final_report_df_for_join['ProductSetSid'] = final_report_df_for_join['ProductSetSid'].astype(str)
                 data_for_join = data[['PRODUCT_SET_SID', 'SELLER_NAME']].copy()
                 data_for_join['PRODUCT_SET_SID'] = data_for_join['PRODUCT_SET_SID'].astype(str)
-                
+               
                 data_for_join.drop_duplicates(subset=['PRODUCT_SET_SID'], inplace=True)
-
                 report_with_seller = pd.merge(
                     final_report_df_for_join,
                     data_for_join,
@@ -1180,13 +1082,10 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 )
                 if not report_with_seller.empty:
                     seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
-
             selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="data_lake_sellers")
-
             seller_data_filtered = data.copy()
             seller_final_report_df_filtered = final_report_df.copy()
             seller_label_filename = "All_Sellers"
-
             if 'All Sellers' not in selected_sellers and selected_sellers:
                 if 'SELLER_NAME' in data.columns:
                     seller_data_filtered = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
@@ -1194,16 +1093,14 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                     seller_label_filename = "_".join(s.replace(" ", "_").replace("/", "_") for s in selected_sellers)
                 else:
                     st.sidebar.warning("SELLER_NAME column missing, cannot filter by seller.")
-
             seller_rejected_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Rejected']
             seller_approved_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Approved']
-
             st.sidebar.subheader("Seller SKU Metrics")
             if 'SELLER_NAME' in data.columns and 'report_with_seller' in locals() and not report_with_seller.empty:
                 sellers_to_display = selected_sellers if 'All Sellers' not in selected_sellers and selected_sellers else seller_options[1:]
                 for seller in sellers_to_display:
                     if seller == 'All Sellers': continue
-                    
+                   
                     current_seller_data = report_with_seller[report_with_seller['SELLER_NAME'] == seller]
                     if 'All Sellers' not in selected_sellers and selected_sellers and seller in selected_sellers:
                         rej_count = current_seller_data[current_seller_data['Status'] == 'Rejected']['ParentSKU'].count()
@@ -1215,7 +1112,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                         st.sidebar.write(f"{seller}: **Rej**: {rej_count}, **App**: {app_count}")
             else:
                 st.sidebar.write("Seller metrics unavailable (SELLER_NAME missing or no products).")
-
             st.sidebar.subheader(f"Exports for: {seller_label_filename.replace('_', ' ')}")
             seller_final_excel = to_excel(seller_final_report_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
@@ -1225,7 +1121,7 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="data_lake_final_export"
             )
-            
+           
             seller_rejected_excel = to_excel(seller_rejected_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
                 label="Seller Rejected Export",
@@ -1234,7 +1130,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="data_lake_rejected_export"
             )
-
             seller_approved_excel = to_excel(seller_approved_df_filtered, reasons_df_from_config)
             st.sidebar.download_button(
                 label="Seller Approved Export",
@@ -1243,7 +1138,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="data_lake_approved_export"
             )
-
             seller_full_excel = to_excel_seller_data(seller_data_filtered, seller_final_report_df_filtered)
             st.sidebar.download_button(
                 label="Seller Full Data Export",
@@ -1252,7 +1146,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="data_lake_full_export"
             )
-
             st.header("Overall Product Validation Results")
             col1, col2 = st.columns(2)
             with col1:
@@ -1262,13 +1155,12 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                 st.metric("Rejected Products (Overall)", len(rejected_df))
                 rejection_rate = (len(rejected_df)/len(data)*100) if len(data) > 0 else 0
                 st.metric("Rejection Rate (Overall)", f"{rejection_rate:.1f}%")
-
             for title, df_flagged in individual_flag_dfs.items():
                 with st.expander(f"{title} ({len(df_flagged)} products overall)"):
                     if not df_flagged.empty:
                         display_cols = [col for col in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE', 'COLOR'] if col in df_flagged.columns]
                         st.dataframe(df_flagged[display_cols] if display_cols else df_flagged)
-                        
+                       
                         flag_excel_export = to_excel_flag_data(df_flagged.copy(), title)
                         safe_title = title.replace(' ', '_').replace('/', '_')
                         st.download_button(
@@ -1280,7 +1172,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                         )
                     else:
                         st.write("No issues found for this check.")
-
             st.header("Overall Data Exports (All Sellers)")
             col1_main, col2_main, col3_main, col4_main = st.columns(4)
             with col1_main:
@@ -1319,7 +1210,6 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="data_lake_overall_full"
                 )
-
         except Exception as e:
             process_success = False
             st.error(f"An unexpected error occurred processing the file: {e}")
@@ -1330,6 +1220,5 @@ Available columns: {', '.join(raw_data.columns)}""".format(raw_data=raw_data))
 - Required columns (e.g., cod_productset_sid, dsc_name) may be missing or incorrectly formatted.
 - The file may be too large or contain invalid data types.
 Please verify the file structure and try again.""")
-
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
