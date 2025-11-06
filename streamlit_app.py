@@ -1239,4 +1239,4 @@ Available columns: {', '.join(raw_data.columns)}""")
 Please verify the file structure and try again.""")
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
-```
+
