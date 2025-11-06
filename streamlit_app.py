@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -1247,4 +1246,3 @@ with tab3:
             st.error(f"Traceback: {traceback.format_exc()}")
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
-```
