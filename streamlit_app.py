@@ -1037,10 +1037,10 @@ with tab3:
                 ke_ug_data = data[valid_countries_mask & ke_ug_mask].copy()
                 excluded_rows = len(data) - len(ke_ug_data)
                 if excluded_rows > 0:
-                    st.warning(f"Excluded {excluded_rows} rows that are not for Kenya (jumia-ke) or Uganda (jumia-ug), or have invalid/missing ACTIVE_STATUS_COUNTRY. Only processing {len(ke_ug_data)} relevant rows.")
+                    st.warning(f"Excluded {excluded_rows} rows from other countries (e.g., NG) or with invalid/missing ACTIVE_STATUS_COUNTRY. Only processing {len(ke_ug_data)} KE/UG rows.")
                 data = ke_ug_data
                 if data.empty:
-                    st.error("No rows for Kenya or Uganda found after excluding invalid countries. Please check the ACTIVE_STATUS_COUNTRY column.")
+                    st.error("No rows for Kenya or Uganda found after excluding other countries. Please check the ACTIVE_STATUS_COUNTRY column.")
                     st.stop()
             else:
                 st.warning("ACTIVE_STATUS_COUNTRY column not found. Proceeding without country filtering, but this may include irrelevant data.")
@@ -1193,50 +1193,4 @@ Available columns: {', '.join(raw_data.columns)}""")
             col1_main, col2_main, col3_main, col4_main = st.columns(4)
             with col1_main:
                 overall_final_excel = to_excel(final_report_df, reasons_df_from_config)
-                st.download_button(
-                    label="Final Export (All)",
-                    data=overall_final_excel,
-                    file_name=f"{file_prefix}_Final_Report_{current_date}_ALL.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="data_lake_overall_final"
-                )
-            with col2_main:
-                overall_rejected_excel = to_excel(rejected_df, reasons_df_from_config)
-                st.download_button(
-                    label="Rejected Export (All)",
-                    data=overall_rejected_excel,
-                    file_name=f"{file_prefix}_Rejected_Products_{current_date}_ALL.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="data_lake_overall_rejected"
-                )
-            with col3_main:
-                overall_approved_excel = to_excel(approved_df, reasons_df_from_config)
-                st.download_button(
-                    label="Approved Export (All)",
-                    data=overall_approved_excel,
-                    file_name=f"{file_prefix}_Approved_Products_{current_date}_ALL.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="data_lake_overall_approved"
-                )
-            with col4_main:
-                overall_full_excel = to_excel_full_data(data.copy(), final_report_df)
-                st.download_button(
-                    label="Full Data Export (All)",
-                    data=overall_full_excel,
-                    file_name=f"{file_prefix}_Full_Data_Export_{current_date}_ALL.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="data_lake_overall_full"
-                )
-        except Exception as e:
-            process_success = False
-            st.error(f"An unexpected error occurred processing the file: {e}")
-            import traceback
-            st.error(f"Traceback: {traceback.format_exc()}")
-            st.error("""Possible issues:
-- The Excel file may not have a 'Sheet1' or may be corrupted.
-- Required columns (e.g., cod_productset_sid, dsc_name) may be missing or incorrectly formatted.
-- The file may be too large or contain invalid data types.
-Please verify the file structure and try again.""")
-        if not process_success and uploaded_file is not None:
-            st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
-
+                st.download_button
