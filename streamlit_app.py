@@ -1,3 +1,4 @@
+```python
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -604,8 +605,28 @@ with tab1:
             raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=dtype_spec)
             st.write(f"Loaded CSV with {len(raw_data)} rows.")
 
+            # --- First: Filter to KE/UG only ---
             data = filter_ke_ug_only(raw_data, "Daily CSV")
+            if data.empty:
+                st.stop()
 
+            # --- Second: Filter to selected country only ---
+            selected_code = "KE" if country == "Kenya" else "UG"
+            before_count = len(data)
+            data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(rf'\b{selected_code}\b', na=False, regex=True)]
+            excluded_in_selected = before_count - len(data)
+
+            if excluded_in_selected > 0:
+                st.warning(f"Excluded {excluded_in_selected} rows not matching selected country ({selected_code}). "
+                           f"Processing {len(data)} {country} rows only.")
+            else:
+                st.info(f"All {len(data)} valid rows are from {country} ({selected_code}).")
+
+            if data.empty:
+                st.error(f"No {country} ({selected_code}) rows found after filtering.")
+                st.stop()
+
+            # --- Continue processing ---
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'GLOBAL_PRICE', 'GLOBAL_SALE_PRICE', 'PARENTSKU']
             for col in essential_input_cols:
                 if col not in data.columns:
@@ -1014,6 +1035,7 @@ with tab3:
             if raw_data.empty:
                 st.error("The uploaded Excel file is empty. Please verify that the file contains data in 'Sheet1'.")
                 st.stop()
+
             column_mapping = {
                 'cod_productset_sid': 'PRODUCT_SET_SID',
                 'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
@@ -1030,17 +1052,32 @@ with tab3:
                 'dsc_shop_tax_class': 'TAX_CLASS'
             }
             data = raw_data.rename(columns=column_mapping).copy()
+
+            # --- First: Filter to KE/UG only ---
             data = filter_ke_ug_only(data, "Data Lake")
-            country_code = COUNTRY_MAPPING[country]
-            if country_code:
-                data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(country_code, na=False, case=False)]
-                st.write(f"Further filtered to {len(data)} products for {country} ({country_code}).")
+            if data.empty:
+                st.stop()
+
+            # --- Second: Filter to selected country (if not All Countries) ---
+            if country != "All Countries":
+                selected_code = "KE" if country == "Kenya" else "UG"
+                before_count = len(data)
+                data = data[data['ACTIVE_STATUS_COUNTRY'].str.contains(rf'\b{selected_code}\b', na=False, regex=True)]
+                excluded_in_selected = before_count - len(data)
+
+                if excluded_in_selected > 0:
+                    st.warning(f"Excluded {excluded_in_selected} rows not matching selected country ({selected_code}). "
+                               f"Processing {len(data)} {country} rows only.")
+                else:
+                    st.info(f"All {len(data)} valid rows are from {country} ({selected_code}).")
+
                 if data.empty:
-                    unique_countries = raw_data['dsc_shop_active_country'].dropna().unique() if 'dsc_shop_active_country' in raw_data.columns else []
-                    st.error(f"""No products found for {country} ({country_code}) after KE/UG filtering. Available countries: {', '.join(unique_countries) if len(unique_countries) > 0 else 'None'}""")
+                    st.error(f"No {country} ({selected_code}) rows found after filtering.")
                     st.stop()
             else:
-                st.write(f"Processing all {len(data)} KE+UG products (no further country filter).")
+                st.info(f"Processing all {len(data)} KE+UG rows (no further filtering).")
+
+            # --- Continue processing ---
             essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'PARENTSKU']
             for col in essential_input_cols:
                 if col not in data.columns:
@@ -1052,6 +1089,7 @@ with tab3:
                 st.error("The DataFrame is empty after processing.")
                 st.stop()
             st.write(f"Processed {len(data)} products after cleaning.")
+
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_dict_legacy,
                 book_category_codes, sensitive_brand_words,
@@ -1209,3 +1247,4 @@ with tab3:
             st.error(f"Traceback: {traceback.format_exc()}")
         if not process_success and uploaded_file is not None:
             st.error("File processing failed. Please check the file format, content, console logs (if running locally), and error messages above, then try again.")
+```
