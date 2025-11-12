@@ -3,7 +3,6 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import re
-import warnings
 
 # -------------------------------------------------
 # Page config
@@ -51,13 +50,27 @@ def _load_excel(path, col):
         st.error(f"Error reading {path}: {e}")
         return []
 
+# Load from TXT: Perfume_cat.txt
+def load_perfume_category_codes_txt():
+    try:
+        with open('Perfume_cat.txt', 'r', encoding='utf-8') as f:
+            codes = [line.strip() for line in f if line.strip()]
+        st.success(f"Loaded {len(codes)} perfume category codes from Perfume_cat.txt")
+        return codes
+    except FileNotFoundError:
+        st.warning("Perfume_cat.txt not found – perfume checks disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading Perfume_cat.txt: {e}")
+        return []
+
 # Load all support files
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
 sensitive_brand_words      = _load_excel('sensitive_brands.xlsx', 'BrandWords')
-perfume_category_codes     = _load_excel('Perfume_cat.xlsx', 'CategoryCode')
-approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')  # ← NEW
+perfume_category_codes     = load_perfume_category_codes_txt()  # ← TXT
+approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
 
 def load_config_files():
     files = {
@@ -203,7 +216,7 @@ def check_missing_color(data, book_category_codes):
     return non_books[non_books['COLOR'].isna() | (non_books['COLOR'] == '')]
 
 # -------------------------------------------------
-# Master validation runner (9 args)
+# Master validation runner
 # -------------------------------------------------
 def validate_products(
     data,
@@ -434,13 +447,6 @@ def to_excel(report_df, reasons_config_df, sheet1_name="ProductSets", sheet2_nam
     return output
 
 # -------------------------------------------------
-# Weekly Analysis Parser
-# -------------------------------------------------
-def parse_sellers_data_sheet(sellers_sheet, date):
-    # (unchanged – omitted for brevity)
-    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-# -------------------------------------------------
 # UI
 # -------------------------------------------------
 st.title("Product Validation Tool")
@@ -486,6 +492,13 @@ with tab1:
                 if col in data.columns:
                     data[col] = data[col].astype(str).fillna('')
 
+            # DEBUG: Show loaded perfume data
+            st.sidebar.header("DEBUG – Perfume Check")
+            st.sidebar.write(f"Perfume codes loaded: {perfume_category_codes}")
+            st.sidebar.write(f"Approved sellers: {approved_perfume_sellers}")
+            st.sidebar.write("First 3 rows from your data:")
+            st.sidebar.dataframe(data[['CATEGORY_CODE', 'SELLER_NAME']].head(3))
+
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_df,
                 book_category_codes, sensitive_brand_words,
@@ -510,7 +523,7 @@ with tab1:
                     if not df_flagged.empty:
                         cols = [c for c in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE'] if c in df_flagged.columns]
                         st.dataframe(df_flagged[cols])
-                        safe = title.replace(' ', '_')
+                        safe = title.replace(' ', '_').replace('/', '_')
                         st.download_button(
                             f"Export {title}",
                             to_excel_flag_data(df_flagged.copy(), title),
@@ -534,4 +547,4 @@ with tab1:
         except Exception as e:
             st.error(f"Error: {e}")
 
-# (Weekly & Data Lake tabs omitted for brevity – same as before)
+# (Weekly & Data Lake tabs – omitted for brevity, same as before)
