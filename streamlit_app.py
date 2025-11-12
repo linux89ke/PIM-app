@@ -65,12 +65,27 @@ def load_perfume_category_codes_txt():
         st.error(f"Error reading Perfume_cat.txt: {e}")
         return []
 
+# Load sensitive perfume brands from TXT
+def load_sensitive_perfume_brands():
+    try:
+        with open('sensitive_perfumes.txt', 'r', encoding='utf-8') as f:
+            brands = [line.strip().lower() for line in f if line.strip()]
+        st.success(f"Loaded {len(brands)} sensitive perfume brands from sensitive_perfumes.txt")
+        return brands
+    except FileNotFoundError:
+        st.warning("sensitive_perfumes.txt not found – perfume brand check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading sensitive_perfumes.txt: {e}")
+        return []
+
 # Load all support files
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
 sensitive_brand_words      = _load_excel('sensitive_brands.xlsx', 'BrandWords')
-perfume_category_codes     = load_perfume_category_codes_txt()  # ← TXT
+perfume_category_codes     = load_perfume_category_codes_txt()
+sensitive_perfume_brands   = load_sensitive_perfume_brands()  # ← NEW
 approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
 
 def load_config_files():
@@ -121,7 +136,7 @@ def filter_ke_ug_only(df, src):
     return keug
 
 # -------------------------------------------------
-# Validation checks – FIXED SIGNATURES
+# Validation checks
 # -------------------------------------------------
 def check_missing_brand_or_name(data):
     if not {'BRAND','NAME'}.issubset(data.columns):
@@ -159,13 +174,35 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
         return pd.DataFrame(columns=data.columns)
     return books[~books['SELLER_NAME'].isin(approved_book_sellers)]
 
-def check_seller_approved_for_perfume(data, perfume_category_codes, approved_perfume_sellers):
-    if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
+# NEW: Perfume seller check with sensitive brands + fake brand in name
+def check_seller_approved_for_perfume(data, perfume_category_codes, approved_perfume_sellers, sensitive_perfume_brands):
+    if not {'CATEGORY_CODE','SELLER_NAME','BRAND','NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
-    perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)]
+
+    # Filter by perfume category
+    perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perfume_data.empty or not approved_perfume_sellers:
         return pd.DataFrame(columns=data.columns)
-    return perfume_data[~perfume_data['SELLER_NAME'].isin(approved_perfume_sellers)]
+
+    # Normalize
+    perfume_data['BRAND_LOWER'] = perfume_data['BRAND'].astype(str).str.strip().str.lower()
+    perfume_data['NAME_LOWER'] = perfume_data['NAME'].astype(str).str.strip().str.lower()
+
+    # Condition 1: BRAND is sensitive
+    sensitive_mask = perfume_data['BRAND_LOWER'].isin(sensitive_perfume_brands)
+
+    # Condition 2: Fake brand + sensitive brand in NAME
+    fake_brands = ['designers collection', 'smart collection', 'generic', 'designer', 'fashion']
+    fake_brand_mask = perfume_data['BRAND_LOWER'].isin(fake_brands)
+    name_contains_sensitive = perfume_data['NAME_LOWER'].apply(
+        lambda x: any(brand in x for brand in sensitive_perfume_brands)
+    )
+    fake_name_mask = fake_brand_mask & name_contains_sensitive
+
+    # Final: (sensitive OR fake name) AND not approved
+    final_mask = (sensitive_mask | fake_name_mask) & (~perfume_data['SELLER_NAME'].isin(approved_perfume_sellers))
+
+    return perfume_data[final_mask].drop(columns=['BRAND_LOWER', 'NAME_LOWER'])
 
 FX_RATE = 132.0
 def check_perfume_price(data, perfumes_df, perfume_category_codes):
@@ -228,6 +265,7 @@ def validate_products(
     sensitive_brand_words,
     approved_book_sellers,
     perfume_category_codes,
+    sensitive_perfume_brands,
     country
 ):
     validations = [
@@ -238,7 +276,9 @@ def validate_products(
         ("Perfume Price Check", check_perfume_price,
          {'perfumes_df': cfg.get('perfumes', pd.DataFrame()), 'perfume_category_codes': perfume_category_codes}),
         ("Seller Approved to Sell Perfume", check_seller_approved_for_perfume,
-         {'perfume_category_codes': perfume_category_codes, 'approved_perfume_sellers': approved_perfume_sellers}),
+         {'perfume_category_codes': perfume_category_codes,
+          'approved_perfume_sellers': approved_perfume_sellers,
+          'sensitive_perfume_brands': sensitive_perfume_brands}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
@@ -362,7 +402,7 @@ def to_excel_full_data(data_df, final_report_df):
         if 'ProductSetSid_y' in merged_df.columns:
             merged_df.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged_df.columns:
-            merged_df.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
+            merged_df.rename.web(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
         if 'FLAG' in merged_df.columns:
             merged_df['FLAG'] = merged_df['FLAG'].fillna('')
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -496,7 +536,8 @@ with tab1:
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_df,
                 book_category_codes, sensitive_brand_words,
-                approved_book_sellers, perfume_category_codes, country
+                approved_book_sellers, perfume_category_codes,
+                sensitive_perfume_brands, country
             )
 
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
@@ -589,4 +630,8 @@ with tab1:
         except Exception as e:
             st.error(f"Error: {e}")
 
-# (Weekly & Data Lake tabs – same as your original, with seller sidebar in Data Lake too)
+# ================================
+# WEEKLY & DATA LAKE TABS (unchanged – same sidebar logic)
+# ================================
+
+# ... (rest of Weekly and Data Lake tabs – same as your original, with seller sidebar in Data Lake too)
