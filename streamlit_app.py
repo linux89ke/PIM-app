@@ -121,21 +121,22 @@ def load_sensitive_words():
         st.error(f"Error reading sensitive_words.txt: {e}")
         return []
 
-# Load prohibited products from TXT
-def load_prohibited_products():
+# Load country-specific prohibited products from TXT
+def load_prohibited_products(country):
+    filename = f'prohibited_products{country[:2].upper()}.txt'  # KE or UG
     try:
-        with open('prohibited_products.txt', 'r', encoding='utf-8') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             words = [line.strip().lower() for line in f if line.strip()]
-        st.success(f"Loaded {len(words)} prohibited product keywords from prohibited_products.txt")
+        st.success(f"Loaded {len(words)} prohibited product keywords from {filename}")
         return words
     except FileNotFoundError:
-        st.warning("prohibited_products.txt not found – prohibited products check disabled.")
+        st.warning(f"{filename} not found – prohibited products check disabled for {country}.")
         return []
     except Exception as e:
-        st.error(f"Error reading prohibited_products.txt: {e}")
+        st.error(f"Error reading {filename}: {e}")
         return []
 
-# Load all support files
+# Load all support files (non-country-specific)
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
@@ -144,8 +145,7 @@ sensitive_perfume_brands   = load_sensitive_perfume_brands()
 approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
 sneaker_category_codes     = load_sneaker_category_codes()
 sneaker_sensitive_brands   = load_sneaker_sensitive_brands()
-sensitive_words            = load_sensitive_words()           # ← NEW
-prohibited_products        = load_prohibited_products()       # ← NEW
+sensitive_words            = load_sensitive_words()
 
 def load_config_files():
     files = {
@@ -360,9 +360,11 @@ def validate_products(
     sneaker_category_codes,
     sneaker_sensitive_brands,
     sensitive_words,
-    prohibited_products,
     country
 ):
+    # Load country-specific prohibited products
+    prohibited_products = load_prohibited_products(country)
+
     validations = [
         ("Sensitive words", check_sensitive_words,
          {'sensitive_words': sensitive_words}),
@@ -655,7 +657,7 @@ with tab1:
                 book_category_codes, approved_book_sellers,
                 perfume_category_codes, sensitive_perfume_brands,
                 sneaker_category_codes, sneaker_sensitive_brands,
-                sensitive_words, prohibited_products, country
+                sensitive_words, country
             )
 
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
