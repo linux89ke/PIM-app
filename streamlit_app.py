@@ -136,7 +136,35 @@ def load_prohibited_products(country):
         st.error(f"Error reading {filename}: {e}")
         return []
 
-# Load all support files (non-country-specific)
+# Load valid colors from TXT
+def load_colors():
+    try:
+        with open('colors.txt', 'r', encoding='utf-8') as f:
+            colors = [line.strip().lower() for line in f if line.strip()]
+        st.success(f"Loaded {len(colors)} colors from colors.txt")
+        return colors
+    except FileNotFoundError:
+        st.warning("colors.txt not found – color check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading colors.txt: {e}")
+        return []
+
+# Load category codes that require color
+def load_color_categories():
+    try:
+        with open('color_cats.txt', 'r', encoding='utf-8') as f:
+            cats = [line.strip() for line in f if line.strip()]
+        st.success(f"Loaded {len(cats)} color-required categories from color_cats.txt")
+        return cats
+    except FileNotFoundError:
+        st.warning("color_cats.txt not found – color check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading color_cats.txt: {e}")
+        return []
+
+# Load all support files
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
@@ -146,6 +174,8 @@ approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
 sneaker_category_codes     = load_sneaker_category_codes()
 sneaker_sensitive_brands   = load_sneaker_sensitive_brands()
 sensitive_words            = load_sensitive_words()
+colors                     = load_colors()           # ← NEW
+color_categories           = load_color_categories() # ← NEW
 
 def load_config_files():
     files = {
@@ -296,6 +326,31 @@ def check_prohibited_products(data, prohibited_products):
 
     return data[mask].drop(columns=['NAME_LOWER'])
 
+# SMART Missing COLOR Check
+def check_missing_color(data, colors, color_categories):
+    if not {'NAME', 'COLOR', 'CATEGORY_CODE'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+    if not colors or not color_categories:
+        return pd.DataFrame(columns=data.columns)
+
+    # Filter to only categories that require color
+    data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
+    if data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+    data['COLOR_LOWER'] = data['COLOR'].astype(str).str.strip().str.lower()
+
+    # Build regex: word boundaries
+    pat = '|'.join(r'\b' + re.escape(c) + r'\b' for c in colors)
+
+    name_has_color = data['NAME_LOWER'].str.contains(pat, regex=True, na=False)
+    color_has_color = data['COLOR_LOWER'].str.contains(pat, regex=True, na=False)
+
+    mask = ~(name_has_color | color_has_color)
+
+    return data[mask].drop(columns=['NAME_LOWER', 'COLOR_LOWER'])
+
 FX_RATE = 132.0
 def check_perfume_price(data, perfumes_df, perfume_category_codes):
     req = ['CATEGORY_CODE','NAME','BRAND','GLOBAL_SALE_PRICE','GLOBAL_PRICE','CURRENCY']
@@ -339,12 +394,6 @@ def check_generic_brand_issues(data, valid_category_codes_fas):
         return pd.DataFrame(columns=data.columns)
     return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')]
 
-def check_missing_color(data, book_category_codes):
-    if not {'CATEGORY_CODE','COLOR'}.issubset(data.columns):
-        return pd.DataFrame(columns=data.columns)
-    non_books = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
-    return non_books[non_books['COLOR'].isna() | (non_books['COLOR'] == '')]
-
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
@@ -360,6 +409,8 @@ def validate_products(
     sneaker_category_codes,
     sneaker_sensitive_brands,
     sensitive_words,
+    colors,
+    color_categories,
     country
 ):
     # Load country-specific prohibited products
@@ -381,10 +432,11 @@ def validate_products(
           'sneaker_sensitive_brands': sneaker_sensitive_brands}),
         ("Prohibited products", check_prohibited_products,
          {'prohibited_products': prohibited_products}),
+        ("Missing COLOR", check_missing_color,
+         {'colors': colors, 'color_categories': color_categories}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
-        ("Missing COLOR", check_missing_color, {'book_category_codes': book_category_codes}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Duplicate product", check_duplicate_products, {}),
     ]
@@ -417,11 +469,11 @@ If you believe this decision is incorrect or need further clarification, please 
             """Kindly note this product is not allowed for listing on Jumia .Your product listing has been rejected due to the absence of a required license for this item. As a result, the product cannot be authorized for sale on Jumia.
 Please ensure that you obtain and submit the necessary license(s) before attempting to relist the product. For further assistance or clarification, Please raise a claim via Vendor Center."""
         ),
+        "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
 If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
         "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
-        "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
         "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", """Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.
 If you include it in both fields, it will show up twice in the product title on the website"""),
         "Duplicate product": ("1000007 - Other Reason", "kindly note product was rejected because its a duplicate product"),
@@ -657,7 +709,10 @@ with tab1:
                 book_category_codes, approved_book_sellers,
                 perfume_category_codes, sensitive_perfume_brands,
                 sneaker_category_codes, sneaker_sensitive_brands,
-                sensitive_words, country
+                sensitive_words,
+                colors,
+                color_categories,
+                country
             )
 
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
