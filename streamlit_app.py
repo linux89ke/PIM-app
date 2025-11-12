@@ -227,11 +227,6 @@ def filter_ke_ug_only(df, src):
 # -------------------------------------------------
 # Validation checks
 # -------------------------------------------------
-def check_missing_brand_or_name(data):
-    if not {'BRAND','NAME'}.issubset(data.columns):
-        return pd.DataFrame(columns=data.columns)
-    return data[data['BRAND'].isna() | (data['BRAND']=='') | data['NAME'].isna() | (data['NAME']=='')]
-
 def check_brand_in_name(data):
     if not {'BRAND','NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
@@ -432,12 +427,11 @@ def validate_products(
           'sneaker_sensitive_brands': sneaker_sensitive_brands}),
         ("Prohibited products", check_prohibited_products,
          {'prohibited_products': prohibited_products}),
-        ("Missing COLOR", check_missing_color,
-         {'colors': colors, 'color_categories': color_categories}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
-        ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
+        ("Missing COLOR", check_missing_color,
+         {'colors': colors, 'color_categories': color_categories}),
         ("Duplicate product", check_duplicate_products, {}),
     ]
 
@@ -469,18 +463,17 @@ If you believe this decision is incorrect or need further clarification, please 
             """Kindly note this product is not allowed for listing on Jumia .Your product listing has been rejected due to the absence of a required license for this item. As a result, the product cannot be authorized for sale on Jumia.
 Please ensure that you obtain and submit the necessary license(s) before attempting to relist the product. For further assistance or clarification, Please raise a claim via Vendor Center."""
         ),
+        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
+If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
+        "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
+        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", """Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.
+If you include it in both fields, it will show up twice in the product title on the website"""),
         "Missing COLOR": (
             "1000005 - Kindly confirm the actual product colour",
             """Please make sure that the product color is clearly mentioned in both the title and in the color tab.
 Also, the images you upload must match the exact color being sold in this specific listing.
 Avoid including pictures of other colors, as this may confuse customers and lead to order cancellations."""
         ),
-        "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
-If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
-        "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
-        "Generic BRAND Issues": ("1000001 - Brand NOT Allowed", "Please use Fashion as brand for Fashion items- Kindly request for the creation of this product's actual brand name by filling this form: https://bit.ly/2kpjja8"),
-        "BRAND name repeated in NAME": ("1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name", """Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.
-If you include it in both fields, it will show up twice in the product title on the website"""),
         "Duplicate product": ("1000007 - Other Reason", "kindly note product was rejected because its a duplicate product"),
     }
 
