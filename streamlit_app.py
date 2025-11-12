@@ -107,16 +107,45 @@ def load_sneaker_sensitive_brands():
         st.error(f"Error reading Sneakers_Sensitive.txt: {e}")
         return []
 
+# Load sensitive words from TXT
+def load_sensitive_words():
+    try:
+        with open('sensitive_words.txt', 'r', encoding='utf-8') as f:
+            words = [line.strip().lower() for line in f if line.strip()]
+        st.success(f"Loaded {len(words)} sensitive words from sensitive_words.txt")
+        return words
+    except FileNotFoundError:
+        st.warning("sensitive_words.txt not found – sensitive words check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading sensitive_words.txt: {e}")
+        return []
+
+# Load prohibited products from TXT
+def load_prohibited_products():
+    try:
+        with open('prohibited_products.txt', 'r', encoding='utf-8') as f:
+            words = [line.strip().lower() for line in f if line.strip()]
+        st.success(f"Loaded {len(words)} prohibited product keywords from prohibited_products.txt")
+        return words
+    except FileNotFoundError:
+        st.warning("prohibited_products.txt not found – prohibited products check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading prohibited_products.txt: {e}")
+        return []
+
 # Load all support files
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
-sensitive_brand_words      = _load_excel('sensitive_brands.xlsx', 'BrandWords')
 perfume_category_codes     = load_perfume_category_codes_txt()
 sensitive_perfume_brands   = load_sensitive_perfume_brands()
 approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
-sneaker_category_codes     = load_sneaker_category_codes()      # ← NEW
-sneaker_sensitive_brands   = load_sneaker_sensitive_brands()    # ← NEW
+sneaker_category_codes     = load_sneaker_category_codes()
+sneaker_sensitive_brands   = load_sneaker_sensitive_brands()
+sensitive_words            = load_sensitive_words()           # ← NEW
+prohibited_products        = load_prohibited_products()       # ← NEW
 
 def load_config_files():
     files = {
@@ -187,15 +216,6 @@ def check_duplicate_products(data):
         return pd.DataFrame(columns=data.columns)
     return data[data.duplicated(subset=cols, keep=False)]
 
-def check_sensitive_brands(data, sensitive_brand_words, book_category_codes):
-    if not {'CATEGORY_CODE','NAME'}.issubset(data.columns):
-        return pd.DataFrame(columns=data.columns)
-    books = data[data['CATEGORY_CODE'].isin(book_category_codes)]
-    if books.empty or not sensitive_brand_words:
-        return pd.DataFrame(columns=data.columns)
-    pat = '|'.join(r'\b' + re.escape(w.lower()) + r'\b' for w in sensitive_brand_words)
-    return books[books['NAME'].astype(str).str.lower().str.contains(pat, regex=True, na=False)]
-
 def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers):
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
@@ -249,6 +269,32 @@ def check_counterfeit_sneakers(data, sneaker_category_codes, sneaker_sensitive_b
     final_mask = fake_brand_mask & name_contains_brand
 
     return sneaker_data[final_mask].drop(columns=['NAME_LOWER', 'BRAND_LOWER'])
+
+# Sensitive words check
+def check_sensitive_words(data, sensitive_words):
+    if not {'NAME'}.issubset(data.columns) or not sensitive_words:
+        return pd.DataFrame(columns=data.columns)
+
+    data = data.copy()
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+
+    pat = '|'.join(r'\b' + re.escape(w) + r'\b' for w in sensitive_words)
+    mask = data['NAME_LOWER'].str.contains(pat, regex=True, na=False)
+
+    return data[mask].drop(columns=['NAME_LOWER'])
+
+# Prohibited products check
+def check_prohibited_products(data, prohibited_products):
+    if not {'NAME'}.issubset(data.columns) or not prohibited_products:
+        return pd.DataFrame(columns=data.columns)
+
+    data = data.copy()
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+
+    pat = '|'.join(r'\b' + re.escape(w) + r'\b' for w in prohibited_products)
+    mask = data['NAME_LOWER'].str.contains(pat, regex=True, na=False)
+
+    return data[mask].drop(columns=['NAME_LOWER'])
 
 FX_RATE = 132.0
 def check_perfume_price(data, perfumes_df, perfume_category_codes):
@@ -308,17 +354,18 @@ def validate_products(
     blacklisted_words,
     reasons_df,
     book_category_codes,
-    sensitive_brand_words,
     approved_book_sellers,
     perfume_category_codes,
     sensitive_perfume_brands,
     sneaker_category_codes,
     sneaker_sensitive_brands,
+    sensitive_words,
+    prohibited_products,
     country
 ):
     validations = [
-        ("Sensitive Brand Issues", check_sensitive_brands,
-         {'sensitive_brand_words': sensitive_brand_words, 'book_category_codes': book_category_codes}),
+        ("Sensitive words", check_sensitive_words,
+         {'sensitive_words': sensitive_words}),
         ("Seller Approve to sell books", check_seller_approved_for_books,
          {'book_category_codes': book_category_codes, 'approved_book_sellers': approved_book_sellers}),
         ("Perfume Price Check", check_perfume_price,
@@ -330,6 +377,8 @@ def validate_products(
         ("Counterfeit Sneakers", check_counterfeit_sneakers,
          {'sneaker_category_codes': sneaker_category_codes,
           'sneaker_sensitive_brands': sneaker_sensitive_brands}),
+        ("Prohibited products", check_prohibited_products,
+         {'prohibited_products': prohibited_products}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
@@ -339,11 +388,14 @@ def validate_products(
     ]
 
     if country == "Uganda":
-        skip = ["Sensitive Brand Issues", "Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers"]
+        skip = ["Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers"]
         validations = [v for v in validations if v[0] not in skip]
 
     flag_reason_comment_mapping = {
-        "Sensitive Brand Issues": ("1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)", "Please contact vendor support for sale of..."),
+        "Sensitive words": (
+            "1000001 - Brand NOT Allowed",
+            "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
+        ),
         "Seller Approve to sell books": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
 This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."""),
         "Perfume Price Check": ("1000029 - Perfume Price Deviation >= $30", "Price is $30+ below reference. Contact Seller Support with claim #{{CLAIM_ID}} for authenticity verification."),
@@ -357,6 +409,11 @@ As a result, this item cannot be sold on the platform.
 Please ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.
 
 If you believe this decision is incorrect or need further clarification, please contact the Seller Support team"""
+        ),
+        "Prohibited products": (
+            "1000007 - Other Reason",
+            """Kindly note this product is not allowed for listing on Jumia .Your product listing has been rejected due to the absence of a required license for this item. As a result, the product cannot be authorized for sale on Jumia.
+Please ensure that you obtain and submit the necessary license(s) before attempting to relist the product. For further assistance or clarification, Please raise a claim via Vendor Center."""
         ),
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
 If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
@@ -595,10 +652,10 @@ with tab1:
 
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_df,
-                book_category_codes, sensitive_brand_words,
-                approved_book_sellers, perfume_category_codes,
-                sensitive_perfume_brands, sneaker_category_codes,
-                sneaker_sensitive_brands, country
+                book_category_codes, approved_book_sellers,
+                perfume_category_codes, sensitive_perfume_brands,
+                sneaker_category_codes, sneaker_sensitive_brands,
+                sensitive_words, prohibited_products, country
             )
 
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
