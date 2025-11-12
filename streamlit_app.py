@@ -733,7 +733,7 @@ with tab3:
                 else:
                     st.info(f"All valid rows are from {country} ({selected_code}).")
                 if data.empty:
-                   .st.error(f"No {country} rows found.")
+                    st.error(f"No {country} rows found.")
                     st.stop()
             else:
                 st.info(f"Processing all {len(data)} KE+UG rows.")
