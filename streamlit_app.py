@@ -79,14 +79,44 @@ def load_sensitive_perfume_brands():
         st.error(f"Error reading sensitive_perfumes.txt: {e}")
         return []
 
+# Load sneaker category codes from TXT
+def load_sneaker_category_codes():
+    try:
+        with open('Sneakers_Cat.txt', 'r', encoding='utf-8') as f:
+            codes = [line.strip() for line in f if line.strip()]
+        st.success(f"Loaded {len(codes)} sneaker category codes from Sneakers_Cat.txt")
+        return codes
+    except FileNotFoundError:
+        st.warning("Sneakers_Cat.txt not found – sneaker counterfeit check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading Sneakers_Cat.txt: {e}")
+        return []
+
+# Load sensitive sneaker brands from TXT
+def load_sneaker_sensitive_brands():
+    try:
+        with open('Sneakers_Sensitive.txt', 'r', encoding='utf-8') as f:
+            brands = [line.strip().lower() for line in f if line.strip()]
+        st.success(f"Loaded {len(brands)} sensitive sneaker brands from Sneakers_Sensitive.txt")
+        return brands
+    except FileNotFoundError:
+        st.warning("Sneakers_Sensitive.txt not found – sneaker counterfeit check disabled.")
+        return []
+    except Exception as e:
+        st.error(f"Error reading Sneakers_Sensitive.txt: {e}")
+        return []
+
 # Load all support files
 blacklisted_words          = _load_txt('blacklisted.txt')
 book_category_codes        = _load_excel('Books_cat.xlsx', 'CategoryCode')
 approved_book_sellers      = _load_excel('Books_Approved_Sellers.xlsx', 'SellerName')
 sensitive_brand_words      = _load_excel('sensitive_brands.xlsx', 'BrandWords')
 perfume_category_codes     = load_perfume_category_codes_txt()
-sensitive_perfume_brands   = load_sensitive_perfume_brands()  # ← NEW
+sensitive_perfume_brands   = load_sensitive_perfume_brands()
 approved_perfume_sellers   = _load_excel('perfumeSellers.xlsx', 'SellerName')
+sneaker_category_codes     = load_sneaker_category_codes()      # ← NEW
+sneaker_sensitive_brands   = load_sneaker_sensitive_brands()    # ← NEW
 
 def load_config_files():
     files = {
@@ -174,24 +204,20 @@ def check_seller_approved_for_books(data, book_category_codes, approved_book_sel
         return pd.DataFrame(columns=data.columns)
     return books[~books['SELLER_NAME'].isin(approved_book_sellers)]
 
-# NEW: Perfume seller check with sensitive brands + fake brand in name
+# Perfume seller check
 def check_seller_approved_for_perfume(data, perfume_category_codes, approved_perfume_sellers, sensitive_perfume_brands):
     if not {'CATEGORY_CODE','SELLER_NAME','BRAND','NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
 
-    # Filter by perfume category
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perfume_data.empty or not approved_perfume_sellers:
         return pd.DataFrame(columns=data.columns)
 
-    # Normalize
     perfume_data['BRAND_LOWER'] = perfume_data['BRAND'].astype(str).str.strip().str.lower()
     perfume_data['NAME_LOWER'] = perfume_data['NAME'].astype(str).str.strip().str.lower()
 
-    # Condition 1: BRAND is sensitive
     sensitive_mask = perfume_data['BRAND_LOWER'].isin(sensitive_perfume_brands)
 
-    # Condition 2: Fake brand + sensitive brand in NAME
     fake_brands = ['designers collection', 'smart collection', 'generic', 'designer', 'fashion']
     fake_brand_mask = perfume_data['BRAND_LOWER'].isin(fake_brands)
     name_contains_sensitive = perfume_data['NAME_LOWER'].apply(
@@ -199,10 +225,30 @@ def check_seller_approved_for_perfume(data, perfume_category_codes, approved_per
     )
     fake_name_mask = fake_brand_mask & name_contains_sensitive
 
-    # Final: (sensitive OR fake name) AND not approved
     final_mask = (sensitive_mask | fake_name_mask) & (~perfume_data['SELLER_NAME'].isin(approved_perfume_sellers))
 
     return perfume_data[final_mask].drop(columns=['BRAND_LOWER', 'NAME_LOWER'])
+
+# Counterfeit Sneakers Check
+def check_counterfeit_sneakers(data, sneaker_category_codes, sneaker_sensitive_brands):
+    if not {'CATEGORY_CODE', 'NAME', 'BRAND'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+
+    sneaker_data = data[data['CATEGORY_CODE'].isin(sneaker_category_codes)].copy()
+    if sneaker_data.empty or not sneaker_sensitive_brands:
+        return pd.DataFrame(columns=data.columns)
+
+    sneaker_data['NAME_LOWER'] = sneaker_data['NAME'].astype(str).str.strip().str.lower()
+    sneaker_data['BRAND_LOWER'] = sneaker_data['BRAND'].astype(str).str.strip().str.lower()
+
+    fake_brand_mask = sneaker_data['BRAND_LOWER'].isin(['generic', 'fashion'])
+    name_contains_brand = sneaker_data['NAME_LOWER'].apply(
+        lambda x: any(brand in x for brand in sneaker_sensitive_brands)
+    )
+
+    final_mask = fake_brand_mask & name_contains_brand
+
+    return sneaker_data[final_mask].drop(columns=['NAME_LOWER', 'BRAND_LOWER'])
 
 FX_RATE = 132.0
 def check_perfume_price(data, perfumes_df, perfume_category_codes):
@@ -266,6 +312,8 @@ def validate_products(
     approved_book_sellers,
     perfume_category_codes,
     sensitive_perfume_brands,
+    sneaker_category_codes,
+    sneaker_sensitive_brands,
     country
 ):
     validations = [
@@ -279,6 +327,9 @@ def validate_products(
          {'perfume_category_codes': perfume_category_codes,
           'approved_perfume_sellers': approved_perfume_sellers,
           'sensitive_perfume_brands': sensitive_perfume_brands}),
+        ("Counterfeit Sneakers", check_counterfeit_sneakers,
+         {'sneaker_category_codes': sneaker_category_codes,
+          'sneaker_sensitive_brands': sneaker_sensitive_brands}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': book_category_codes}),
         ("Missing BRAND or NAME", check_missing_brand_or_name, {}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
@@ -288,7 +339,7 @@ def validate_products(
     ]
 
     if country == "Uganda":
-        skip = ["Sensitive Brand Issues", "Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume"]
+        skip = ["Sensitive Brand Issues", "Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers"]
         validations = [v for v in validations if v[0] not in skip]
 
     flag_reason_comment_mapping = {
@@ -298,6 +349,15 @@ This step will help ensure that all necessary requirements and approvals are add
         "Perfume Price Check": ("1000029 - Perfume Price Deviation >= $30", "Price is $30+ below reference. Contact Seller Support with claim #{{CLAIM_ID}} for authenticity verification."),
         "Seller Approved to Sell Perfume": ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", """Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.
 This step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."""),
+        "Counterfeit Sneakers": (
+            "1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)",
+            """Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.
+As a result, this item cannot be sold on the platform.
+
+Please ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.
+
+If you believe this decision is incorrect or need further clarification, please contact the Seller Support team"""
+        ),
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
 If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
@@ -402,7 +462,7 @@ def to_excel_full_data(data_df, final_report_df):
         if 'ProductSetSid_y' in merged_df.columns:
             merged_df.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged_df.columns:
-            merged_df.rename.web(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
+            merged_df.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
         if 'FLAG' in merged_df.columns:
             merged_df['FLAG'] = merged_df['FLAG'].fillna('')
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -537,7 +597,8 @@ with tab1:
                 data, config_data, blacklisted_words, reasons_df,
                 book_category_codes, sensitive_brand_words,
                 approved_book_sellers, perfume_category_codes,
-                sensitive_perfume_brands, country
+                sensitive_perfume_brands, sneaker_category_codes,
+                sneaker_sensitive_brands, country
             )
 
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
@@ -631,7 +692,5 @@ with tab1:
             st.error(f"Error: {e}")
 
 # ================================
-# WEEKLY & DATA LAKE TABS (unchanged – same sidebar logic)
+# WEEKLY & DATA LAKE TABS (same logic)
 # ================================
-
-# ... (rest of Weekly and Data Lake tabs – same as your original, with seller sidebar in Data Lake too)
