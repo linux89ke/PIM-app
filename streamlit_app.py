@@ -3,6 +3,7 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import re
+import os
 
 # -------------------------------------------------
 # Page config
@@ -50,7 +51,7 @@ def _load_excel(path, col):
         st.error(f"Error reading {path}: {e}")
         return []
 
-# Load from TXT: Perfume_cat.txt
+# Load perfume category codes from TXT
 def load_perfume_category_codes_txt():
     try:
         with open('Perfume_cat.txt', 'r', encoding='utf-8') as f:
@@ -492,13 +493,6 @@ with tab1:
                 if col in data.columns:
                     data[col] = data[col].astype(str).fillna('')
 
-            # DEBUG: Show loaded perfume data
-            st.sidebar.header("DEBUG – Perfume Check")
-            st.sidebar.write(f"Perfume codes loaded: {perfume_category_codes}")
-            st.sidebar.write(f"Approved sellers: {approved_perfume_sellers}")
-            st.sidebar.write("First 3 rows from your data:")
-            st.sidebar.dataframe(data[['CATEGORY_CODE', 'SELLER_NAME']].head(3))
-
             final_report_df, individual_flag_dfs = validate_products(
                 data, config_data, blacklisted_words, reasons_df,
                 book_category_codes, sensitive_brand_words,
@@ -508,6 +502,59 @@ with tab1:
             approved_df = final_report_df[final_report_df['Status'] == 'Approved']
             rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
 
+            # --- ORIGINAL SIDEBAR RESTORED ---
+            st.sidebar.header("Seller Options")
+            seller_options = ['All Sellers']
+            if 'SELLER_NAME' in data.columns and 'ProductSetSid' in final_report_df.columns and 'PRODUCT_SET_SID' in data.columns:
+                final_report_df_for_join = final_report_df.copy()
+                final_report_df_for_join['ProductSetSid'] = final_report_df_for_join['ProductSetSid'].astype(str)
+                data_for_join = data[['PRODUCT_SET_SID', 'SELLER_NAME']].copy()
+                data_for_join['PRODUCT_SET_SID'] = data_for_join['PRODUCT_SET_SID'].astype(str)
+                data_for_join.drop_duplicates(subset=['PRODUCT_SET_SID'], inplace=True)
+                report_with_seller = pd.merge(
+                    final_report_df_for_join,
+                    data_for_join,
+                    left_on='ProductSetSid',
+                    right_on='PRODUCT_SET_SID',
+                    how='left'
+                )
+                if not report_with_seller.empty:
+                    seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
+            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="daily_sellers")
+
+            seller_data_filtered = data.copy()
+            seller_final_report_df_filtered = final_report_df.copy()
+            seller_label_filename = "All_Sellers"
+            if 'All Sellers' not in selected_sellers and selected_sellers:
+                if 'SELLER_NAME' in data.columns:
+                    seller_data_filtered = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
+                    seller_final_report_df_filtered = final_report_df[final_report_df['ProductSetSid'].isin(seller_data_filtered['PRODUCT_SET_SID'])].copy()
+                    seller_label_filename = "_".join(s.replace(" ", "_").replace("/", "_") for s in selected_sellers)
+                else:
+                    st.sidebar.warning("SELLER_NAME column missing, cannot filter by seller.")
+
+            seller_rejected_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Rejected']
+            seller_approved_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Approved']
+
+            st.sidebar.subheader("Seller SKU Metrics")
+            if 'SELLER_NAME' in data.columns and 'report_with_seller' in locals() and not report_with_seller.empty:
+                sellers_to_display = selected_sellers if 'All Sellers' not in selected_sellers and selected_sellers else seller_options[1:]
+                for seller in sellers_to_display:
+                    if seller == 'All Sellers': continue
+                    current_seller_data = report_with_seller[report_with_seller['SELLER_NAME'] == seller]
+                    rej_count = current_seller_data[current_seller_data['Status'] == 'Rejected'].shape[0]
+                    app_count = current_seller_data[current_seller_data['Status'] == 'Approved'].shape[0]
+                    st.sidebar.write(f"{seller}: **Rej**: {rej_count}, **App**: {app_count}")
+            else:
+                st.sidebar.write("Seller metrics unavailable.")
+
+            st.sidebar.subheader(f"Exports for: {seller_label_filename.replace('_', ' ')}")
+            st.sidebar.download_button("Seller Final Export", to_excel(seller_final_report_df_filtered, reasons_df), f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx", key="daily_final")
+            st.sidebar.download_button("Seller Rejected Export", to_excel(seller_rejected_df_filtered, reasons_df), f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx", key="daily_rejected")
+            st.sidebar.download_button("Seller Approved Export", to_excel(seller_approved_df_filtered, reasons_df), f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx", key="daily_approved")
+            st.sidebar.download_button("Seller Full Data Export", to_excel_full_data(seller_data_filtered, seller_final_report_df_filtered), f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", key="daily_full")
+
+            # Main content
             st.header("Overall Results")
             col1, col2 = st.columns(2)
             with col1:
@@ -524,27 +571,22 @@ with tab1:
                         cols = [c for c in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE'] if c in df_flagged.columns]
                         st.dataframe(df_flagged[cols])
                         safe = title.replace(' ', '_').replace('/', '_')
-                        st.download_button(
-                            f"Export {title}",
-                            to_excel_flag_data(df_flagged.copy(), title),
-                            f"{file_prefix}_{safe}_{current_date}.xlsx",
-                            key=f"flag_{safe}"
-                        )
+                        st.download_button(f"Export {title}", to_excel_flag_data(df_flagged.copy(), title), f"{file_prefix}_{safe}_{current_date}.xlsx", key=f"flag_{safe}")
                     else:
                         st.write("No issues.")
 
-            st.header("Exports")
+            st.header("Overall Exports")
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.download_button("Final Report", to_excel(final_report_df, reasons_df), f"{file_prefix}_Final_{current_date}.xlsx")
+                st.download_button("Final Report", to_excel(final_report_df, reasons_df), f"{file_prefix}_Final_{current_date}_ALL.xlsx")
             with col2:
-                st.download_button("Rejected", to_excel(rejected_df, reasons_df), f"{file_prefix}_Rejected_{current_date}.xlsx")
+                st.download_button("Rejected", to_excel(rejected_df, reasons_df), f"{file_prefix}_Rejected_{current_date}_ALL.xlsx")
             with col3:
-                st.download_button("Approved", to_excel(approved_df, reasons_df), f"{file_prefix}_Approved_{current_date}.xlsx")
+                st.download_button("Approved", to_excel(approved_df, reasons_df), f"{file_prefix}_Approved_{current_date}_ALL.xlsx")
             with col4:
-                st.download_button("Full Data", to_excel_full_data(data.copy(), final_report_df), f"{file_prefix}_Full_{current_date}.xlsx")
+                st.download_button("Full Data", to_excel_full_data(data.copy(), final_report_df), f"{file_prefix}_Full_{current_date}_ALL.xlsx")
 
         except Exception as e:
             st.error(f"Error: {e}")
 
-# (Weekly & Data Lake tabs – omitted for brevity, same as before)
+# (Weekly & Data Lake tabs – same as your original, with seller sidebar in Data Lake too)
