@@ -469,7 +469,12 @@ If you believe this decision is incorrect or need further clarification, please 
             """Kindly note this product is not allowed for listing on Jumia .Your product listing has been rejected due to the absence of a required license for this item. As a result, the product cannot be authorized for sale on Jumia.
 Please ensure that you obtain and submit the necessary license(s) before attempting to relist the product. For further assistance or clarification, Please raise a claim via Vendor Center."""
         ),
-        "Missing COLOR": ("1000005 - Kindly confirm the actual product colour", "Kindly add color on the color field"),
+        "Missing COLOR": (
+            "1000005 - Kindly confirm the actual product colour",
+            """Please make sure that the product color is clearly mentioned in both the title and in the color tab.
+Also, the images you upload must match the exact color being sold in this specific listing.
+Avoid including pictures of other colors, as this may confuse customers and lead to order cancellations."""
+        ),
         "Single-word NAME": ("1000008 - Kindly Improve Product Name Description", """Kindly update the product title using this format: Name – Type of the Products – Color.
 If available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."""),
         "Missing BRAND or NAME": ("1000001 - Brand NOT Allowed", "Brand NOT Allowed"),
