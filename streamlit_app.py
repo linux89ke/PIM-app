@@ -1106,23 +1106,50 @@ with tab1:
             with st.expander("Technical Details"):
                 st.code(traceback.format_exc())
 # ================================
-# WEEKLY & DATA LAKE TABS
-# ================================
-with tab2:
-    st.header("Weekly Analysis")
-    st.info("Weekly analysis functionality - Coming soon")
-    st.write("This tab will provide weekly trend analysis and reporting.")
-# ================================
-# DATA LAKE TAB - FULLY FUNCTIONAL (3 LINES)
+# DATA LAKE TAB – now works with *any* audit file
 # ================================
 with tab3:
     st.header("Data Lake")
-    file = st.file_uploader("Upload audit file (jsonl/csv/xlsx)", type=['jsonl','csv','xlsx'], key="lake")
+    file = st.file_uploader(
+        "Upload audit file (jsonl / csv / xlsx)",
+        type=['jsonl','csv','xlsx'],
+        key="lake"
+    )
+
     try:
-        df = pd.read_json(file) if file else pd.read_json('validation_audit.jsonl')
-        df = df if file and file.name.endswith('.csv') else (pd.read_csv(file) if file else df)
-        df = df if file and file.name.endswith('.xlsx') else (pd.read_excel(file) if file else df)
-        df['timestamp'] = pd.to_datetime(df.get('timestamp', df.index)).dt.strftime('%Y-%m-%d %H:%M')
-        st.dataframe(df.sort_values('timestamp', ascending=False).head(50), use_container_width=True)
-    except Exception:
+        # ---- 1. Load the file -------------------------------------------------
+        if file:
+            # JSONL (one JSON object per line)
+            if file.name.endswith('.jsonl'):
+                df = pd.read_json(file, lines=True)
+            # CSV (any delimiter – auto-detect)
+            elif file.name.endswith('.csv'):
+                df = pd.read_csv(file, sep=None, engine='python')
+            # Excel
+            else:  # .xlsx
+                df = pd.read_excel(file)
+        else:
+            # default audit log
+            df = pd.read_json('validation_audit.jsonl', lines=True)
+
+        # ---- 2. Normalise timestamp -------------------------------------------
+        # look for any column that looks like a date/time
+        time_cols = [c for c in df.columns if 'time' in c.lower() or 'date' in c.lower()]
+        if time_cols:
+            ts = df[time_cols[0]]
+        else:
+            ts = pd.to_datetime(df.index)          # fallback to row index
+
+        df['timestamp'] = pd.to_datetime(ts, errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+
+        # ---- 3. Show the latest 50 rows ---------------------------------------
+        st.dataframe(
+            df.sort_values('timestamp', ascending=False).head(50),
+            use_container_width=True
+        )
+
+    except Exception as e:
         st.info("No data yet – run a validation or upload a file.")
+        # optional: show the exact error in an expander (debug only)
+        # with st.expander("Debug"):
+        #     st.write(str(e))
