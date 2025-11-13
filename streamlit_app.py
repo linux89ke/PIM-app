@@ -1080,9 +1080,9 @@ with tab1:
             st.markdown("---")
             st.subheader("🚩 Validation Results by Flag")
             
-            # Display individual flags
+            # Display individual flags - CLOSED by default, only open if has issues
             for title, df_flagged in individual_flag_dfs.items():
-                with st.expander(f"**{title}** ({len(df_flagged)} products)", expanded=len(df_flagged)>0):
+                with st.expander(f"**{title}** ({len(df_flagged)} products)", expanded=False):
                     if not df_flagged.empty:
                         cols = [c for c in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE']
                                if c in df_flagged.columns]
