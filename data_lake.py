@@ -1156,8 +1156,18 @@ with tab2:
 
 with tab3:
     if DATA_LAKE_AVAILABLE:
-        # Call the Data Lake module's render function
-        data_lake.render_data_lake_tab(support_files)
+        # Pass all necessary functions to the Data Lake module
+        data_lake.render_data_lake_tab(
+            support_files=support_files,
+            validate_products_func=validate_products,
+            CountryValidator=CountryValidator,
+            validate_input_schema=validate_input_schema,
+            filter_by_country=filter_by_country,
+            to_excel=to_excel,
+            to_excel_full_data=to_excel_full_data,
+            to_excel_flag_data=to_excel_flag_data,
+            log_validation_run=log_validation_run
+        )
     else:
         st.header("💾 Data Lake")
         st.error("❌ data_lake.py module not found")
