@@ -394,7 +394,7 @@ def check_seller_approved_for_perfume(data: pd.DataFrame, perfume_category_codes
    
     sensitive_mask = perfume_data['BRAND_LOWER'].isin(sensitive_perfume_brands)
    
-    fake_brands = ['designers collection', 'smart collection', 'generic', 'designer', 'fashion']
+    fake_brands = ['designers collection', 'smart collection', 'generic', 'ORIGINAL', 'original' 'designer', 'fashion']
     fake_brand_mask = perfume_data['BRAND_LOWER'].isin(fake_brands)
    
     # Vectorized brand check in name
