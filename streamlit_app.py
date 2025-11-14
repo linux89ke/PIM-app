@@ -75,13 +75,6 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
-    """
-    Load flags.xlsx and return:
-        { <FLAG_NAME> : ( <REJECTION_CODE>, <COMMENT> ) }
-    Supports:
-      - Multiple flags → same code
-      - Optional FLAG_NAME column (auto-generated if missing)
-    """
     try:
         flags_df = pd.read_excel('flags.xlsx')
         flags_df.columns = flags_df.columns.str.strip()
@@ -101,10 +94,8 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             .replace({r'\n': '\n', r'\\n': '\n'}, regex=True)
         )
 
-        # Create FLAG_NAME
         if 'FLAG_NAME' in flags_df.columns:
             flags_df['FLAG_NAME'] = flags_df['FLAG_NAME'].astype(str).str.strip().replace('nan', '')
-            # Ensure uniqueness
             seen = set()
             unique_names = []
             for idx, name in enumerate(flags_df['FLAG_NAME']):
@@ -544,8 +535,46 @@ def to_excel_full_data(data_df: pd.DataFrame, final_report_df: pd.DataFrame) -> 
                 seller_summary['Rejection %'] = (seller_summary['Rejected'] / (seller_summary['Rejected'] + seller_summary['Approved']) * 100).round(1)
                 seller_summary = seller_summary.sort_values('Rejected', ascending=False)
                 sellers_data_rows.append(seller_summary)
-            # ... (rest of export logic unchanged) ...
+            try:
+                if 'CATEGORY' in merged_df.columns and not merged_df['CATEGORY'].isna().all():
+                    category_rejections = (merged_df[merged_df['Status'] == 'Rejected'].groupby('CATEGORY').size().reset_index(name='Rejected Products'))
+                    category_rejections = category_rejections.sort_values('Rejected Products', ascending=False)
+                    category_rejections.insert(0, 'Rank', range(1, len(category_rejections) + 1))
+                    sellers_data_rows.append(pd.DataFrame([['', '', '', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Categories Summary', '', '', '']]))
+                    sellers_data_rows.append(category_rejections.rename(columns={'CATEGORY': 'Category', 'Rejected Products': 'Number of Rejected Products'}))
+            except Exception as e:
+                logger.error(f"Error creating category summary: {e}")
+                sellers_data_rows.append(pd.DataFrame([['Categories Summary', f'Error: {str(e)}', '', '']]))
+            try:
+                if 'Reason' in merged_df.columns and not merged_df['Reason'].isna().all():
+                    reason_rejections = (merged_df[merged_df['Status'] == 'Rejected'].groupby('Reason').size().reset_index(name='Rejected Products'))
+                    reason_rejections = reason_rejections.sort_values('Rejected Products', ascending=False)
+                    reason_rejections.insert(0, 'Rank', range(1, len(reason_rejections) + 1))
+                    sellers_data_rows.append(pd.DataFrame([['', '', '', '']]))
+                    sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', '', '', '']]))
+                    sellers_data_rows.append(reason_rejections.rename(columns={'Reason': 'Rejection Reason', 'Rejected Products': 'Number of Rejected Products'}))
+            except Exception as e:
+                logger.error(f"Error creating reasons summary: {e}")
+                sellers_data_rows.append(pd.DataFrame([['Rejection Reasons Summary', f'Error: {str(e)}', '', '']]))
+            for df in sellers_data_rows:
+                if df.empty or len(df.columns) < 2:
+                    continue
+                if 'Rank' in df.columns:
+                    for col_num, col_name in enumerate(df.columns):
+                        worksheet.write(start_row, col_num, col_name, header_fmt)
+                    for row_num, row_data in enumerate(df.values, start=start_row + 1):
+                        for col_num, value in enumerate(row_data):
+                            fmt = red_fill if col_num == 4 and len(row_data) > 4 and value > 30 else None
+                            worksheet.write(row_num, col_num, value, fmt or header_fmt)
+                else:
+                    worksheet.write(start_row, 0, df.iloc[0, 0], header_fmt)
+                start_row += len(df) + 1
+            worksheet.set_column('A:A', 30)
+            worksheet.set_column('B:B', 10)
+            worksheet.set_column('C:C', 20)
         output.seek(0)
+        logger.info("Full data export generated")
         return output
     except Exception as e:
         logger.error(f"Error generating Full Data Export: {e}", exc_info=True)
@@ -608,10 +637,184 @@ if not support_files['flags_mapping']:
 
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
 
-# [Rest of UI code — unchanged from your original]
-# ... (you already have this part — just paste it below)
+# ================================
+# DAILY VALIDATION TAB
+# ================================
+with tab1:
+    st.header("Daily Product Validation")
+    country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
+    country_validator = CountryValidator(country)
 
-# For brevity, the UI part is omitted here — copy from your original code starting from:
-# with tab1:
-#     st.header("Daily Product Validation")
-#     ...
+    uploaded_file = st.file_uploader("Upload your CSV file", type='csv', key="daily_file")
+
+    if uploaded_file is not None:
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        file_prefix = country_validator.code
+
+        try:
+            dtype_spec = {
+                'CATEGORY_CODE': str,
+                'PRODUCT_SET_SID': str,
+                'PARENTSKU': str,
+                'ACTIVE_STATUS_COUNTRY': str,
+            }
+            with st.spinner("Loading CSV file..."):
+                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=dtype_spec)
+                logger.info(f"Loaded CSV: {uploaded_file.name}, {len(raw_data)} rows")
+            st.success(f"Loaded CSV with {len(raw_data)} rows")
+
+            is_valid, errors = validate_input_schema(raw_data)
+            if not is_valid:
+                st.error("Input validation failed:")
+                for error in errors:
+                    st.error(f" • {error}")
+                logger.error(f"Input validation failed: {errors}")
+                st.stop()
+
+            data = filter_by_country(raw_data, country_validator, "Daily CSV")
+            if data.empty:
+                st.stop()
+
+            essential_input_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'COLOR', 'SELLER_NAME', 'GLOBAL_PRICE', 'GLOBAL_SALE_PRICE', 'PARENTSKU']
+            for col in essential_input_cols:
+                if col not in data.columns:
+                    data[col] = pd.NA
+            for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE', 'PARENTSKU']:
+                if col in data.columns:
+                    data[col] = data[col].astype(str).fillna('')
+
+            with st.spinner("Running validations..."):
+                final_report_df, individual_flag_dfs = validate_products(data, support_files, country_validator)
+
+            final_report_df = country_validator.ensure_status_column(final_report_df)
+
+            approved_df = final_report_df[final_report_df['Status'] == 'Approved']
+            rejected_df = final_report_df[final_report_df['Status'] == 'Rejected']
+
+            log_validation_run(
+                country=country,
+                file_name=uploaded_file.name,
+                total_rows=len(data),
+                approved=len(approved_df),
+                rejected=len(rejected_df)
+            )
+
+            # Seller filter
+            st.sidebar.header("Seller Options")
+            seller_options = ['All Sellers']
+            if 'SELLER_NAME' in data.columns and 'ProductSetSid' in final_report_df.columns:
+                final_report_df_for_join = final_report_df.copy()
+                final_report_df_for_join['ProductSetSid'] = final_report_df_for_join['ProductSetSid'].astype(str)
+                data_for_join = data[['PRODUCT_SET_SID', 'SELLER_NAME']].copy()
+                data_for_join['PRODUCT_SET_SID'] = data_for_join['PRODUCT_SET_SID'].astype(str)
+                data_for_join.drop_duplicates(subset=['PRODUCT_SET_SID'], inplace=True)
+                report_with_seller = pd.merge(final_report_df_for_join, data_for_join, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
+                if not report_with_seller.empty:
+                    seller_options.extend(list(report_with_seller['SELLER_NAME'].dropna().unique()))
+
+            selected_sellers = st.sidebar.multiselect("Select Sellers", seller_options, default=['All Sellers'], key="daily_sellers")
+
+            seller_data_filtered = data.copy()
+            seller_final_report_df_filtered = final_report_df.copy()
+            seller_label_filename = "All_Sellers"
+
+            if 'All Sellers' not in selected_sellers and selected_sellers:
+                if 'SELLER_NAME' in data.columns:
+                    seller_data_filtered = data[data['SELLER_NAME'].isin(selected_sellers)].copy()
+                    seller_final_report_df_filtered = final_report_df[final_report_df['ProductSetSid'].isin(seller_data_filtered['PRODUCT_SET_SID'])].copy()
+                    seller_label_filename = "_".join(s.replace(" ", "_").replace("/", "_") for s in selected_sellers)
+                else:
+                    st.sidebar.warning("SELLER_NAME column missing, cannot filter by seller.")
+
+            seller_final_report_df_filtered = country_validator.ensure_status_column(seller_final_report_df_filtered)
+            seller_rejected_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Rejected']
+            seller_approved_df_filtered = seller_final_report_df_filtered[seller_final_report_df_filtered['Status'] == 'Approved']
+
+            st.sidebar.subheader("Seller SKU Metrics")
+            if 'SELLER_NAME' in data.columns and 'report_with_seller' in locals() and not report_with_seller.empty:
+                sellers_to_display = (selected_sellers if 'All Sellers' not in selected_sellers and selected_sellers else seller_options[1:])
+                for seller in sellers_to_display:
+                    if seller == 'All Sellers':
+                        continue
+                    current_seller_data = report_with_seller[report_with_seller['SELLER_NAME'] == seller]
+                    rej_count = current_seller_data[current_seller_data['Status'] == 'Rejected'].shape[0]
+                    app_count = current_seller_data[current_seller_data['Status'] == 'Approved'].shape[0]
+                    st.sidebar.write(f"**{seller}**: Rej: {rej_count}, App: {app_count}")
+            else:
+                st.sidebar.write("Seller metrics unavailable.")
+
+            st.sidebar.markdown("---")
+            st.sidebar.subheader(f"Exports: {seller_label_filename.replace('_', ' ')}")
+            st.sidebar.download_button("Seller Final Export", to_excel(seller_final_report_df_filtered, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}_{seller_label_filename}.xlsx", key="daily_final")
+            st.sidebar.download_button("Seller Rejected Export", to_excel(seller_rejected_df_filtered, support_files['reasons']), f"{file_prefix}_Rejected_Products_{current_date}_{seller_label_filename}.xlsx", key="daily_rejected")
+            st.sidebar.download_button("Seller Approved Export", to_excel(seller_approved_df_filtered, support_files['reasons']), f"{file_prefix}_Approved_Products_{current_date}_{seller_label_filename}.xlsx", key="daily_approved")
+            st.sidebar.download_button("Seller Full Data Export", to_excel_full_data(seller_data_filtered, seller_final_report_df_filtered), f"{file_prefix}_Seller_Data_Export_{current_date}_{seller_label_filename}.xlsx", key="daily_full")
+
+            st.markdown("---")
+            st.header("Overall Results")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Products", len(data))
+            with col2:
+                st.metric("Approved", len(approved_df))
+            with col3:
+                st.metric("Rejected", len(rejected_df))
+            with col4:
+                rate = (len(rejected_df)/len(data)*100) if len(data) > 0 else 0
+                st.metric("Rejection Rate", f"{rate:.1f}%")
+
+            st.markdown("---")
+            st.subheader("Validation Results by Flag")
+            for title, df_flagged in individual_flag_dfs.items():
+                with st.expander(f"**{title}** ({len(df_flagged)} products)", expanded=False):
+                    if not df_flagged.empty:
+                        cols = [c for c in ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE'] if c in df_flagged.columns]
+                        st.dataframe(df_flagged[cols], use_container_width=True)
+                        safe = title.replace(' ', '_').replace('/', '_')
+                        st.download_button(f"Export {title}", to_excel_flag_data(df_flagged.copy(), title), f"{file_prefix}_{safe}_{current_date}.xlsx", key=f"flag_{safe}")
+                    else:
+                        st.success("No issues found for this validation.")
+
+            st.markdown("---")
+            st.header("Overall Exports (All Sellers)")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.download_button("Final Report", to_excel(final_report_df, support_files['reasons']), f"{file_prefix}_Final_{current_date}_ALL.xlsx", use_container_width=True)
+            with col2:
+                st.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}_ALL.xlsx", use_container_width=True)
+            with col3:
+                st.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}_ALL.xlsx", use_container_width=True)
+            with col4:
+                st.download_button("Full Data", to_excel_full_data(data.copy(), final_report_df), f"{file_prefix}_Full_{current_date}_ALL.xlsx", use_container_width=True)
+
+        except Exception as e:
+            logger.error(f"Critical error in daily validation: {e}", exc_info=True)
+            st.error(f"Critical Error: {e}")
+            with st.expander("Technical Details"):
+                st.code(traceback.format_exc())
+
+# ================================
+# DATA LAKE TAB
+# ================================
+with tab3:
+    st.header("Data Lake")
+    file = st.file_uploader("Upload audit file (jsonl / csv / xlsx)", type=['jsonl','csv','xlsx'], key="lake")
+    try:
+        if file:
+            if file.name.endswith('.jsonl'):
+                df = pd.read_json(file, lines=True)
+            elif file.name.endswith('.csv'):
+                df = pd.read_csv(file, sep=None, engine='python')
+            else:
+                df = pd.read_excel(file)
+        else:
+            df = pd.read_json('validation_audit.jsonl', lines=True)
+        time_cols = [c for c in df.columns if 'time' in c.lower() or 'date' in c.lower()]
+        if time_cols:
+            ts = df[time_cols[0]]
+        else:
+            ts = pd.to_datetime(df.index)
+        df['timestamp'] = pd.to_datetime(ts, errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+        st.dataframe(df.sort_values('timestamp', ascending=False).head(50), use_container_width=True)
+    except Exception as e:
+        st.info("No data yet – run a validation or upload a file.")
