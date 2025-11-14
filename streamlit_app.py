@@ -73,92 +73,41 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     """
-    Load flags.xlsx and reasons.xlsx for ID-based reason/comment mapping
+    Load flags.xlsx for reason/comment mapping
    
-    Expected files:
-    - reasons.xlsx: columns [rejection_reason_code, Comment] with row numbers as IDs
-    - flags.xlsx: columns [flag_name, reason_id]
+    Expected file:
+    - flags.xlsx: columns [flag_name, rejection_reason_code, Comment]
    
     Returns: Dictionary mapping flag names to (reason_code, comment) tuples
     """
     try:
-        # Load master reasons file
-        reasons_df = pd.read_excel('reasons.xlsx')
-        reasons_df.columns = reasons_df.columns.str.strip()
-       
-        # Validate reasons.xlsx structure
-        required_reasons_cols = ['rejection_reason_code', 'Comment']
-        missing = [col for col in required_reasons_cols if col not in reasons_df.columns]
-       
-        if missing:
-            logger.error(f"reasons.xlsx missing columns: {missing}")
-            st.error(f"❌ reasons.xlsx missing required columns: {missing}")
-            st.info("Required: 'rejection_reason_code' and 'Comment'")
-            return {}
-       
-        # Create reason_id index (row number = ID)
-        reasons_df['reason_id'] = range(1, len(reasons_df) + 1)
-       
-        # Create lookup dictionary: reason_id -> (reason_code, comment)
-        reasons_lookup = {}
-        for _, row in reasons_df.iterrows():
-            reason_id = row['reason_id']
-            reason_code = str(row.get('rejection_reason_code', '')).strip()
-            comment = str(row.get('Comment', '')).strip()
-           
-            if reason_code:
-                reasons_lookup[reason_id] = (reason_code, comment)
-       
-        logger.info(f"Loaded {len(reasons_lookup)} reasons from reasons.xlsx")
-       
-        # Load flags mapping file
+        # Load flags file
         flags_df = pd.read_excel('flags.xlsx')
         flags_df.columns = flags_df.columns.str.strip()
        
         # Validate flags.xlsx structure
-        required_flags_cols = ['flag_name', 'reason_id']
-        missing_flags = [col for col in required_flags_cols if col not in flags_df.columns]
+        required_cols = ['flag_name', 'rejection_reason_code', 'Comment']
+        missing = [col for col in required_cols if col not in flags_df.columns]
        
-        if missing_flags:
-            logger.error(f"flags.xlsx missing columns: {missing_flags}")
-            st.error(f"❌ flags.xlsx missing required columns: {missing_flags}")
-            st.info("Required: 'flag_name' and 'reason_id'")
+        if missing:
+            logger.error(f"flags.xlsx missing columns: {missing}")
+            st.error(f"❌ flags.xlsx missing required columns: {missing}")
+            st.info(f"Required: {required_cols}")
             return {}
        
         # Build flag mapping: flag_name -> (reason_code, comment)
         flag_mapping = {}
-        missing_reason_ids = []
        
         for _, row in flags_df.iterrows():
             flag_name = str(row.get('flag_name', '')).strip()
-            reason_id = row.get('reason_id')
+            reason_code = str(row.get('rejection_reason_code', '')).strip()
+            comment = str(row.get('Comment', '')).strip()
            
-            if not flag_name:
+            if not flag_name or not reason_code:
                 continue
            
-            # Convert reason_id to int
-            try:
-                reason_id = int(reason_id)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid reason_id for flag '{flag_name}': {reason_id}")
-                st.warning(f"⚠️ Invalid reason_id for flag '{flag_name}': {reason_id}")
-                continue
-           
-            # Lookup reason by ID
-            if reason_id in reasons_lookup:
-                flag_mapping[flag_name] = reasons_lookup[reason_id]
-                logger.debug(f"Mapped flag '{flag_name}' -> reason_id {reason_id}")
-            else:
-                missing_reason_ids.append((flag_name, reason_id))
-                logger.warning(f"Flag '{flag_name}' references non-existent reason_id: {reason_id}")
-       
-        # Report missing reason IDs
-        if missing_reason_ids:
-            st.warning(f"⚠️ {len(missing_reason_ids)} flags reference invalid reason IDs:")
-            for flag, rid in missing_reason_ids[:5]:
-                st.caption(f" • '{flag}' → reason_id {rid} (not found)")
-            if len(missing_reason_ids) > 5:
-                st.caption(f" ...and {len(missing_reason_ids) - 5} more")
+            flag_mapping[flag_name] = (reason_code, comment)
+            logger.debug(f"Mapped flag '{flag_name}' -> {reason_code}")
        
         # Validate expected flags
         expected_flags = [
@@ -173,6 +122,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approve to sell books',
             'Seller Approved to Sell Perfume',
             'Perfume Price Check',
+            'Suspected Fake',
         ]
        
         missing_flags = [f for f in expected_flags if f not in flag_mapping]
@@ -186,31 +136,24 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             logger.error("No valid flag mappings loaded")
             st.error("❌ No valid flag mappings found!")
             st.info("""
-            **Required files:**
+            **Required file:**
            
-            **reasons.xlsx** (master reasons list):
-            | rejection_reason_code | Comment |
-            |----------------------|---------|
-            | 1000001 - Brand NOT Allowed | Your listing was... |
-            | 1000002 - Kindly Ensure... | Please do not... |
-           
-            **flags.xlsx** (flag to reason mapping):
-            | flag_name | reason_id |
-            |-----------|-----------|
-            | Sensitive words | 1 |
-            | BRAND name repeated in NAME | 2 |
+            **flags.xlsx**:
+            | flag_name | rejection_reason_code | Comment |
+            |-----------|----------------------|---------|
+            | Sensitive words | 1000001 - Brand NOT Allowed | Your listing was... |
+            | BRAND name repeated in NAME | 1000002 - Kindly Ensure... | Please do not... |
             """)
             return {}
        
         logger.info(f"Loaded {len(flag_mapping)} flag mappings from flags.xlsx")
-        st.success(f"✅ Loaded {len(flag_mapping)} validation flags (using {len(reasons_lookup)} reasons)")
+        st.success(f"✅ Loaded {len(flag_mapping)} validation flags")
        
         # Display loaded mappings in expander
         with st.expander("📋 View Loaded Flag Mappings", expanded=False):
             mapping_df = pd.DataFrame([
                 {
                     'Flag': k,
-                    'Reason ID': next((rid for rid, v in reasons_lookup.items() if v == val), 'N/A'),
                     'Reason Code': val[0],
                     'Comment Preview': val[1][:50] + '...' if len(val[1]) > 50 else val[1]
                 }
@@ -239,17 +182,22 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
        
         return flag_mapping
    
-    except FileNotFoundError as e:
-        missing_file = str(e).split("'")[1] if "'" in str(e) else "required file"
-        logger.error(f"{missing_file} not found")
-        st.error(f"❌ {missing_file} not found. This file is required for validation.")
+    except FileNotFoundError:
+        logger.error("flags.xlsx not found")
+        st.error("❌ flags.xlsx not found. This file is required for validation.")
         st.info("""
-        **Required files:**
-        - `reasons.xlsx`: Master list of all rejection reasons (1-49)
-        - `flags.xlsx`: Mapping of validation flags to reason IDs
+        **Required file:**
+        - flags.xlsx: Contains flag names, rejection codes, and comments
        
-        Make sure both files are in the same directory as your script.
+        Make sure the file is in the same directory as your script.
         """)
+        return {}
+   
+    except Exception as e:
+        logger.error(f"Error loading flag mappings: {e}", exc_info=True)
+        st.error(f"❌ Error loading flag mappings: {e}")
+        with st.expander("Technical Details"):
+            st.code(traceback.format_exc())
         return {}
    
     except Exception as e:
@@ -278,7 +226,7 @@ def load_all_support_files() -> Dict:
         'check_variation': load_excel_file('check_variation.xlsx'),
         'category_fas': load_excel_file('category_FAS.xlsx'),
         'perfumes': load_excel_file('perfumes.xlsx'),
-        'reasons': load_excel_file('reasons.xlsx'),
+        'reasons': load_excel_file('flags.xlsx'),  # Changed from reasons.xlsx to flags.xlsx
         'flags_mapping': load_flags_mapping(),
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
     }
@@ -986,7 +934,14 @@ def to_excel(report_df: pd.DataFrame, reasons_config_df: pd.DataFrame,
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         to_excel_base(report_df, sheet1_name, PRODUCTSETS_COLS, writer)
         if not reasons_config_df.empty:
-            to_excel_base(reasons_config_df, sheet2_name, REJECTION_REASONS_COLS, writer)
+            # Extract only rejection_reason_code and Comment columns
+            rejection_cols = ['rejection_reason_code', 'Comment']
+            if all(col in reasons_config_df.columns for col in rejection_cols):
+                reasons_export = reasons_config_df[rejection_cols].drop_duplicates()
+                reasons_export.columns = REJECTION_REASONS_COLS
+                reasons_export.to_excel(writer, index=False, sheet_name=sheet2_name)
+            else:
+                pd.DataFrame(columns=REJECTION_REASONS_COLS).to_excel(writer, index=False, sheet_name=sheet2_name)
         else:
             pd.DataFrame(columns=REJECTION_REASONS_COLS).to_excel(writer, index=False, sheet_name=sheet2_name)
     output.seek(0)
