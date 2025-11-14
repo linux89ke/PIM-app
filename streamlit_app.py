@@ -968,7 +968,7 @@ def to_excel_full_data(data_df: pd.DataFrame, final_report_df: pd.DataFrame) -> 
         return output
     except Exception as e:
         logger.error(f"Error generating Full Data Export: {e}", exc_info=True)
-        st.error(f"Error generating Full Data Export: {e}")
+        st.error(f"Error generating Full Data Export: {str(e)}")
         return BytesIO()
 def to_excel_flag_data(flag_df: pd.DataFrame, flag_name: str) -> BytesIO:
     """Export individual flag data"""
