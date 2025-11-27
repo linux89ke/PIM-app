@@ -1,20 +1,18 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from datetime import datetime
 import re
 from typing import Dict, List, Optional
 
 # =============================================
-# CONFIG & CONSTANTS
+# CONFIG
 # =============================================
 st.set_page_config(page_title="Product Validation Tool", layout="wide")
 FX_RATE = 132.0
-
 PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]
 
 # =============================================
-# SUPPORT FILES (CACHED)
+# SUPPORT FILES
 # =============================================
 @st.cache_data(ttl=3600)
 def load_txt_file(filename: str) -> List[str]:
@@ -41,15 +39,15 @@ def load_flags_mapping() -> Dict[str, tuple]:
         'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia"),
         'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field"),
         'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned"),
-        'Duplicate product': ('1000007 - Other Reason', "Kindly note product was rejected because it's a duplicate product"),
-        'Prohibited products': ('1000007 - Other Reason', "This product is not allowed for listing on Jumia"),
-        'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type – Color"),
-        'Generic BRAND Issues': ('1000014 - Kindly request for the creation of this product\'s actual brand name...', "To create the actual brand name, please fill the form"),
-        'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product...', "Jumia's technical team has confirmed the product is counterfeit"),
-        'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Seller Support to confirm eligibility"),
-        'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Seller Support to confirm eligibility"),
-        'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify Authenticity...', "Price is $30+ below reference price"),
-        'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit/Fake Product', "This jersey is suspected to be counterfeit. Please raise a claim with Seller Support."),
+        'Duplicate product': ('1000007 - Other Reason', "Duplicate product"),
+        'Prohibited products': ('1000007 - Other Reason', "Product not allowed"),
+        'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Single word title"),
+        'Generic BRAND Issues': ('1000014 - Kindly request for the creation of this product\'s actual brand name...', "Generic brand"),
+        'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product...', "Counterfeit sneakers"),
+        'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support...', "Not approved for books"),
+        'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Not approved for perfume"),
+        'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify Authenticity...', "Price too low"),
+        'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit/Fake Product', "Suspected fake jersey"),
     }
 
 @st.cache_data(ttl=3600)
@@ -82,18 +80,12 @@ def compile_regex(words: List[str]) -> Optional[re.Pattern]:
 class CountryValidator:
     def __init__(self, country: str):
         self.code = "KE" if country == "Kenya" else "UG"
-        self.skip_list = [
-            "Seller Approve to sell books",
-            "Perfume Price Check",
-            "Seller Approved to Sell Perfume",
-            "Counterfeit Sneakers"
-        ] if country == "Uganda" else []
-
+        self.skip_list = ["Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers"] if country == "Uganda" else []
     def skip_validation(self, name: str) -> bool:
         return name in self.skip_list
 
 # =============================================
-# ALL VALIDATION FUNCTIONS (SAFE)
+# VALIDATION FUNCTIONS
 # =============================================
 def check_sensitive_words(data, pattern):
     if not pattern: return pd.DataFrame(columns=data.columns)
@@ -101,7 +93,7 @@ def check_sensitive_words(data, pattern):
 
 def check_prohibited_products(data, pattern):
     if not pattern: return pd.DataFrame(columns=data.columns)
-    return data[data['NAME'].astype(str).str.lower().lower().str.contains(pattern, na=False)]
+    return data[data['NAME'].astype(str).str.lower().str.contains(pattern, na=False)]
 
 def check_missing_color(data, pattern, cats):
     if not pattern or not cats: return pd.DataFrame(columns=data.columns)
@@ -145,7 +137,7 @@ def check_perfume_price_vectorized(data, ref_df, cats):
     df['B'] = df['BRAND'].str.lower()
     if 'PRICE_USD' not in ref_df.columns: return pd.DataFrame(columns=data.columns)
     ref_df['B'] = ref_df['BRAND'].astype(str).str.lower()
-    merged = df.merge(ref_df[['B','PRICE_USD','PRODUCT_NAME']], on='left')
+    merged = df.merge(ref_df[['B','PRICE_USD','PRODUCT_NAME']], on='B', how='left')
     merged['match'] = merged.apply(lambda r: pd.notna(r['PRODUCT_NAME']) and str(r['PRODUCT_NAME']) in str(r['NAME']), axis=1)
     flagged = merged[merged['match'] & (merged['PRICE_USD'] - merged['usd'] >= 30)]
     return flagged[data.columns] if not flagged.empty else pd.DataFrame(columns=data.columns)
@@ -168,7 +160,7 @@ def check_generic_brand_issues(data, fas_cats):
     return data[data['CATEGORY_CODE'].isin(fas_cats) & data['BRAND'].str.lower().eq('generic')]
 
 # =============================================
-# MAIN VALIDATION ENGINE
+# MAIN VALIDATION
 # =============================================
 def validate_products(data, files, validator):
     flags = files['flags_mapping']
@@ -199,11 +191,11 @@ def validate_products(data, files, validator):
         try:
             results[name] = func(data, **kwargs)
         except Exception as e:
-            st.warning(f"{name}: {e}")
+            st.warning(f"Error in {name}: {e}")
             results[name] = pd.DataFrame(columns=data.columns)
-        progress.progress((i+1)/len(validations)))
+        progress.progress((i + 1) / len(validations))  # FIXED: removed extra ) removed
 
-    # Build final report
+    # Build report
     rejected_sids = set()
     report = []
     for name, df in results.items():
@@ -235,7 +227,7 @@ def validate_products(data, files, validator):
     return pd.DataFrame(report), results
 
 # =============================================
-# 4 ORIGINAL REPORTS (EXACTLY AS BEFORE)
+# 4 ORIGINAL REPORTS
 # =============================================
 def generate_four_reports(data_df, report_df, support_files):
     # 1. ProductSets + RejectionReasons
@@ -256,8 +248,7 @@ def generate_four_reports(data_df, report_df, support_files):
         merged = data_df.merge(report_df[["ProductSetSid","Status","Reason","Comment","FLAG","SellerName"]], 
                               left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how="left")
         cols = [c for c in ["PRODUCT_SET_SID","NAME","BRAND","CATEGORY","CATEGORY_CODE","COLOR","PARENTSKU",
-                           "SELLER_NAME","SELLER_SKU","GLOBAL_PRICE","GLOBAL_SALE_PRICE","Status","Reason","Comment","FLAG"] 
-                if c in merged.columns]
+                           "SELLER_NAME","SELLER_SKU","GLOBAL_PRICE","GLOBAL_SALE_PRICE","Status","Reason","Comment","FLAG"] if c in merged.columns]
         out = BytesIO()
         with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
             merged[cols].to_excel(writer, sheet_name="ProductSets", index=False)
@@ -287,7 +278,6 @@ def generate_four_reports(data_df, report_df, support_files):
         if 'Rejected' not in cat_summary.columns: cat_summary['Rejected'] = 0
         cat_summary['Total'] = cat_summary.sum(axis=1)
         cat_summary = cat_summary.sort_values('Total', ascending=False)
-
         reason_summary = report_df[report_df['Status']=='Rejected'].groupby('Reason').size().sort_values(ascending=False)
 
         out = BytesIO()
@@ -326,4 +316,41 @@ if uploaded:
         col1.metric("Total", len(df))
         col2.metric("Approved", len(report_df[report_df['Status']=='Approved']))
         col3.metric("Rejected", len(report_df[report_df['Status']=='Rejected']))
-        col4.metric("Rejection Rate
+        col4.metric("Rejection Rate", f"{len(report_df[report_df['Status']=='Rejected'])/len(df)*100:.1f}%")
+
+        # Generate reports
+        r1, r2, r3, r4 = generate_four_reports(df, report_df, support_files)
+
+        st.markdown("### Download Reports")
+        c1, c2 = st.columns(2)
+        c3, c4 = st.columns(2)
+        c1.download_button("1. ProductSets + RejectionReasons", r1, "01_ProductSets_RejectionReasons.xlsx")
+        c2.download_button("2. Full Data Export", r2, "02_Full_Data_Export.xlsx")
+        c3.download_button("3. Sellers Summary", r3, "03_Sellers_Summary.xlsx")
+        c4.download_button("4. Categories & Reasons Summary", r4, "04_Categories_Reasons_Summary.xlsx")
+
+        # Show ALL flags (even 0)
+        st.markdown("### Validation Flags")
+        all_flags = [
+            "Sensitive words","Seller Approve to sell books","Perfume Price Check","Seller Approved to Sell Perfume",
+            "Counterfeit Sneakers","Suspected counterfeit Jerseys","Prohibited products","Single-word NAME",
+            "Generic BRAND Issues","BRAND name repeated in NAME","Missing COLOR","Duplicate product"
+        ]
+        active_flags = [f for f in all_flags if not validator.skip_validation(f)]
+        cols = st.columns(4)
+        for i, flag in enumerate(active_flags):
+            count = len(flag_results.get(flag, pd.DataFrame()))
+            cols[i % 4].metric(flag, count)
+
+        # Optional details
+        with st.expander("Show products per flag", expanded=False):
+            for flag in active_flags:
+                df_flag = flag_results.get(flag, pd.DataFrame())
+                if not df_flag.empty:
+                    st.write(f"**{flag}** – {len(df_flag)}")
+                    st.dataframe(df_flag[['PRODUCT_SET_SID','NAME','BRAND','SELLER_NAME','CATEGORY_CODE']].head(50))
+
+    except Exception as e:
+        st.error("Error processing file")
+        with st.expander("Details"):
+            st.code(traceback.format_exc())
