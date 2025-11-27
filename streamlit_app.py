@@ -105,7 +105,7 @@ def load_all_support_files() -> Dict:
         'book_category_codes': load_excel_file('Books_cat.xlsx', 'CategoryCode'),
         'approved_book_sellers': load_excel_file('Books_Approved_Sellers.xlsx', 'SellerName'),
         'perfume_category_codes': load_txt_file('Perfume_cat.txt'),
-        'sensitive_perfume_brands': [b.lower() for in load_txt_file('sensitive_perfumes.txt')],
+        'sensitive_perfume_brands': [b.lower() for b in load_txt_file('sensitive_perfumes.txt')],
         'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
         'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
         'sneaker_sensitive_brands': [b.lower() for in load_txt_file('Sneakers_Sensitive.txt')],
