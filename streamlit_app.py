@@ -137,7 +137,7 @@ def check_seller_approved_for_perfume(data: pd.DataFrame, cats: List[str], selle
     sensitive = df['BRAND_L'].isin(brands)
     fake = df['BRAND_L'].isin(['generic','fashion','original','designer','smart collection','designers collection'])
     name_has = df['NAME_L'].apply(lambda x: any(b in x for b in brands))
-    return df[(sensitive | (fake & name_has)) & (~df['SELLER_NAME'].isin(sellers)))]
+    return df[(sensitive | (fake & name_has)) & (~df['SELLER_NAME'].isin(sellers))]
 
 def check_counterfeit_sneakers(data: pd.DataFrame, cats: List[str], brands: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','NAME','BRAND'}.issubset(data.columns): return pd.DataFrame()
