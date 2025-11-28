@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Optional
 import traceback
 import json
 import xlsxwriter
-import altair as alt # Added for charts
+import altair as alt
 
 # -------------------------------------------------
 # Logging Configuration
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------
 # Page config
 # -------------------------------------------------
-st.set_page_config(page_title="Product Validation Tool", layout="wide") # Changed to wide layout for dashboards
+st.set_page_config(page_title="Product Validation Tool", layout="wide")
 
 # -------------------------------------------------
 # Constants & Mapping
@@ -83,7 +83,6 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
-        # Manual mapping for demonstration/fallback
         flag_mapping = {
             'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia..."),
             'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field..."),
@@ -184,7 +183,7 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
         st.stop()
     return filtered
 
-# --- Validation Logic Functions (Same as before) ---
+# --- Validation Logic Functions ---
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
@@ -391,7 +390,6 @@ def to_excel_full_data(data_df, final_report_df):
         d_cp = data_df.copy()
         r_cp = final_report_df.copy()
         
-        # Merge logic
         d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
         r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
         merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
@@ -405,12 +403,10 @@ def to_excel_full_data(data_df, final_report_df):
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             to_excel_base(merged, "ProductSets", export_cols, writer)
             
-            # Helper for summary sheets
             wb = writer.book
             ws = wb.add_worksheet('Sellers Data')
             fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
             
-            # Sellers Summary
             if 'SELLER_RATING' in merged.columns:
                 merged['Rejected_Count'] = (merged['Status'] == 'Rejected').astype(int)
                 merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
@@ -419,14 +415,12 @@ def to_excel_full_data(data_df, final_report_df):
                     AvgRating=('SELLER_RATING', 'mean'), TotalStock=('STOCK_QTY', 'sum')
                 ).reset_index().sort_values('Rejected', ascending=False)
                 summ.insert(0, 'Rank', range(1, len(summ) + 1))
-                
                 ws.write(0, 0, "Sellers Summary", fmt)
                 summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
                 row_cursor = len(summ) + 4
             else:
                 row_cursor = 1
 
-            # Category Summary
             if 'CATEGORY' in merged.columns:
                 cat_summ = merged[merged['Status']=='Rejected'].groupby('CATEGORY').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
                 cat_summ.insert(0, 'Rank', range(1, len(cat_summ) + 1))
@@ -434,7 +428,6 @@ def to_excel_full_data(data_df, final_report_df):
                 cat_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
                 row_cursor += len(cat_summ) + 4
             
-            # Reasons Summary
             if 'Reason' in merged.columns:
                 rsn_summ = merged[merged['Status']=='Rejected'].groupby('Reason').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
                 rsn_summ.insert(0, 'Rank', range(1, len(rsn_summ) + 1))
@@ -499,7 +492,6 @@ with tab1:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
             
-            # Smart Load
             try:
                 if uploaded_file.name.endswith('.xlsx'):
                      raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
@@ -533,12 +525,10 @@ with tab1:
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
                 log_validation_run(country, uploaded_file.name, len(data), len(approved_df), len(rejected_df))
                 
-                # Side Panel
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
                 
-                # Filter Logic
                 filt_data = data.copy()
                 filt_report = final_report.copy()
                 lbl = "All_Sellers"
@@ -551,7 +541,6 @@ with tab1:
                 filt_rej = filt_report[filt_report['Status']=='Rejected']
                 filt_app = filt_report[filt_report['Status']=='Approved']
                 
-                # Dashboard
                 st.markdown("---")
                 st.header("Overall Results")
                 c1, c2, c3, c4 = st.columns(4)
@@ -598,36 +587,25 @@ with tab2:
         with st.spinner("Aggregating files..."):
             for f in weekly_files:
                 try:
-                    # Logic to read "ProductSets" sheet if available, else standard read
                     if f.name.endswith('.xlsx'):
                         try:
-                            # Try reading ProductSets sheet directly
                             df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
                         except:
-                            # Fallback to first sheet
                             f.seek(0)
                             df = pd.read_excel(f, engine='openpyxl', dtype=str)
                     else:
                         df = pd.read_csv(f, dtype=str)
                     
-                    # Ensure standard names
                     df = standardize_input_data(df)
                     combined_df = pd.concat([combined_df, df], ignore_index=True)
                 except Exception as e:
                     st.error(f"Error reading {f.name}: {e}")
         
         if not combined_df.empty:
-            # Check for required analysis columns
-            if 'Status' not in combined_df.columns:
-                # If Status is missing, it might be raw data, try to look for Listing Status or map it
-                st.warning("Column 'Status' (Approved/Rejected) not found. Attempting to use available data.")
-                # Fallback logic if needed, or stop
-            
-            # Clean up
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
             
-            # --- METRICS ROW ---
+            # Key Metrics
             st.markdown("### Key Metrics")
             m1, m2, m3, m4 = st.columns(4)
             total = len(combined_df)
@@ -641,16 +619,13 @@ with tab2:
             
             st.markdown("---")
             
-            # --- CHARTS ROW 1 ---
+            # Visuals
             c1, c2 = st.columns(2)
-            
-            # Chart 1: Top Rejection Reasons
             with c1:
                 st.subheader("Top Rejection Reasons")
                 if not rejected.empty and 'Reason' in rejected.columns:
                     reason_counts = rejected['Reason'].value_counts().reset_index()
                     reason_counts.columns = ['Reason', 'Count']
-                    
                     chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(
                         x=alt.X('Count', title='Number of Products'),
                         y=alt.Y('Reason', sort='-x', title=None),
@@ -658,16 +633,12 @@ with tab2:
                         tooltip=['Reason', 'Count']
                     ).interactive()
                     st.altair_chart(chart, use_container_width=True)
-                else:
-                    st.info("No rejection reasons data found.")
 
-            # Chart 2: Top Rejected Categories
             with c2:
                 st.subheader("Top Rejected Categories")
                 if not rejected.empty and 'CATEGORY' in rejected.columns:
                     cat_counts = rejected['CATEGORY'].value_counts().reset_index()
                     cat_counts.columns = ['Category', 'Count']
-                    
                     chart = alt.Chart(cat_counts.head(10)).mark_bar().encode(
                         x=alt.X('Count', title='Number of Rejections'),
                         y=alt.Y('Category', sort='-x', title=None),
@@ -675,19 +646,13 @@ with tab2:
                         tooltip=['Category', 'Count']
                     ).interactive()
                     st.altair_chart(chart, use_container_width=True)
-                else:
-                    st.info("No category data found.")
 
-            # --- CHARTS ROW 2 ---
             c3, c4 = st.columns(2)
-
-            # Chart 3: Top Rejected Sellers
             with c3:
                 st.subheader("Top 10 Rejected Sellers")
                 if not rejected.empty and 'SELLER_NAME' in rejected.columns:
                     seller_counts = rejected['SELLER_NAME'].value_counts().reset_index()
                     seller_counts.columns = ['Seller', 'Count']
-                    
                     chart = alt.Chart(seller_counts.head(10)).mark_bar().encode(
                         x=alt.X('Seller', sort='-y', axis=alt.Axis(labelAngle=-45)),
                         y=alt.Y('Count', title='Rejections'),
@@ -696,18 +661,13 @@ with tab2:
                     ).interactive()
                     st.altair_chart(chart, use_container_width=True)
 
-            # Chart 4: Seller vs Reason Heatmap (Aggregated)
             with c4:
                 st.subheader("Seller vs. Reason Breakdown (Top 5)")
                 if not rejected.empty and 'SELLER_NAME' in rejected.columns and 'Reason' in rejected.columns:
-                    # Get top 5 sellers
                     top_sellers = rejected['SELLER_NAME'].value_counts().head(5).index.tolist()
                     filtered_rej = rejected[rejected['SELLER_NAME'].isin(top_sellers)]
-                    
                     if not filtered_rej.empty:
-                        # Prepare data for stacked bar
                         breakdown = filtered_rej.groupby(['SELLER_NAME', 'Reason']).size().reset_index(name='Count')
-                        
                         chart = alt.Chart(breakdown).mark_bar().encode(
                             x=alt.X('SELLER_NAME', title='Seller'),
                             y=alt.Y('Count', title='Count'),
@@ -715,20 +675,62 @@ with tab2:
                             tooltip=['SELLER_NAME', 'Reason', 'Count']
                         ).interactive()
                         st.altair_chart(chart, use_container_width=True)
-                    else:
-                        st.info("Not enough data for breakdown.")
 
-            # --- DATA TABLES ---
-            with st.expander("View Detailed Data Tables"):
-                t1, t2 = st.tabs(["Top Rejected Sellers", "Category Breakdown"])
+            # --- NEW SUMMARY TABLES & DOWNLOAD ---
+            st.markdown("---")
+            st.subheader("Top 5 Summaries")
+
+            if not rejected.empty:
+                # Prepare Dataframes
+                top_reasons = rejected['Reason'].value_counts().head(5).reset_index()
+                top_reasons.columns = ['Reason', 'Count']
                 
-                with t1:
-                    if not rejected.empty:
-                        st.dataframe(rejected['SELLER_NAME'].value_counts().reset_index(name='Rejections').rename(columns={'index':'Seller'}))
+                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
+                top_sellers.columns = ['Seller', 'Rejection Count']
                 
-                with t2:
-                     if not rejected.empty:
-                        st.dataframe(rejected['CATEGORY'].value_counts().reset_index(name='Rejections').rename(columns={'index':'Category'}))
+                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
+                top_cats.columns = ['Category', 'Rejection Count']
+                
+                # Display on UI
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown("**Top 5 Reasons**")
+                    st.dataframe(top_reasons, hide_index=True, use_container_width=True)
+                with c2:
+                    st.markdown("**Top 5 Sellers**")
+                    st.dataframe(top_sellers, hide_index=True, use_container_width=True)
+                with c3:
+                    st.markdown("**Top 5 Categories**")
+                    st.dataframe(top_cats, hide_index=True, use_container_width=True)
+                
+                # Generate Excel
+                summary_excel = BytesIO()
+                with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
+                    # Metrics Sheet
+                    pd.DataFrame([
+                        {'Metric': 'Total Rejected SKUs', 'Value': len(rejected)},
+                        {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
+                        {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
+                    ]).to_excel(writer, sheet_name='Summary', index=False)
+                    
+                    # Data Sheets
+                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
+                    top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
+                    top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
+                    
+                    # Formatting
+                    workbook = writer.book
+                    for sheet in writer.sheets.values():
+                        sheet.set_column(0, 1, 25)
+                
+                summary_excel.seek(0)
+                
+                st.download_button(
+                    label="📥 Download Summary Excel",
+                    data=summary_excel,
+                    file_name=f"Weekly_Analysis_Summary_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
 # -------------------------------------------------
 # TAB 3: DATA LAKE
