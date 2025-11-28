@@ -232,6 +232,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     has_warranty_desc = is_present(target_data['PRODUCT_WARRANTY'])
     has_warranty_duration = is_present(target_data['WARRANTY_DURATION'])
     
+    # Flag if BOTH are missing
     mask = ~(has_warranty_desc | has_warranty_duration)
     return target_data[mask]
 
@@ -360,6 +361,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     flags_mapping = support_files['flags_mapping']
     
     validations = [
+        # PRIORITY #1: Product Warranty Check
+        ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
+        
         ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
         ("Perfume Price Check", check_perfume_price_vectorized, {'perfumes_df': support_files['perfumes'], 'perfume_category_codes': support_files['perfume_category_codes']}),
@@ -372,7 +376,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {}),
-        ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
     ]
     
     progress_bar = st.progress(0)
@@ -538,6 +541,7 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
+    # 1. Allow Multiple File Uploads
     uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
     
     if uploaded_files:
@@ -546,8 +550,9 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
-            file_sids_sets = []
+            file_sids_sets = []  # To track intersections
             
+            # 2. Load and Standardize Each File
             for uploaded_file in uploaded_files:
                 try:
                     if uploaded_file.name.endswith('.xlsx'):
@@ -577,16 +582,20 @@ with tab1:
                 st.error("No valid data loaded.")
                 st.stop()
                 
+            # 3. Concatenate
             merged_data = pd.concat(all_dfs, ignore_index=True)
             st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
+            # 4. Calculate Intersection (Before consolidation)
             intersection_count = 0
             if len(file_sids_sets) > 1:
                 intersection_sids = set.intersection(*file_sids_sets)
                 intersection_count = len(intersection_sids)
             
+            # 5. Consolidate (Dedup + Propagate COLOR_FAMILY & WARRANTY INFO)
             data_cons = consolidate_data(merged_data)
             
+            # 6. Filter Country & Validate Schema
             is_valid, errors = validate_input_schema(data_cons)
             
             if is_valid:
@@ -594,6 +603,7 @@ with tab1:
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
+                # Ensure COLOR_FAMILY exists for checks, even if empty
                 if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
                 
                 with st.spinner("Running validations..."):
@@ -603,6 +613,7 @@ with tab1:
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
                 log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
                 
+                # --- UI: Filters & Exports ---
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
@@ -622,6 +633,7 @@ with tab1:
                 st.markdown("---")
                 st.header("Overall Results")
                 
+                # METRICS ROW - Added Intersection Count
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Total", len(data))
                 c2.metric("Approved", len(approved_df))
