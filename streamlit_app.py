@@ -38,17 +38,21 @@ FULL_DATA_COLS = [
 FX_RATE = 132.0
 
 # MAPPING: New File Columns -> Script Internal Columns
+# The script will look for keys (Left) and rename them to values (Right)
 NEW_FILE_MAPPING = {
     'cod_productset_sid': 'PRODUCT_SET_SID',
     'dsc_name': 'NAME',
     'dsc_brand_name': 'BRAND',
     'cod_category_code': 'CATEGORY_CODE',
-    'dsc_category_name': 'CATEGORY', # Added category name mapping
+    'dsc_category_name': 'CATEGORY',
     'dsc_shop_seller_name': 'SELLER_NAME',
     'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
     'cod_parent_sku': 'PARENTSKU',
     'color': 'COLOR',
-    'list_seller_skus': 'SELLER_SKU'
+    'list_seller_skus': 'SELLER_SKU',
+    'image1': 'MAIN_IMAGE',
+    'dsc_status': 'LISTING_STATUS',
+    'dsc_shop_email': 'SELLER_EMAIL'
 }
 
 # -------------------------------------------------
