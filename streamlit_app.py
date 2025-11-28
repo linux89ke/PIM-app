@@ -34,7 +34,7 @@ FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG",
-    "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY"
+    "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION"
 ]
 FX_RATE = 132.0
 
@@ -49,11 +49,13 @@ NEW_FILE_MAPPING = {
     'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
     'cod_parent_sku': 'PARENTSKU',
     'color': 'COLOR',
-    'color_family': 'COLOR_FAMILY', # Critical for Kenya check
+    'color_family': 'COLOR_FAMILY',
     'list_seller_skus': 'SELLER_SKU',
     'image1': 'MAIN_IMAGE',
     'dsc_status': 'LISTING_STATUS',
-    'dsc_shop_email': 'SELLER_EMAIL'
+    'dsc_shop_email': 'SELLER_EMAIL',
+    'product_warranty': 'PRODUCT_WARRANTY',
+    'warranty_duration': 'WARRANTY_DURATION'
 }
 
 # -------------------------------------------------
@@ -97,6 +99,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity...', "Please contact Jumia Seller Support to raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
+            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."),
         }
         return flag_mapping
     except Exception: return {}
@@ -121,6 +124,7 @@ def load_all_support_files() -> Dict:
         'reasons': load_excel_file('reasons.xlsx'),
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
+        'warranty_category_codes': load_txt_file('Warranty.txt'),
     }
     return files
 
@@ -187,53 +191,67 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
 def consolidate_data(df: pd.DataFrame) -> pd.DataFrame:
     """
     Consolidate duplicate SIDs from multiple files.
-    Crucial: Propagates COLOR_FAMILY from one file to the rows of the other file.
+    Crucial: Propagates COLOR_FAMILY, PRODUCT_WARRANTY, and WARRANTY_DURATION.
     """
     if df.empty: return df
-    
-    # Propagate COLOR_FAMILY to all rows of the same SID (forward fill and back fill)
-    if 'COLOR_FAMILY' in df.columns:
-        df['COLOR_FAMILY'] = df.groupby('PRODUCT_SET_SID')['COLOR_FAMILY'].transform(lambda x: x.ffill().bfill())
-    
-    # Deduplicate keeping the first
+    cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']
+    for col in cols_to_propagate:
+        if col in df.columns:
+            df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
     df_dedup = df.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
     return df_dedup
 
 # --- Validation Logic Functions ---
 
+def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
+    """
+    Checks for missing warranty info in specific categories.
+    SAFEGUARD: Only runs if the uploaded file actually contained warranty data.
+    """
+    for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
+        if col not in data.columns: data[col] = ""
+    
+    # SAFEGUARD: If all warranty data is empty (e.g. only Pending QC file uploaded), SKIP this check.
+    all_warranty_missing = (
+        data['PRODUCT_WARRANTY'].replace(['', 'nan', 'NaN'], pd.NA).isna().all() and 
+        data['WARRANTY_DURATION'].replace(['', 'nan', 'NaN'], pd.NA).isna().all()
+    )
+    
+    if all_warranty_missing:
+        # Implicitly pass everything if data is not available
+        return pd.DataFrame(columns=data.columns)
+
+    if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
+    
+    target_data = data[data['CATEGORY_CODE'].isin(warranty_category_codes)].copy()
+    if target_data.empty: return pd.DataFrame(columns=data.columns)
+    
+    def is_present(series):
+        return series.notna() & (series.astype(str).str.strip() != '') & (series.astype(str).str.lower() != 'nan')
+
+    has_warranty_desc = is_present(target_data['PRODUCT_WARRANTY'])
+    has_warranty_duration = is_present(target_data['WARRANTY_DURATION'])
+    
+    mask = ~(has_warranty_desc | has_warranty_duration)
+    return target_data[mask]
+
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
-    """
-    Updated Logic:
-    - If Country is UG: Reject if COLOR is missing/wrong.
-    - If Country is KE: Reject if COLOR AND COLOR_FAMILY are missing/wrong.
-    """
     req = ['NAME', 'COLOR', 'CATEGORY_CODE']
     if not set(req).issubset(data.columns): return pd.DataFrame(columns=data.columns)
-    
     data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
     if data.empty: return pd.DataFrame(columns=data.columns)
     
-    # 1. Check Name
     name_check = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    
-    # 2. Check Color Field
     color_check = data['COLOR'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    
-    # 3. Check Color Family (KE Only)
     family_check = pd.Series([False] * len(data), index=data.index)
+    
     if country_code == 'KE' and 'COLOR_FAMILY' in data.columns:
-        # Check logic: is valid color in Color Family?
         family_check = data['COLOR_FAMILY'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     
     if country_code == 'KE':
-        # KE Rule: Approved if (Name OK) OR (Color OK) OR (Family OK)
-        # Reject if ALL fail
         mask = ~(name_check | color_check | family_check)
     else:
-        # UG Rule: Approved if (Name OK) OR (Color OK)
-        # Reject if BOTH fail
         mask = ~(name_check | color_check)
-        
     return data[mask]
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
@@ -354,6 +372,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {}),
+        ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
     ]
     
     progress_bar = st.progress(0)
@@ -519,7 +538,6 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    # 1. Allow Multiple File Uploads
     uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
     
     if uploaded_files:
@@ -528,9 +546,8 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
-            file_sids_sets = []  # To track intersections
+            file_sids_sets = []
             
-            # 2. Load and Standardize Each File
             for uploaded_file in uploaded_files:
                 try:
                     if uploaded_file.name.endswith('.xlsx'):
@@ -560,20 +577,16 @@ with tab1:
                 st.error("No valid data loaded.")
                 st.stop()
                 
-            # 3. Concatenate
             merged_data = pd.concat(all_dfs, ignore_index=True)
             st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
-            # 4. Calculate Intersection (Before consolidation)
             intersection_count = 0
             if len(file_sids_sets) > 1:
                 intersection_sids = set.intersection(*file_sids_sets)
                 intersection_count = len(intersection_sids)
             
-            # 5. Consolidate (Dedup + Propagate COLOR_FAMILY)
             data_cons = consolidate_data(merged_data)
             
-            # 6. Filter Country & Validate Schema
             is_valid, errors = validate_input_schema(data_cons)
             
             if is_valid:
@@ -581,7 +594,6 @@ with tab1:
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
-                # Ensure COLOR_FAMILY exists for checks, even if empty
                 if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
                 
                 with st.spinner("Running validations..."):
@@ -591,7 +603,6 @@ with tab1:
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
                 log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
                 
-                # --- UI: Filters & Exports ---
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
@@ -611,7 +622,6 @@ with tab1:
                 st.markdown("---")
                 st.header("Overall Results")
                 
-                # METRICS ROW - Added Intersection Count
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Total", len(data))
                 c2.metric("Approved", len(approved_df))
