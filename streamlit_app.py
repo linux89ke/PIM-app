@@ -32,7 +32,7 @@ PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment",
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
-    "COLOR", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
+    "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG",
     "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY"
 ]
@@ -49,6 +49,7 @@ NEW_FILE_MAPPING = {
     'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
     'cod_parent_sku': 'PARENTSKU',
     'color': 'COLOR',
+    'color_family': 'COLOR_FAMILY', # Added Mapping
     'list_seller_skus': 'SELLER_SKU',
     'image1': 'MAIN_IMAGE',
     'dsc_status': 'LISTING_STATUS',
@@ -183,7 +184,63 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
         st.stop()
     return filtered
 
+def consolidate_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    If SIDs are duplicated (due to multi-file upload), consolidate them.
+    Priority: Retain fields like COLOR_FAMILY if available in one but not the other.
+    """
+    if df.empty: return df
+    
+    # Sort so that rows with more non-nulls or critical info might come first (optional optimization)
+    # Here we mainly want to ensure COLOR_FAMILY is propagated.
+    
+    # 1. Propagate COLOR_FAMILY to all rows of the same SID
+    if 'COLOR_FAMILY' in df.columns:
+        # Forward fill and backward fill per group to spread the info
+        df['COLOR_FAMILY'] = df.groupby('PRODUCT_SET_SID')['COLOR_FAMILY'].transform(lambda x: x.ffill().bfill())
+    
+    # 2. Deduplicate on SID, keeping the first occurrence (which now has propagated info)
+    df_dedup = df.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+    
+    return df_dedup
+
 # --- Validation Logic Functions ---
+
+def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
+    """
+    Updated Logic:
+    - If Country is UG: Reject if COLOR is missing/wrong.
+    - If Country is KE: Reject if COLOR AND COLOR_FAMILY are missing/wrong.
+    """
+    req = ['NAME', 'COLOR', 'CATEGORY_CODE']
+    if not set(req).issubset(data.columns): return pd.DataFrame(columns=data.columns)
+    
+    data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
+    if data.empty: return pd.DataFrame(columns=data.columns)
+    
+    # Check 1: Name contains color?
+    name_check = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    
+    # Check 2: Color column contains color?
+    color_check = data['COLOR'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    
+    # Check 3 (KE Only): Color Family contains color?
+    family_check = pd.Series([False] * len(data), index=data.index) # Default fail
+    if country_code == 'KE' and 'COLOR_FAMILY' in data.columns:
+        family_check = data['COLOR_FAMILY'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    
+    if country_code == 'KE':
+        # KE Rule: Approved if (Name OK) OR (Color OK) OR (Family OK)
+        # Reject if ALL fail
+        mask = ~(name_check | color_check | family_check)
+    else:
+        # UG Rule: Approved if (Name OK) OR (Color OK)
+        # Reject if BOTH fail
+        mask = ~(name_check | color_check)
+        
+    return data[mask]
+
+# ... [Other checks remain unchanged, copying relevant ones for completeness] ...
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
@@ -192,14 +249,6 @@ def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFra
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    return data[mask]
-
-def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str]) -> pd.DataFrame:
-    if not {'NAME', 'COLOR', 'CATEGORY_CODE'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
-    data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
-    if data.empty: return pd.DataFrame(columns=data.columns)
-    mask = ~(data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False) | 
-             data['COLOR'].astype(str).str.strip().str.lower().str.contains(pattern, na=False))
     return data[mask]
 
 def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
@@ -247,22 +296,18 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     if not all(c in data.columns for c in req) or perfumes_df.empty: return pd.DataFrame(columns=data.columns)
     perf = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perf.empty: return pd.DataFrame(columns=data.columns)
-    
     perf['price_to_use'] = perf['GLOBAL_SALE_PRICE'].where((perf['GLOBAL_SALE_PRICE'].notna()) & (perf['GLOBAL_SALE_PRICE'] > 0), perf['GLOBAL_PRICE'])
     currency = perf.get('CURRENCY', pd.Series(['KES'] * len(perf)))
     perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'] / FX_RATE)
-    
     perf['BRAND_LOWER'] = perf['BRAND'].astype(str).str.strip().str.lower()
     perf['NAME_LOWER'] = perf['NAME'].astype(str).str.strip().str.lower()
     perfumes_df = perfumes_df.copy()
     perfumes_df['BRAND_LOWER'] = perfumes_df['BRAND'].astype(str).str.strip().str.lower()
     if 'PRODUCT_NAME' in perfumes_df.columns:
         perfumes_df['PRODUCT_NAME_LOWER'] = perfumes_df['PRODUCT_NAME'].astype(str).str.strip().str.lower()
-    
     merged = perf.merge(perfumes_df, on='BRAND_LOWER', how='left', suffixes=('', '_ref'))
     if 'PRODUCT_NAME_LOWER' in merged.columns:
         merged = merged[merged.apply(lambda r: r['PRODUCT_NAME_LOWER'] in r['NAME_LOWER'] if pd.notna(r['PRODUCT_NAME_LOWER']) else False, axis=1)]
-    
     if 'PRICE_USD' in merged.columns:
         flagged = merged[merged['PRICE_USD'] - merged['price_usd'] >= 30]
         return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
@@ -280,27 +325,19 @@ def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     req = ['CATEGORY_CODE', 'NAME', 'SELLER_NAME']
     if not all(c in data.columns for c in req) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
-    
     jersey_cats = jerseys_df['Categories'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().unique().tolist()
     jersey_cats = [c for c in jersey_cats if c.lower() != 'nan']
     keywords = [w for w in jerseys_df['Checklist'].astype(str).str.strip().str.lower().unique().tolist() if w and w!='nan']
     exempt = [s for s in jerseys_df['Exempted'].astype(str).str.strip().unique().tolist() if s and s.lower()!='nan']
-    
     if not jersey_cats or not keywords: return pd.DataFrame(columns=data.columns)
-    
     regex = re.compile('|'.join(r'\b' + re.escape(w) + r'\b' for w in keywords), re.IGNORECASE)
-    
     data['CAT_STR'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     jerseys = data[data['CAT_STR'].isin(jersey_cats)].copy()
-    
     if jerseys.empty: return pd.DataFrame(columns=data.columns)
-    
     target = jerseys[~jerseys['SELLER_NAME'].isin(exempt)].copy()
     if target.empty: return pd.DataFrame(columns=data.columns)
-    
     mask = target['NAME'].astype(str).str.strip().str.lower().str.contains(regex, na=False)
     flagged = target[mask]
-    
     return flagged.drop(columns=['CAT_STR']) if 'CAT_STR' in flagged.columns else flagged
 
 # -------------------------------------------------
@@ -335,6 +372,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         if name == "Generic BRAND Issues":
              fas = support_files.get('category_fas', pd.DataFrame())
              ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
+        elif name == "Missing COLOR":
+            ckwargs['country_code'] = country_validator.code  # Pass country code for new logic
         
         try:
             res = func(**ckwargs)
@@ -485,46 +524,68 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    uploaded_file = st.file_uploader("Upload your file", type=['csv', 'xlsx'], key="daily_file")
+    # 1. Allow Multiple File Uploads
+    uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
     
-    if uploaded_file:
+    if uploaded_files:
         try:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
             
-            try:
-                if uploaded_file.name.endswith('.xlsx'):
-                     raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
-                else:
-                    try: 
-                        raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                        if len(raw_data.columns) <= 1:
+            all_dfs = []
+            
+            # 2. Load and Standardize Each File
+            for uploaded_file in uploaded_files:
+                try:
+                    if uploaded_file.name.endswith('.xlsx'):
+                         raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                    else:
+                        try: 
+                            raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                            if len(raw_data.columns) <= 1:
+                                uploaded_file.seek(0)
+                                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                        except:
                             uploaded_file.seek(0)
                             raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-                    except:
-                        uploaded_file.seek(0)
-                        raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-            except Exception as e:
-                st.error(f"Failed to read file: {e}")
+                    
+                    std_data = standardize_input_data(raw_data)
+                    all_dfs.append(std_data)
+                    
+                except Exception as e:
+                    st.error(f"Failed to read file {uploaded_file.name}: {e}")
+                    st.stop()
+            
+            if not all_dfs:
+                st.error("No valid data loaded.")
                 st.stop()
+                
+            # 3. Concatenate
+            merged_data = pd.concat(all_dfs, ignore_index=True)
+            st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
-            raw_data = standardize_input_data(raw_data)
-            st.success(f"Loaded {len(raw_data)} rows from {uploaded_file.name}")
+            # 4. Consolidate (Dedup + Propagate COLOR_FAMILY)
+            data_cons = consolidate_data(merged_data)
             
-            is_valid, errors = validate_input_schema(raw_data)
+            # 5. Filter Country & Validate Schema
+            is_valid, errors = validate_input_schema(data_cons)
             
             if is_valid:
-                data = filter_by_country(raw_data, country_validator, "Uploaded File")
+                data = filter_by_country(data_cons, country_validator, "Uploaded Files")
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
+                
+                # Ensure COLOR_FAMILY exists for checks, even if empty
+                if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
                 
                 with st.spinner("Running validations..."):
                     final_report, flag_dfs = validate_products(data, support_files, country_validator)
                 
                 approved_df = final_report[final_report['Status'] == 'Approved']
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
-                log_validation_run(country, uploaded_file.name, len(data), len(approved_df), len(rejected_df))
+                log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
                 
+                # --- UI: Filters & Exports ---
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
@@ -583,7 +644,6 @@ with tab2:
     
     if weekly_files:
         combined_df = pd.DataFrame()
-        
         with st.spinner("Aggregating files..."):
             for f in weekly_files:
                 try:
@@ -595,7 +655,6 @@ with tab2:
                             df = pd.read_excel(f, engine='openpyxl', dtype=str)
                     else:
                         df = pd.read_csv(f, dtype=str)
-                    
                     df = standardize_input_data(df)
                     combined_df = pd.concat([combined_df, df], ignore_index=True)
                 except Exception as e:
@@ -605,7 +664,6 @@ with tab2:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
             
-            # Key Metrics
             st.markdown("### Key Metrics")
             m1, m2, m3, m4 = st.columns(4)
             total = len(combined_df)
@@ -618,8 +676,6 @@ with tab2:
             m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
             
             st.markdown("---")
-            
-            # Visuals
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("Top Rejection Reasons")
@@ -676,22 +732,17 @@ with tab2:
                         ).interactive()
                         st.altair_chart(chart, use_container_width=True)
 
-            # --- NEW SUMMARY TABLES & DOWNLOAD ---
             st.markdown("---")
             st.subheader("Top 5 Summaries")
 
             if not rejected.empty:
-                # Prepare Dataframes
                 top_reasons = rejected['Reason'].value_counts().head(5).reset_index()
                 top_reasons.columns = ['Reason', 'Count']
-                
                 top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
                 top_sellers.columns = ['Seller', 'Rejection Count']
-                
                 top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
                 top_cats.columns = ['Category', 'Rejection Count']
                 
-                # Display on UI
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     st.markdown("**Top 5 Reasons**")
@@ -703,28 +754,21 @@ with tab2:
                     st.markdown("**Top 5 Categories**")
                     st.dataframe(top_cats, hide_index=True, use_container_width=True)
                 
-                # Generate Excel
                 summary_excel = BytesIO()
                 with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
-                    # Metrics Sheet
                     pd.DataFrame([
                         {'Metric': 'Total Rejected SKUs', 'Value': len(rejected)},
                         {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
                         {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
                     ]).to_excel(writer, sheet_name='Summary', index=False)
-                    
-                    # Data Sheets
                     top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
                     top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
                     top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
-                    
-                    # Formatting
                     workbook = writer.book
                     for sheet in writer.sheets.values():
                         sheet.set_column(0, 1, 25)
                 
                 summary_excel.seek(0)
-                
                 st.download_button(
                     label="📥 Download Summary Excel",
                     data=summary_excel,
