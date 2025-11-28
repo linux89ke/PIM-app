@@ -54,6 +54,7 @@ NEW_FILE_MAPPING = {
     'image1': 'MAIN_IMAGE',
     'dsc_status': 'LISTING_STATUS',
     'dsc_shop_email': 'SELLER_EMAIL',
+    # Warranty Mappings
     'product_warranty': 'PRODUCT_WARRANTY',
     'warranty_duration': 'WARRANTY_DURATION'
 }
@@ -65,6 +66,7 @@ NEW_FILE_MAPPING = {
 def load_txt_file(filename: str) -> List[str]:
     try:
         with open(filename, 'r', encoding='utf-8') as f:
+            # Strip whitespace and ensure valid lines
             data = [line.strip() for line in f if line.strip()]
         return data
     except Exception as e:
@@ -87,6 +89,7 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
+            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."),
             'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia..."),
             'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field..."),
             'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned..."),
@@ -99,7 +102,6 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity...', "Please contact Jumia Seller Support to raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
-            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."),
         }
         return flag_mapping
     except Exception: return {}
@@ -190,17 +192,17 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
 
 def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs before filtering.
-    Does NOT dedup yet.
+    Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs.
+    Ensures missing columns exist before propagation.
     """
     if df.empty: return df
     cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']
     
-    # 1. Ensure columns exist
+    # Ensure columns exist in DataFrame (filled with None if missing)
     for col in cols_to_propagate:
         if col not in df.columns: df[col] = pd.NA
-        
-    # 2. Propagate
+    
+    # Forward fill and Backward fill to spread data between rows of same SID
     for col in cols_to_propagate:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
         
@@ -211,33 +213,53 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
     Checks for missing warranty info in specific categories.
-    SAFEGUARD: Only runs if the uploaded file actually contained warranty data.
     """
+    # 1. Ensure required columns exist
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: data[col] = ""
     
-    # SAFEGUARD: If all warranty data is empty, SKIP.
+    # 2. Check if ANY warranty data exists in the entire dataset.
+    # If the user only uploaded 'Pending QC' (no warranty cols), these cols will be all NaN/Empty.
+    # We skip validation in that case to avoid 100% false rejection.
     all_warranty_missing = (
-        data['PRODUCT_WARRANTY'].replace(['', 'nan', 'NaN'], pd.NA).isna().all() and 
-        data['WARRANTY_DURATION'].replace(['', 'nan', 'NaN'], pd.NA).isna().all()
+        data['PRODUCT_WARRANTY'].replace(['', 'nan', 'NaN', 'None'], pd.NA).isna().all() and 
+        data['WARRANTY_DURATION'].replace(['', 'nan', 'NaN', 'None'], pd.NA).isna().all()
     )
     
     if all_warranty_missing:
+        # Log to sidebar or debug if needed
+        # st.sidebar.warning("Skipping Warranty Check: No warranty data found in uploaded files.")
         return pd.DataFrame(columns=data.columns)
 
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
-    target_data = data[data['CATEGORY_CODE'].isin(warranty_category_codes)].copy()
+    # 3. Clean Category Codes for Matching (Remove decimals, spaces)
+    # This ensures '1002300.0' matches '1002300'
+    data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+    target_cats = [str(c).strip() for c in warranty_category_codes]
+    
+    # 4. Filter for Target Categories
+    target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
     if target_data.empty: return pd.DataFrame(columns=data.columns)
     
+    # 5. Check Presence
     def is_present(series):
-        return series.notna() & (series.astype(str).str.strip() != '') & (series.astype(str).str.lower() != 'nan')
+        # Returns True if value is NOT empty/nan/None
+        s = series.astype(str).str.strip().str.lower()
+        return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat')
 
     has_warranty_desc = is_present(target_data['PRODUCT_WARRANTY'])
     has_warranty_duration = is_present(target_data['WARRANTY_DURATION'])
     
+    # 6. Flag if BOTH are missing (False | False -> False, so we negate to get True/Flag)
     mask = ~(has_warranty_desc | has_warranty_duration)
-    return target_data[mask]
+    
+    flagged = target_data[mask]
+    
+    # Cleanup temp column
+    if 'CAT_CLEAN' in flagged.columns: flagged = flagged.drop(columns=['CAT_CLEAN'])
+    
+    return flagged
 
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
     req = ['NAME', 'COLOR', 'CATEGORY_CODE']
@@ -363,10 +385,9 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator):
     flags_mapping = support_files['flags_mapping']
     
+    # Priority Validation Order
     validations = [
-        # PRIORITY #1: Product Warranty Check
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
-        
         ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
         ("Perfume Price Check", check_perfume_price_vectorized, {'perfumes_df': support_files['perfumes'], 'perfume_category_codes': support_files['perfume_category_codes']}),
@@ -553,9 +574,8 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
-            file_sids_sets = []  # To track intersections
+            file_sids_sets = []
             
-            # 2. Load and Standardize Each File
             for uploaded_file in uploaded_files:
                 try:
                     if uploaded_file.name.endswith('.xlsx'):
@@ -585,17 +605,15 @@ with tab1:
                 st.error("No valid data loaded.")
                 st.stop()
                 
-            # 3. Concatenate
             merged_data = pd.concat(all_dfs, ignore_index=True)
             st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
-            # 4. Calculate Intersection (Before consolidation)
             intersection_count = 0
             if len(file_sids_sets) > 1:
                 intersection_sids = set.intersection(*file_sids_sets)
                 intersection_count = len(intersection_sids)
             
-            # 5. Propagate Metadata across duplicates (before filtering/dedup)
+            # Step 1: Propagate Metadata across duplicates (before filtering/dedup)
             data_prop = propagate_metadata(merged_data)
             
             is_valid, errors = validate_input_schema(data_prop)
@@ -620,7 +638,6 @@ with tab1:
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
                 log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
                 
-                # --- UI: Filters & Exports ---
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
