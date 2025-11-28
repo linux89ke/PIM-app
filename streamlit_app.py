@@ -49,7 +49,7 @@ NEW_FILE_MAPPING = {
     'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
     'cod_parent_sku': 'PARENTSKU',
     'color': 'COLOR',
-    'color_family': 'COLOR_FAMILY', # Added Mapping
+    'color_family': 'COLOR_FAMILY', # Critical for Kenya check
     'list_seller_skus': 'SELLER_SKU',
     'image1': 'MAIN_IMAGE',
     'dsc_status': 'LISTING_STATUS',
@@ -186,22 +186,17 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
 
 def consolidate_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    If SIDs are duplicated (due to multi-file upload), consolidate them.
-    Priority: Retain fields like COLOR_FAMILY if available in one but not the other.
+    Consolidate duplicate SIDs from multiple files.
+    Crucial: Propagates COLOR_FAMILY from one file to the rows of the other file.
     """
     if df.empty: return df
     
-    # Sort so that rows with more non-nulls or critical info might come first (optional optimization)
-    # Here we mainly want to ensure COLOR_FAMILY is propagated.
-    
-    # 1. Propagate COLOR_FAMILY to all rows of the same SID
+    # Propagate COLOR_FAMILY to all rows of the same SID (forward fill and back fill)
     if 'COLOR_FAMILY' in df.columns:
-        # Forward fill and backward fill per group to spread the info
         df['COLOR_FAMILY'] = df.groupby('PRODUCT_SET_SID')['COLOR_FAMILY'].transform(lambda x: x.ffill().bfill())
     
-    # 2. Deduplicate on SID, keeping the first occurrence (which now has propagated info)
+    # Deduplicate keeping the first
     df_dedup = df.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
-    
     return df_dedup
 
 # --- Validation Logic Functions ---
@@ -218,15 +213,16 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
     if data.empty: return pd.DataFrame(columns=data.columns)
     
-    # Check 1: Name contains color?
+    # 1. Check Name
     name_check = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     
-    # Check 2: Color column contains color?
+    # 2. Check Color Field
     color_check = data['COLOR'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     
-    # Check 3 (KE Only): Color Family contains color?
-    family_check = pd.Series([False] * len(data), index=data.index) # Default fail
+    # 3. Check Color Family (KE Only)
+    family_check = pd.Series([False] * len(data), index=data.index)
     if country_code == 'KE' and 'COLOR_FAMILY' in data.columns:
+        # Check logic: is valid color in Color Family?
         family_check = data['COLOR_FAMILY'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     
     if country_code == 'KE':
@@ -240,7 +236,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         
     return data[mask]
 
-# ... [Other checks remain unchanged, copying relevant ones for completeness] ...
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
@@ -373,7 +368,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
              fas = support_files.get('category_fas', pd.DataFrame())
              ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
-            ckwargs['country_code'] = country_validator.code  # Pass country code for new logic
+            ckwargs['country_code'] = country_validator.code
         
         try:
             res = func(**ckwargs)
@@ -533,6 +528,7 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
+            file_sids_sets = []  # To track intersections
             
             # 2. Load and Standardize Each File
             for uploaded_file in uploaded_files:
@@ -550,6 +546,10 @@ with tab1:
                             raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
                     
                     std_data = standardize_input_data(raw_data)
+                    
+                    if 'PRODUCT_SET_SID' in std_data.columns:
+                        file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
+                        
                     all_dfs.append(std_data)
                     
                 except Exception as e:
@@ -564,10 +564,16 @@ with tab1:
             merged_data = pd.concat(all_dfs, ignore_index=True)
             st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
-            # 4. Consolidate (Dedup + Propagate COLOR_FAMILY)
+            # 4. Calculate Intersection (Before consolidation)
+            intersection_count = 0
+            if len(file_sids_sets) > 1:
+                intersection_sids = set.intersection(*file_sids_sets)
+                intersection_count = len(intersection_sids)
+            
+            # 5. Consolidate (Dedup + Propagate COLOR_FAMILY)
             data_cons = consolidate_data(merged_data)
             
-            # 5. Filter Country & Validate Schema
+            # 6. Filter Country & Validate Schema
             is_valid, errors = validate_input_schema(data_cons)
             
             if is_valid:
@@ -604,12 +610,15 @@ with tab1:
                 
                 st.markdown("---")
                 st.header("Overall Results")
-                c1, c2, c3, c4 = st.columns(4)
+                
+                # METRICS ROW - Added Intersection Count
+                c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Total", len(data))
                 c2.metric("Approved", len(approved_df))
                 c3.metric("Rejected", len(rejected_df))
                 rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
                 c4.metric("Rate", f"{rt:.1f}%")
+                c5.metric("SKUs in Both Files", intersection_count)
                 
                 st.subheader("Validation Results by Flag")
                 for title, df_flagged in flag_dfs.items():
