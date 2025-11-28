@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="Product Validation Tool", layout="centered")
 
 # -------------------------------------------------
-# Constants
+# Constants & Mapping
 # -------------------------------------------------
 PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
@@ -36,6 +36,20 @@ FULL_DATA_COLS = [
     "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY"
 ]
 FX_RATE = 132.0
+
+# MAPPING: New File Columns -> Script Internal Columns
+NEW_FILE_MAPPING = {
+    'cod_productset_sid': 'PRODUCT_SET_SID',
+    'dsc_name': 'NAME',
+    'dsc_brand_name': 'BRAND',
+    'cod_category_code': 'CATEGORY_CODE',
+    'dsc_category_name': 'CATEGORY', # Added category name mapping
+    'dsc_shop_seller_name': 'SELLER_NAME',
+    'dsc_shop_active_country': 'ACTIVE_STATUS_COUNTRY',
+    'cod_parent_sku': 'PARENTSKU',
+    'color': 'COLOR',
+    'list_seller_skus': 'SELLER_SKU'
+}
 
 # -------------------------------------------------
 # CACHED FILE LOADING
@@ -61,8 +75,7 @@ def load_txt_file(filename: str) -> List[str]:
 def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame:
     """Load and cache Excel file"""
     try:
-        # Use openpyxl for Excel files with formulas/complex structure
-        # dtype=str prevents '123' becoming '123.0' which breaks category matching
+        # Use openpyxl and enforce string to prevent '123' -> '123.0'
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         logger.info(f"Loaded {len(df)} rows from {filename}")
@@ -129,7 +142,6 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity By Raising A Claim',
                 "Please contact Jumia Seller Support to raise a claim and begin the process of verifying the authenticity of this product.\nConfirming the product's authenticity is mandatory for listing approval and helps maintain customer trust and platform standards.\n\nNote: Price is $30+ below reference price."
             ),
-            # NEW FLAG
             'Suspected counterfeit Jerseys': (
                 '1000030 - Suspected Counterfeit Product',
                 "Your listing has been rejected as it is suspected to be a counterfeit jersey based on name and brand. Products must be 100% authentic. Please contact Seller Support if you believe this is an error."
@@ -214,10 +226,35 @@ class CountryValidator:
         return [w.lower() for w in load_txt_file(filename)]
 
 # -------------------------------------------------
-# Input Validation
+# Input Standardization & Validation
 # -------------------------------------------------
+def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Renames columns from 'New File Format' to 'Internal Script Format'
+    and cleans Country codes (e.g., 'jumia-ug' -> 'UG').
+    """
+    df = df.copy()
+    
+    # 1. Rename columns if they exist in the new mapping
+    # This keeps old files working (as keys won't match) and fixes new files
+    df = df.rename(columns=NEW_FILE_MAPPING)
+    
+    # 2. Normalize Country Code (Handle 'jumia-ug', 'jumia-ke')
+    if 'ACTIVE_STATUS_COUNTRY' in df.columns:
+        df['ACTIVE_STATUS_COUNTRY'] = (
+            df['ACTIVE_STATUS_COUNTRY']
+            .astype(str)
+            .str.lower()
+            .str.replace('jumia-', '', regex=False) # remove 'jumia-'
+            .str.strip()
+            .str.upper() # convert 'ug' -> 'UG'
+        )
+        
+    return df
+
 def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
     errors = []
+    # Note: We check schema AFTER standardization
     required_fields = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'ACTIVE_STATUS_COUNTRY']
     for field in required_fields:
         if field not in df.columns: errors.append(f"Missing required column: {field}")
@@ -235,9 +272,14 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
         logger.warning(f"ACTIVE_STATUS_COUNTRY missing in {source}")
         st.warning(f"ACTIVE_STATUS_COUNTRY missing in {source}")
         return df
+    
+    # Pre-cleaning is now done in standardize_input_data, but we double check here
     df['ACTIVE_STATUS_COUNTRY'] = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
     mask_valid = df['ACTIVE_STATUS_COUNTRY'].notna() & (df['ACTIVE_STATUS_COUNTRY'] != '') & (df['ACTIVE_STATUS_COUNTRY'] != 'NAN')
-    mask_country = df['ACTIVE_STATUS_COUNTRY'].str.contains(rf'\b{country_validator.code}\b', na=False, regex=True)
+    
+    # Strict matching now possible since we cleaned 'jumia-' prefix
+    mask_country = df['ACTIVE_STATUS_COUNTRY'] == country_validator.code
+    
     filtered = df[mask_valid & mask_country].copy()
     excluded = len(df[mask_valid]) - len(filtered)
     if excluded: st.info(f"Excluded {excluded} non-{country_validator.code} rows.")
@@ -349,33 +391,27 @@ def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
     if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')]
 
-# --- UPDATED JERSEY CHECK (Corrected based on user feedback) ---
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
-    """Checks for suspected counterfeit jerseys using correct column names."""
     req_cols = ['CATEGORY_CODE', 'NAME', 'SELLER_NAME']
     if not all(c in data.columns for c in req_cols) or jerseys_df.empty:
         return pd.DataFrame(columns=data.columns)
 
     jerseys_df = jerseys_df.copy()
-    
-    # 1. Check for EXPECTED columns (User rectified typo, so we expect correct names)
     config_cols = ['Categories', 'Checklist', 'Exempted']
     if not all(c in jerseys_df.columns for c in config_cols):
         logger.error(f"Jerseys.xlsx missing required columns: {config_cols}. Found: {jerseys_df.columns.tolist()}")
         return pd.DataFrame(columns=data.columns)
 
-    # 2. Extract Categories (STRIP .0 FIX)
     jersey_category_codes = (
         jerseys_df['Categories']
         .astype(str)
-        .str.replace(r'\.0$', '', regex=True) # Remove float suffix if present from Excel
+        .str.replace(r'\.0$', '', regex=True)
         .str.strip()
         .unique()
         .tolist()
     )
     jersey_category_codes = [c for c in jersey_category_codes if c.lower() != 'nan']
 
-    # 3. Extract Keywords
     checklist_keywords = (
         jerseys_df['Checklist']
         .astype(str)
@@ -386,7 +422,6 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     )
     checklist_keywords = [w for w in checklist_keywords if w and w.lower() != 'nan']
 
-    # 4. Extract Exempted Sellers
     exempted_sellers = (
         jerseys_df['Exempted']
         .astype(str)
@@ -402,7 +437,6 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     keyword_pattern = '|'.join(r'\b' + re.escape(w) + r'\b' for w in checklist_keywords)
     keyword_regex = re.compile(keyword_pattern, re.IGNORECASE)
 
-    # Filter Data
     data['CATEGORY_CODE_STR'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     jersey_products = data[data['CATEGORY_CODE_STR'].isin(jersey_category_codes)].copy()
     
@@ -649,18 +683,29 @@ with tab1:
         try:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
-            dtype_spec = {'CATEGORY_CODE': str, 'PRODUCT_SET_SID': str, 'PARENTSKU': str}
             
-            try: raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=dtype_spec)
+            # 1. Load Data
+            try: 
+                # Try semicolon first
+                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                if len(raw_data.columns) < 2: raise ValueError("Separation failed")
             except: 
+                # Fallback to comma
                 uploaded_file.seek(0)
-                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=dtype_spec)
-                
+                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+            
+            # 2. Standardize Data (Map Columns + Clean Country)
+            raw_data = standardize_input_data(raw_data)
+            
             st.success(f"Loaded CSV with {len(raw_data)} rows")
+            
+            # 3. Validation
             is_valid, errors = validate_input_schema(raw_data)
             
             if is_valid:
                 data = filter_by_country(raw_data, country_validator, "Daily CSV")
+                
+                # Ensure specific columns are strings
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
