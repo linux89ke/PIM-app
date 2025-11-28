@@ -688,13 +688,17 @@ with tab1:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
             
-            # 1. Load Data
-            try: 
-                # Try semicolon first
+            # 1. Load Data with Robust Separator Detection
+            try:
+                # Try semicolon first (common for the pendingQC file)
                 raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                if len(raw_data.columns) < 2: raise ValueError("Separation failed")
-            except: 
-                # Fallback to comma
+                
+                # If everything ended up in 1 column, it's probably comma-separated
+                if len(raw_data.columns) <= 1:
+                    uploaded_file.seek(0)
+                    raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+            except Exception:
+                # Fallback to comma if semicolon fails completely
                 uploaded_file.seek(0)
                 raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
             
