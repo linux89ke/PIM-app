@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 import traceback
 import json
+import xlsxwriter
 
 # -------------------------------------------------
 # Logging Configuration
@@ -61,7 +62,8 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
     """Load and cache Excel file"""
     try:
         # Use openpyxl for Excel files with formulas/complex structure
-        df = pd.read_excel(filename, engine='openpyxl')
+        # dtype=str prevents '123' becoming '123.0' which breaks category matching
+        df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         logger.info(f"Loaded {len(df)} rows from {filename}")
         
@@ -719,21 +721,20 @@ with tab1:
                 
                 st.subheader("Validation Results by Flag")
                 for title, df_flagged in flag_dfs.items():
-                    # SHOW ALL FLAGS logic
                     with st.expander(f"{title} ({len(df_flagged)})"):
                         if not df_flagged.empty:
                             st.dataframe(df_flagged)
-                            st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{title}.xlsx")
+                            st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
                         else:
                             st.success("No issues found for this validation.")
                 
                 st.markdown("---")
                 st.header("Overall Exports")
                 c1, c2, c3, c4 = st.columns(4)
-                c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"Final_Report_{current_date}.xlsx")
-                c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"Rejected_{current_date}.xlsx")
-                c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"Approved_{current_date}.xlsx")
-                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"Full_Data_{current_date}.xlsx")
+                c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
+                c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
+                c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
+                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
             
             else:
                 for e in errors: st.error(e)
