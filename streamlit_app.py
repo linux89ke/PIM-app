@@ -681,37 +681,45 @@ with tab1:
     st.header("Daily Product Validation")
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
-    uploaded_file = st.file_uploader("Upload your CSV file", type='csv', key="daily_file")
+    
+    # 1. Update Uploader to allow both CSV and XLSX
+    uploaded_file = st.file_uploader("Upload your file", type=['csv', 'xlsx'], key="daily_file")
     
     if uploaded_file:
         try:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
             
-            # 1. Load Data with Robust Separator Detection
+            # 2. Smart Loading Logic (CSV vs Excel)
             try:
-                # Try semicolon first (common for the pendingQC file)
-                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                
-                # If everything ended up in 1 column, it's probably comma-separated
-                if len(raw_data.columns) <= 1:
-                    uploaded_file.seek(0)
-                    raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-            except Exception:
-                # Fallback to comma if semicolon fails completely
-                uploaded_file.seek(0)
-                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                # Check extension
+                if uploaded_file.name.endswith('.xlsx'):
+                     raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                else:
+                    # Fallback to CSV logic
+                    try: 
+                        raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                        if len(raw_data.columns) <= 1:
+                            uploaded_file.seek(0)
+                            raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                    except:
+                        uploaded_file.seek(0)
+                        raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
             
-            # 2. Standardize Data (Map Columns + Clean Country)
+            except Exception as e:
+                st.error(f"Failed to read file: {e}")
+                st.stop()
+            
+            # 3. Standardize Data (Map Columns + Clean Country)
             raw_data = standardize_input_data(raw_data)
             
-            st.success(f"Loaded CSV with {len(raw_data)} rows")
+            st.success(f"Loaded {len(raw_data)} rows from {uploaded_file.name}")
             
-            # 3. Validation
+            # 4. Validation
             is_valid, errors = validate_input_schema(raw_data)
             
             if is_valid:
-                data = filter_by_country(raw_data, country_validator, "Daily CSV")
+                data = filter_by_country(raw_data, country_validator, "Uploaded File")
                 
                 # Ensure specific columns are strings
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
