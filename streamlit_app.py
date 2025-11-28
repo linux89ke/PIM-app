@@ -188,18 +188,23 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
         st.stop()
     return filtered
 
-def consolidate_data(df: pd.DataFrame) -> pd.DataFrame:
+def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Consolidate duplicate SIDs from multiple files.
-    Crucial: Propagates COLOR_FAMILY, PRODUCT_WARRANTY, and WARRANTY_DURATION.
+    Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs before filtering.
+    Does NOT dedup yet.
     """
     if df.empty: return df
     cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']
+    
+    # 1. Ensure columns exist
     for col in cols_to_propagate:
-        if col in df.columns:
-            df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
-    df_dedup = df.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
-    return df_dedup
+        if col not in df.columns: df[col] = pd.NA
+        
+    # 2. Propagate
+    for col in cols_to_propagate:
+        df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
+        
+    return df
 
 # --- Validation Logic Functions ---
 
@@ -211,14 +216,13 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: data[col] = ""
     
-    # SAFEGUARD: If all warranty data is empty (e.g. only Pending QC file uploaded), SKIP this check.
+    # SAFEGUARD: If all warranty data is empty, SKIP.
     all_warranty_missing = (
         data['PRODUCT_WARRANTY'].replace(['', 'nan', 'NaN'], pd.NA).isna().all() and 
         data['WARRANTY_DURATION'].replace(['', 'nan', 'NaN'], pd.NA).isna().all()
     )
     
     if all_warranty_missing:
-        # Implicitly pass everything if data is not available
         return pd.DataFrame(columns=data.columns)
 
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
@@ -232,7 +236,6 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     has_warranty_desc = is_present(target_data['PRODUCT_WARRANTY'])
     has_warranty_duration = is_present(target_data['WARRANTY_DURATION'])
     
-    # Flag if BOTH are missing
     mask = ~(has_warranty_desc | has_warranty_duration)
     return target_data[mask]
 
@@ -592,18 +595,22 @@ with tab1:
                 intersection_sids = set.intersection(*file_sids_sets)
                 intersection_count = len(intersection_sids)
             
-            # 5. Consolidate (Dedup + Propagate COLOR_FAMILY & WARRANTY INFO)
-            data_cons = consolidate_data(merged_data)
+            # 5. Propagate Metadata across duplicates (before filtering/dedup)
+            data_prop = propagate_metadata(merged_data)
             
-            # 6. Filter Country & Validate Schema
-            is_valid, errors = validate_input_schema(data_cons)
+            is_valid, errors = validate_input_schema(data_prop)
             
             if is_valid:
-                data = filter_by_country(data_cons, country_validator, "Uploaded Files")
+                # 6. Filter for Target Country (e.g., KE)
+                data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
+                
+                # 7. Deduplicate (now that we have the right country rows with filled metadata)
+                data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+                
+                # Cleanup
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
-                # Ensure COLOR_FAMILY exists for checks, even if empty
                 if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
                 
                 with st.spinner("Running validations..."):
@@ -633,7 +640,6 @@ with tab1:
                 st.markdown("---")
                 st.header("Overall Results")
                 
-                # METRICS ROW - Added Intersection Count
                 c1, c2, c3, c4, c5 = st.columns(5)
                 c1.metric("Total", len(data))
                 c2.metric("Approved", len(approved_df))
