@@ -207,15 +207,15 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
+    # 1. Ensure columns exist and are of string type for consistent cleaning
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: data[col] = ""
+        # Ensure it's treated as a string and missing values are handled
+        data[col] = data[col].astype(str).fillna('') 
     
-    # SAFEGUARD: Skip if no warranty data at all
-    all_warranty_missing = (
-        data['PRODUCT_WARRANTY'].replace(['', 'nan', 'NaN', 'None'], pd.NA).isna().all() and 
-        data['WARRANTY_DURATION'].replace(['', 'nan', 'NaN', 'None'], pd.NA).isna().all()
-    )
-    if all_warranty_missing: return pd.DataFrame(columns=data.columns)
+    # --- FIX APPLIED: REMOVING THE FLAWED EARLY EXIT CHECK ---
+    # The original check incorrectly exited if all products were missing warranty info, 
+    # even if only a subset needed to be checked.
 
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
@@ -228,16 +228,19 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     
     def is_present(series):
         s = series.astype(str).str.strip().str.lower()
+        # 'nan' is the string representation of missing values after to_string conversion
         return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat')
 
     has_desc = is_present(target_data['PRODUCT_WARRANTY'])
     has_duration = is_present(target_data['WARRANTY_DURATION'])
     
-    mask = ~(has_desc | has_duration)
+    mask = ~(has_desc | has_duration) # Flagged if NOT (has_desc OR has_duration)
     flagged = target_data[mask]
     
     if 'CAT_CLEAN' in flagged.columns: flagged = flagged.drop(columns=['CAT_CLEAN'])
-    return flagged
+    
+    # Return only unique Product Set SIDs
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
     req = ['NAME', 'COLOR', 'CATEGORY_CODE']
@@ -313,9 +316,11 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     if not all(c in data.columns for c in req) or perfumes_df.empty: return pd.DataFrame(columns=data.columns)
     perf = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perf.empty: return pd.DataFrame(columns=data.columns)
-    perf['price_to_use'] = perf['GLOBAL_SALE_PRICE'].where((perf['GLOBAL_SALE_PRICE'].notna()) & (perf['GLOBAL_SALE_PRICE'] > 0), perf['GLOBAL_PRICE'])
+    perf['price_to_use'] = perf['GLOBAL_SALE_PRICE'].where((perf['GLOBAL_SALE_PRICE'].notna()) & (pd.to_numeric(perf['GLOBAL_SALE_PRICE'], errors='coerce') > 0), perf['GLOBAL_PRICE'])
+    perf['price_to_use'] = pd.to_numeric(perf['price_to_use'], errors='coerce').fillna(0) # Ensure price is numeric
+    
     currency = perf.get('CURRENCY', pd.Series(['KES'] * len(perf)))
-    perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'].astype(float) / FX_RATE)
+    perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'] / FX_RATE)
     perf['BRAND_LOWER'] = perf['BRAND'].astype(str).str.strip().str.lower()
     perf['NAME_LOWER'] = perf['NAME'].astype(str).str.strip().str.lower()
     perfumes_df = perfumes_df.copy()
@@ -713,7 +718,6 @@ with tab2:
                     df = standardize_input_data(df)
 
                     # FIX: Ensure essential columns for analysis are present
-                    # This prevents the KeyError: 'Status' if the uploaded file structure is incomplete.
                     required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
                     for col in required_weekly_cols:
                         if col not in df.columns:
@@ -727,7 +731,7 @@ with tab2:
         if not combined_df.empty:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             
-            # This line now works without error.
+            # This line now works without the KeyError: 'Status'
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy() 
             
             st.markdown("### Key Metrics")
