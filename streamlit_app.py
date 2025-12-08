@@ -213,9 +213,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
         # Ensure it's treated as a string and missing values are handled
         data[col] = data[col].astype(str).fillna('') 
     
-    # --- FIX APPLIED: REMOVING THE FLAWED EARLY EXIT CHECK ---
-    # The original check incorrectly exited if all products were missing warranty info, 
-    # even if only a subset needed to be checked.
+    # FIX APPLIED: Removed the flawed 'all_warranty_missing' early exit check.
 
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
@@ -228,7 +226,6 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     
     def is_present(series):
         s = series.astype(str).str.strip().str.lower()
-        # 'nan' is the string representation of missing values after to_string conversion
         return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat')
 
     has_desc = is_present(target_data['PRODUCT_WARRANTY'])
@@ -360,7 +357,6 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     jerseys = data[data['CAT_STR'].isin(jersey_cats)].copy()
     if jerseys.empty: return pd.DataFrame(columns=data.columns)
     target = jerseys[~jerseys['SELLER_NAME'].isin(exempt)].copy()
-    if target.empty: return pd.DataFrame(columns=data.columns)
     mask = target['NAME'].astype(str).str.strip().str.lower().str.contains(regex, na=False)
     flagged = target[mask]
     return flagged.drop(columns=['CAT_STR']) if 'CAT_STR' in flagged.columns else flagged
@@ -371,6 +367,7 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator):
     flags_mapping = support_files['flags_mapping']
     
+    # ORDER MATTERS: This list defines the priority of the rejection flags.
     validations = [
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
         ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
@@ -422,7 +419,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         for _, r in flagged.iterrows():
             sid = r['PRODUCT_SET_SID']
-            if sid in processed: continue
+            # PRIORITY CHECK: If the SID is already processed, skip it.
+            if sid in processed: continue 
+            
             processed.add(sid)
             rows.append({
                 'ProductSetSid': sid, 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Rejected',
