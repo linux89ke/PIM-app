@@ -258,7 +258,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         mask = ~(name_check | color_check)
     return data[mask]
 
-# ... [Include other standard checks: check_sensitive_words, check_prohibited_products, etc. - Same as previous] ...
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
@@ -272,7 +271,7 @@ def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.Dat
 def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
     if not {'BRAND','NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower() 
-                      if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
+                     if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask]
 
 def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
@@ -316,7 +315,7 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     if perf.empty: return pd.DataFrame(columns=data.columns)
     perf['price_to_use'] = perf['GLOBAL_SALE_PRICE'].where((perf['GLOBAL_SALE_PRICE'].notna()) & (perf['GLOBAL_SALE_PRICE'] > 0), perf['GLOBAL_PRICE'])
     currency = perf.get('CURRENCY', pd.Series(['KES'] * len(perf)))
-    perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'] / FX_RATE)
+    perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'].astype(float) / FX_RATE)
     perf['BRAND_LOWER'] = perf['BRAND'].astype(str).str.strip().str.lower()
     perf['NAME_LOWER'] = perf['NAME'].astype(str).str.strip().str.lower()
     perfumes_df = perfumes_df.copy()
@@ -327,7 +326,10 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     if 'PRODUCT_NAME_LOWER' in merged.columns:
         merged = merged[merged.apply(lambda r: r['PRODUCT_NAME_LOWER'] in r['NAME_LOWER'] if pd.notna(r['PRODUCT_NAME_LOWER']) else False, axis=1)]
     if 'PRICE_USD' in merged.columns:
-        flagged = merged[merged['PRICE_USD'] - merged['price_usd'] >= 30]
+        # Ensure PRICE_USD is float for comparison
+        merged['PRICE_USD_ref'] = pd.to_numeric(merged['PRICE_USD'], errors='coerce')
+        merged = merged.dropna(subset=['PRICE_USD_ref']) # Only compare rows where we have a reference price
+        flagged = merged[merged['PRICE_USD_ref'] - merged['price_usd'] >= 30]
         return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
     return pd.DataFrame(columns=data.columns)
 
@@ -389,8 +391,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         status_text.text(f"Running: {name}")
         ckwargs = {'data': data, **kwargs}
         if name == "Generic BRAND Issues":
-             fas = support_files.get('category_fas', pd.DataFrame())
-             ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
+              fas = support_files.get('category_fas', pd.DataFrame())
+              ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
         
@@ -470,7 +472,8 @@ def to_excel_full_data(data_df, final_report_df):
                 merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
                 summ = merged.groupby('SELLER_NAME').agg(
                     Rejected=('Rejected_Count', 'sum'), Approved=('Approved_Count', 'sum'),
-                    AvgRating=('SELLER_RATING', 'mean'), TotalStock=('STOCK_QTY', 'sum')
+                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()), 
+                    TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
                 ).reset_index().sort_values('Rejected', ascending=False)
                 summ.insert(0, 'Rank', range(1, len(summ) + 1))
                 ws.write(0, 0, "Sellers Summary", fmt)
@@ -558,7 +561,7 @@ with tab1:
             for uploaded_file in uploaded_files:
                 try:
                     if uploaded_file.name.endswith('.xlsx'):
-                         raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                        raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
                     else:
                         try: 
                             raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
@@ -681,7 +684,7 @@ with tab1:
             st.code(traceback.format_exc())
 
 # -------------------------------------------------
-# TAB 2: WEEKLY ANALYSIS
+# TAB 2: WEEKLY ANALYSIS (FIXED)
 # -------------------------------------------------
 with tab2:
     st.header("Weekly Analysis Dashboard")
@@ -696,20 +699,36 @@ with tab2:
                 try:
                     if f.name.endswith('.xlsx'):
                         try:
+                            # Try reading 'ProductSets' sheet first
                             df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
                         except:
+                            # Fallback to reading the first sheet
                             f.seek(0)
                             df = pd.read_excel(f, engine='openpyxl', dtype=str)
                     else:
+                        # CSVs
                         df = pd.read_csv(f, dtype=str)
+                    
+                    df.columns = df.columns.str.strip() # Ensure column names are clean
                     df = standardize_input_data(df)
+
+                    # FIX: Ensure essential columns for analysis are present
+                    # This prevents the KeyError: 'Status' if the uploaded file structure is incomplete.
+                    required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
+                    for col in required_weekly_cols:
+                        if col not in df.columns:
+                            # Add missing columns with null values (pd.NA)
+                            df[col] = pd.NA 
+                    
                     combined_df = pd.concat([combined_df, df], ignore_index=True)
                 except Exception as e:
                     st.error(f"Error reading {f.name}: {e}")
         
         if not combined_df.empty:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
-            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
+            
+            # This line now works without error.
+            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy() 
             
             st.markdown("### Key Metrics")
             m1, m2, m3, m4 = st.columns(4)
