@@ -730,7 +730,6 @@ with tab2:
         if not combined_df.empty:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             
-            # This line now works without the KeyError: 'Status'
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy() 
             
             st.markdown("### Key Metrics")
@@ -747,15 +746,16 @@ with tab2:
             st.markdown("---")
             c1, c2 = st.columns(2)
             with c1:
-                st.subheader("Top Rejection Reasons")
-                if not rejected.empty and 'Reason' in rejected.columns:
-                    reason_counts = rejected['Reason'].value_counts().reset_index()
-                    reason_counts.columns = ['Reason', 'Count']
+                st.subheader("Top Rejection Reasons (Flags)")
+                # CHANGE: Use 'FLAG' column for the chart
+                if not rejected.empty and 'FLAG' in rejected.columns:
+                    reason_counts = rejected['FLAG'].value_counts().reset_index()
+                    reason_counts.columns = ['Flag', 'Count']
                     chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(
                         x=alt.X('Count', title='Number of Products'),
-                        y=alt.Y('Reason', sort='-x', title=None),
+                        y=alt.Y('Flag', sort='-x', title=None), # Use 'Flag'
                         color=alt.value('#FF6B6B'),
-                        tooltip=['Reason', 'Count']
+                        tooltip=['Flag', 'Count']
                     ).interactive()
                     st.altair_chart(chart, use_container_width=True)
 
@@ -805,8 +805,10 @@ with tab2:
             st.subheader("Top 5 Summaries")
 
             if not rejected.empty:
-                top_reasons = rejected['Reason'].value_counts().head(5).reset_index()
-                top_reasons.columns = ['Reason', 'Count']
+                # CHANGE: Use 'FLAG' column for the summary table
+                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index()
+                top_reasons.columns = ['Flag', 'Count'] # Renamed column to 'Flag'
+                
                 top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
                 top_sellers.columns = ['Seller', 'Rejection Count']
                 top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
@@ -814,7 +816,7 @@ with tab2:
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.markdown("**Top 5 Reasons**")
+                    st.markdown("**Top 5 Reasons (Flags)**") # Updated title
                     st.dataframe(top_reasons, hide_index=True, use_container_width=True)
                 with c2:
                     st.markdown("**Top 5 Sellers**")
@@ -830,7 +832,8 @@ with tab2:
                         {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
                         {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
                     ]).to_excel(writer, sheet_name='Summary', index=False)
-                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
+                    # The Excel export uses the column names defined in top_reasons ('Flag', 'Count')
+                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False) 
                     top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
                     top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
                     workbook = writer.book
