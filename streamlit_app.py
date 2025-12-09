@@ -88,7 +88,6 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
-    """Loads flag mapping (e.g., 'Sensitive words' -> ('CODE', 'COMMENT'))"""
     try:
         flag_mapping = {
             'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia..."),
@@ -103,14 +102,13 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity...', "Please contact Jumia Seller Support to raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
-            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia\'s requirements."),
+            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."),
         }
         return flag_mapping
     except Exception: return {}
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
-    """Loads all configuration and support files."""
     files = {
         'blacklisted_words': load_txt_file('blacklisted.txt'),
         'book_category_codes': load_excel_file('Books_cat.xlsx', 'CategoryCode'),
@@ -134,8 +132,7 @@ def load_all_support_files() -> Dict:
     return files
 
 @st.cache_data(ttl=3600)
-def compile_regex_patterns(words: List[str]) -> Optional[re.Pattern]:
-    """Compiles a list of words into a single regex pattern for fast search."""
+def compile_regex_patterns(words: List[str]) -> re.Pattern:
     if not words: return None
     pattern = '|'.join(r'\b' + re.escape(w) + r'\b' for w in words)
     return re.compile(pattern, re.IGNORECASE)
@@ -165,10 +162,9 @@ class CountryValidator:
         return [w.lower() for w in load_txt_file(filename)]
 
 # -------------------------------------------------
-# Data Loading & Preparation Functions
+# Data Loading & Validation Functions
 # -------------------------------------------------
 def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Renames columns and cleans country status."""
     df = df.copy()
     df = df.rename(columns=NEW_FILE_MAPPING)
     if 'ACTIVE_STATUS_COUNTRY' in df.columns:
@@ -179,7 +175,6 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
-    """Checks for required columns."""
     errors = []
     required = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'ACTIVE_STATUS_COUNTRY']
     for field in required:
@@ -187,15 +182,19 @@ def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, source: str) -> pd.DataFrame:
-    """Filters data frame to include only rows matching the selected country code."""
     if 'ACTIVE_STATUS_COUNTRY' not in df.columns: return df
     df['ACTIVE_STATUS_COUNTRY'] = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
     mask = df['ACTIVE_STATUS_COUNTRY'] == country_validator.code
     filtered = df[mask].copy()
+    if filtered.empty:
+        st.error(f"No {country_validator.code} rows left in {source}")
+        st.stop()
     return filtered
 
 def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
-    """Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs before filtering."""
+    """
+    Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs before filtering.
+    """
     if df.empty: return df
     cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION', 'WARRANTY_ADDRESS', 'WARRANTY_TYPE']
     
@@ -216,21 +215,20 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     A product needs AT LEAST ONE of: PRODUCT_WARRANTY or WARRANTY_DURATION filled.
     """
     # 1. Ensure warranty columns exist
-    data_to_check = data.copy()
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
-        if col not in data_to_check.columns: 
-            data_to_check[col] = ""
+        if col not in data.columns: 
+            data[col] = ""
         # Ensure it's treated as a string and missing values are handled
-        data_to_check[col] = data_to_check[col].astype(str).fillna('').str.strip()
+        data[col] = data[col].astype(str).fillna('').str.strip()
     
     if not warranty_category_codes: 
         return pd.DataFrame(columns=data.columns)
     
     # 2. Filter to warranty-required categories
-    data_to_check['CAT_CLEAN'] = data_to_check['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+    data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     target_cats = [str(c).strip() for c in warranty_category_codes]
     
-    target_data = data_to_check[data_to_check['CAT_CLEAN'].isin(target_cats)].copy()
+    target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
     if target_data.empty: 
         return pd.DataFrame(columns=data.columns)
     
@@ -258,7 +256,6 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
-    """Checks for color presence in required categories."""
     req = ['NAME', 'COLOR', 'CATEGORY_CODE']
     if not set(req).issubset(data.columns): return pd.DataFrame(columns=data.columns)
     data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
@@ -275,42 +272,36 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         mask = ~(name_check | color_check | family_check)
     else:
         mask = ~(name_check | color_check)
-    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[mask]
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
-    """Flags products whose name contains sensitive words."""
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[mask]
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
-    """Flags products whose name contains prohibited product words."""
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[mask]
 
 def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
-    """Flags products where the brand name is repeated in the product name."""
     if not {'BRAND','NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower() 
                      if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
-    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[mask]
 
 def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
-    """Flags product sets that appear to be duplicates based on key attributes."""
     cols = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
     if len(cols) < 4: return pd.DataFrame(columns=data.columns)
-    return data[data.duplicated(subset=cols, keep=False)].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[data.duplicated(subset=cols, keep=False)]
 
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
-    """Flags unapproved sellers trying to sell books."""
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     books = data[data['CATEGORY_CODE'].isin(book_category_codes)]
     if books.empty: return pd.DataFrame(columns=data.columns)
-    return books[~books['SELLER_NAME'].isin(approved_book_sellers)].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return books[~books['SELLER_NAME'].isin(approved_book_sellers)]
 
 def check_seller_approved_for_perfume(data: pd.DataFrame, perfume_category_codes: List[str], approved_perfume_sellers: List[str], sensitive_perfume_brands: List[str]) -> pd.DataFrame:
-    """Flags unapproved sellers selling sensitive perfume brands/names."""
     if not {'CATEGORY_CODE','SELLER_NAME','BRAND','NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perfume_data.empty: return pd.DataFrame(columns=data.columns)
@@ -321,10 +312,9 @@ def check_seller_approved_for_perfume(data: pd.DataFrame, perfume_category_codes
     fake_brand_mask = brand_lower.isin(fake_brands)
     name_contains_sensitive = name_lower.apply(lambda x: any(brand in x for brand in sensitive_perfume_brands))
     final_mask = (sensitive_mask | (fake_brand_mask & name_contains_sensitive)) & (~perfume_data['SELLER_NAME'].isin(approved_perfume_sellers))
-    return perfume_data[final_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return perfume_data[final_mask]
 
 def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[str], sneaker_sensitive_brands: List[str]) -> pd.DataFrame:
-    """Flags generic sneakers using sensitive brand names."""
     if not {'CATEGORY_CODE', 'NAME', 'BRAND'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     sneaker_data = data[data['CATEGORY_CODE'].isin(sneaker_category_codes)].copy()
     if sneaker_data.empty: return pd.DataFrame(columns=data.columns)
@@ -332,10 +322,9 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
     name_lower = sneaker_data['NAME'].astype(str).str.strip().str.lower()
     fake_brand_mask = brand_lower.isin(['generic', 'fashion'])
     name_contains_brand = name_lower.apply(lambda x: any(brand in x for brand in sneaker_sensitive_brands))
-    return sneaker_data[fake_brand_mask & name_contains_brand].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return sneaker_data[fake_brand_mask & name_contains_brand]
 
 def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame, perfume_category_codes: List[str]) -> pd.DataFrame:
-    """Flags perfumes where the price is significantly lower than a reference price."""
     req = ['CATEGORY_CODE','NAME','BRAND','GLOBAL_SALE_PRICE','GLOBAL_PRICE']
     if not all(c in data.columns for c in req) or perfumes_df.empty: return pd.DataFrame(columns=data.columns)
     perf = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
@@ -362,18 +351,15 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     return pd.DataFrame(columns=data.columns)
 
 def check_single_word_name(data: pd.DataFrame, book_category_codes: List[str]) -> pd.DataFrame:
-    """Flags non-book products with single-word names."""
     if not {'CATEGORY_CODE','NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     non_books = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
-    return non_books[non_books['NAME'].astype(str).str.split().str.len() == 1].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return non_books[non_books['NAME'].astype(str).str.split().str.len() == 1]
 
 def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: List[str]) -> pd.DataFrame:
-    """Flags 'Generic' brand in specific categories."""
     if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
-    return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')]
 
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
-    """Flags suspected counterfeit jerseys based on keywords and seller exceptions."""
     req = ['CATEGORY_CODE', 'NAME', 'SELLER_NAME']
     if not all(c in data.columns for c in req) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
     jersey_cats = jerseys_df['Categories'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip().unique().tolist()
@@ -388,7 +374,7 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     target = jerseys[~jerseys['SELLER_NAME'].isin(exempt)].copy()
     mask = target['NAME'].astype(str).str.strip().str.lower().str.contains(regex, na=False)
     flagged = target[mask]
-    return flagged.drop(columns=['CAT_STR']) if 'CAT_STR' in flagged.columns else flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return flagged.drop(columns=['CAT_STR']) if 'CAT_STR' in flagged.columns else flagged
 
 # -------------------------------------------------
 # Master validation runner
@@ -415,63 +401,48 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     progress_bar = st.progress(0)
     status_text = st.empty()
-    results = {} # Dictionary to hold the DataFrame for each specific flag
+    results = {}
     
     for i, (name, func, kwargs) in enumerate(validations):
-        if country_validator.should_skip_validation(name): 
-            results[name] = pd.DataFrame(columns=data.columns) # Add empty result for skipped validation
-            continue 
-
+        if country_validator.should_skip_validation(name): continue
         status_text.text(f"Running: {name}")
         ckwargs = {'data': data, **kwargs}
         if name == "Generic BRAND Issues":
-            fas = support_files.get('category_fas', pd.DataFrame())
-            ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
+              fas = support_files.get('category_fas', pd.DataFrame())
+              ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
         
         try:
-            # Run the validation function
             res = func(**ckwargs)
-            # Store the resulting DataFrame (unique SIDs already ensured by validation functions)
             results[name] = res if not res.empty else pd.DataFrame(columns=data.columns)
-        except Exception as e:
-            logger.error(f"Error in validation {name}: {e}\n{traceback.format_exc()}")
+        except Exception:
             results[name] = pd.DataFrame(columns=data.columns)
         progress_bar.progress((i + 1) / len(validations))
     
     status_text.text("Finalizing...")
     rows = []
-    processed_sids = set()
+    processed = set()
     
-    # Process Rejected Products based on priority
     for name, _, _ in validations:
         if name not in results or results[name].empty: continue
         res = results[name]
         if 'PRODUCT_SET_SID' not in res.columns: continue
         
         reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
-        # Identify new SIDs for this flag that haven't been rejected by a higher-priority flag
-        newly_flagged_sids = res['PRODUCT_SET_SID'].astype(str).drop_duplicates().tolist()
-        sids_to_process = [sid for sid in newly_flagged_sids if sid not in processed_sids]
-        
-        if sids_to_process:
-            # Get the full product set data for these SIDs
-            flagged = data[data['PRODUCT_SET_SID'].astype(str).isin(sids_to_process)]
+        for _, r in flagged.iterrows():
+            sid = r['PRODUCT_SET_SID']
+            if sid in processed: continue 
             
-            for _, r in flagged.iterrows():
-                sid = r['PRODUCT_SET_SID']
-                if sid in processed_sids: continue # Safety check
-                
-                processed_sids.add(sid)
-                rows.append({
-                    'ProductSetSid': sid, 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Rejected',
-                    'Reason': reason_info[0], 'Comment': reason_info[1], 'FLAG': name, 'SellerName': r.get('SELLER_NAME', '')
-                })
+            processed.add(sid)
+            rows.append({
+                'ProductSetSid': sid, 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Rejected',
+                'Reason': reason_info[0], 'Comment': reason_info[1], 'FLAG': name, 'SellerName': r.get('SELLER_NAME', '')
+            })
     
-    # Process Approved Products
-    approved = data[~data['PRODUCT_SET_SID'].astype(str).isin(processed_sids)].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    approved = data[~data['PRODUCT_SET_SID'].isin(processed)]
     for _, r in approved.iterrows():
         rows.append({
             'ProductSetSid': r['PRODUCT_SET_SID'], 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Approved',
@@ -487,7 +458,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
 # -------------------------------------------------
 def to_excel_base(df, sheet, cols, writer):
     df_p = df.copy()
-    for c in cols:  
+    for c in cols: 
         if c not in df_p.columns: df_p[c] = pd.NA
     df_p[[c for c in cols if c in df_p.columns]].to_excel(writer, index=False, sheet_name=sheet)
 
@@ -499,16 +470,12 @@ def to_excel_full_data(data_df, final_report_df):
         
         d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
         r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
-        
-        # Merge the validation results (Status, Reason, FLAG) back onto the full data
         merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
-                          left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left', suffixes=('_data', '_report'))
+                          left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
         
-        # Clean up merged columns
-        if 'ProductSetSid_report' in merged.columns: merged.drop(columns=['ProductSetSid_report'], inplace=True)
-        if 'ProductSetSid_data' in merged.columns: merged.rename(columns={'ProductSetSid_data': 'PRODUCT_SET_SID'}, inplace=True)
+        if 'ProductSetSid_y' in merged.columns: merged.drop(columns=['ProductSetSid_y'], inplace=True)
+        if 'ProductSetSid_x' in merged.columns: merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
         
-        # Ensure final list of columns for export
         export_cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
         
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -518,23 +485,20 @@ def to_excel_full_data(data_df, final_report_df):
             ws = wb.add_worksheet('Sellers Data')
             fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
             
-            row_cursor = 1
-            if 'SELLER_RATING' in merged.columns and 'SELLER_NAME' in merged.columns and 'STOCK_QTY' in merged.columns:
+            if 'SELLER_RATING' in merged.columns:
                 merged['Rejected_Count'] = (merged['Status'] == 'Rejected').astype(int)
                 merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
-                
-                # Group by SELLER_NAME and calculate summary metrics
                 summ = merged.groupby('SELLER_NAME').agg(
-                    Rejected=('Rejected_Count', 'sum'), 
-                    Approved=('Approved_Count', 'sum'),
-                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()),  
+                    Rejected=('Rejected_Count', 'sum'), Approved=('Approved_Count', 'sum'),
+                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()), 
                     TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
                 ).reset_index().sort_values('Rejected', ascending=False)
-                
                 summ.insert(0, 'Rank', range(1, len(summ) + 1))
                 ws.write(0, 0, "Sellers Summary", fmt)
                 summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
                 row_cursor = len(summ) + 4
+            else:
+                row_cursor = 1
 
             if 'CATEGORY' in merged.columns:
                 cat_summ = merged[merged['Status']=='Rejected'].groupby('CATEGORY').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
@@ -542,7 +506,7 @@ def to_excel_full_data(data_df, final_report_df):
                 ws.write(row_cursor, 0, "Categories Summary", fmt)
                 cat_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
                 row_cursor += len(cat_summ) + 4
-                
+            
             if 'Reason' in merged.columns:
                 rsn_summ = merged[merged['Status']=='Rejected'].groupby('Reason').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
                 rsn_summ.insert(0, 'Rank', range(1, len(rsn_summ) + 1))
@@ -551,12 +515,9 @@ def to_excel_full_data(data_df, final_report_df):
         
         output.seek(0)
         return output
-    except Exception as e:
-        logger.error(f"Error creating full data excel: {e}\n{traceback.format_exc()}")
-        return BytesIO()
+    except Exception: return BytesIO()
 
 def to_excel(report_df, reasons_config_df):
-    """Exports the final status report and rejection reasons config."""
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         to_excel_base(report_df, "ProductSets", PRODUCTSETS_COLS, writer)
@@ -566,16 +527,11 @@ def to_excel(report_df, reasons_config_df):
     return output
 
 def to_excel_flag_data(flag_df, flag_name):
-    """Exports the full product data for a single specific flag."""
     output = BytesIO()
     df_copy = flag_df.copy()
     df_copy['FLAG'] = flag_name
-    
-    # Ensure all necessary columns exist for the full data export
-    export_cols = FULL_DATA_COLS + [c for c in ["FLAG"] if c not in FULL_DATA_COLS]
-    
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        to_excel_base(df_copy, "FlaggedProducts", export_cols, writer)
+        to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
     output.seek(0)
     return output
 
@@ -594,8 +550,8 @@ st.markdown("---")
 with st.spinner("Loading configuration files..."):
     support_files = load_all_support_files()
 
-if support_files['flags_mapping'].empty: # Check if flag mapping loaded correctly
-    st.error("Critical: Flag mapping data could not be loaded. Check support files.")
+if not support_files['flags_mapping']:
+    st.error("Critical: flags.xlsx could not be loaded.")
     st.stop()
 
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
@@ -616,6 +572,7 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
+            file_sids_sets = []
             
             for uploaded_file in uploaded_files:
                 try:
@@ -623,134 +580,304 @@ with tab1:
                         raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
                     else:
                         try: 
-                            raw_data = pd.read_csv(uploaded_file, encoding='utf-8', sep=None, engine='python', dtype=str)
-                        except UnicodeDecodeError:
-                            raw_data = pd.read_csv(uploaded_file, encoding='latin1', sep=None, engine='python', dtype=str)
-                            
-                    st.success(f"Successfully loaded file: {uploaded_file.name}")
+                            raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                            if len(raw_data.columns) <= 1:
+                                uploaded_file.seek(0)
+                                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                        except:
+                            uploaded_file.seek(0)
+                            raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
                     
-                    df = standardize_input_data(raw_data)
+                    std_data = standardize_input_data(raw_data)
                     
-                    # Schema check
-                    schema_ok, errors = validate_input_schema(df)
-                    if not schema_ok:
-                        st.error(f"Schema validation failed for {uploaded_file.name}: {', '.join(errors)}")
-                        continue
-
-                    # Filter by country
-                    df = filter_by_country(df, country_validator, uploaded_file.name)
-                    if df.empty:
-                        st.warning(f"No {country_validator.code} products found in {uploaded_file.name}. Skipping.")
-                        continue
+                    if 'PRODUCT_SET_SID' in std_data.columns:
+                        file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
                         
-                    df = propagate_metadata(df) # Propagate warranty info across variations
-                    df['SourceFile'] = uploaded_file.name # Track source file
-                    all_dfs.append(df)
+                    all_dfs.append(std_data)
                     
                 except Exception as e:
-                    logger.error(f"Error processing {uploaded_file.name}: {e}\n{traceback.format_exc()}")
-                    st.error(f"An error occurred while processing {uploaded_file.name}: {e}")
-                    
-            if all_dfs:
-                # 1. Concatenate all data
-                data_df_full = pd.concat(all_dfs, ignore_index=True)
-                total_products = len(data_df_full.drop_duplicates(subset=['PRODUCT_SET_SID']))
-                
-                # Check for empty data after filtering
-                if data_df_full.empty:
-                    st.error("No valid data remaining after filtering by country and applying schema checks.")
+                    st.error(f"Failed to read file {uploaded_file.name}: {e}")
                     st.stop()
+            
+            if not all_dfs:
+                st.error("No valid data loaded.")
+                st.stop()
+                
+            merged_data = pd.concat(all_dfs, ignore_index=True)
+            st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
+            
+            intersection_count = 0
+            intersection_sids = set()
+            if len(file_sids_sets) > 1:
+                intersection_sids = set.intersection(*file_sids_sets)
+                intersection_count = len(intersection_sids)
+            
+            data_prop = propagate_metadata(merged_data)
+            
+            is_valid, errors = validate_input_schema(data_prop)
+            
+            if is_valid:
+                data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
+                
+                data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+                
+                for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
+                    if col in data.columns: data[col] = data[col].astype(str).fillna('')
+                
+                if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
+                
+                # DEBUG SECTION FOR WARRANTY
+                with st.expander("🔍 WARRANTY DEBUG INFO"):
+                    st.write(f"**Warranty categories from Warranty.txt:** {support_files['warranty_category_codes']}")
                     
-                # 2. Run Validation
-                final_report_df, flag_data = validate_products(data_df_full, support_files, country_validator)
-                
-                # 3. Summarize Results
-                rejected_count = final_report_df[final_report_df['Status'] == 'Rejected']['ProductSetSid'].nunique()
-                approved_count = final_report_df[final_report_df['Status'] == 'Approved']['ProductSetSid'].nunique()
-                
-                st.subheader("Validation Run Summary")
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Total Unique Product Sets", f"{total_products:,}")
-                col2.metric("Approved Product Sets", f"{approved_count:,}", delta_color="normal")
-                col3.metric("Rejected Product Sets", f"{rejected_count:,}", delta_color="inverse")
-                
-                rejection_rate = (rejected_count / total_products) * 100 if total_products > 0 else 0
-                col4.metric("Rejection Rate", f"{rejection_rate:.1f}%")
-                
-                st.markdown("---")
-
-                # 4. Main Download Buttons
-                st.subheader("Final Reports Download ⬇️")
-                
-                # Report with just SIDs, Status, Reason
-                final_report_output = to_excel(final_report_df.drop_duplicates(subset=['ProductSetSid']), support_files['reasons'])
-                st.download_button(
-                    label=f"Download 📋 Final Status Report ({file_prefix}_{current_date})",
-                    data=final_report_output, 
-                    file_name=f"Final_Validation_Report_{file_prefix}_{current_date}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
-                # Full Data Report
-                full_data_output = to_excel_full_data(data_df_full, final_report_df)
-                st.download_button(
-                    label=f"Download 📁 Full Data + Status & Summary ({file_prefix}_{current_date})",
-                    data=full_data_output, file_name=f"Full_Data_Validation_{file_prefix}_{current_date}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-                
-                st.markdown("---")
-                
-                # 5. Interactive Flag Data View (Matching the Image)
-                st.subheader("Validation Results by Flag 🚩")
-                
-                # Sort flags by the count of flagged products (descending)
-                flag_counts = {
-                    name: len(df.drop_duplicates(subset=['PRODUCT_SET_SID']))
-                    for name, df in flag_data.items() if not df.empty
-                }
-                sorted_flags = sorted(flag_counts.items(), key=lambda item: item[1], reverse=True)
-                
-                if not sorted_flags:
-                    st.success("🎉 All products passed all active validation checks!")
-                else:
-                    
-                    # Display the data for each flag in an expander
-                    for flag_name, count in sorted_flags:
-                        flag_specific_data = flag_data.get(flag_name, pd.DataFrame())
+                    if 'CATEGORY_CODE' in data.columns:
+                        data_temp = data.copy()
+                        data_temp['CAT_CLEAN'] = data_temp['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+                        warranty_products = data_temp[data_temp['CAT_CLEAN'].isin([str(c).strip() for c in support_files['warranty_category_codes']])]
+                        st.write(f"**Products in warranty categories:** {len(warranty_products)}")
                         
-                        # Use the count of unique SIDs in the expander title
-                        with st.expander(f"**{flag_name}** ({count:,} products)"):
-                            if not flag_specific_data.empty:
-                                st.markdown("##### Flagged Data Preview (First 50 Rows)")
-                                st.dataframe(flag_specific_data.head(50), use_container_width=True)
-                                
-                                # Download button for the specific flag data
-                                flag_output = to_excel_flag_data(flag_specific_data, flag_name)
-                                st.download_button(
-                                    label=f"Download Full Data for **{flag_name}** ({count:,} products)",
-                                    data=flag_output, 
-                                    file_name=f"{flag_name}_Data_{file_prefix}_{current_date}.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    key=f"dl_{flag_name}_view"
-                                )
-                            else:
-                                st.info("No data available for this flag.")
-
-            else:
-                st.info("No valid files processed or no products matched the selected country.")
+                        if len(warranty_products) > 0:
+                            pw_filled = (warranty_products['PRODUCT_WARRANTY'].astype(str).str.strip() != '').sum()
+                            wd_filled = (warranty_products['WARRANTY_DURATION'].astype(str).str.strip() != '').sum()
+                            st.write(f"**Products with PRODUCT_WARRANTY filled:** {pw_filled}")
+                            st.write(f"**Products with WARRANTY_DURATION filled:** {wd_filled}")
+                            st.write("**Sample warranty data:**")
+                            st.dataframe(warranty_products[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']].head(20))
                 
+                with st.spinner("Running validations..."):
+                    final_report, flag_dfs = validate_products(data, support_files, country_validator)
+                
+                approved_df = final_report[final_report['Status'] == 'Approved']
+                rejected_df = final_report[final_report['Status'] == 'Rejected']
+                log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+                
+                st.sidebar.header("Seller Options")
+                seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
+                sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
+                
+                filt_data = data.copy()
+                filt_report = final_report.copy()
+                lbl = "All_Sellers"
+                
+                if 'All Sellers' not in sel_sellers and sel_sellers:
+                    filt_data = data[data['SELLER_NAME'].isin(sel_sellers)]
+                    filt_report = final_report[final_report['ProductSetSid'].isin(filt_data['PRODUCT_SET_SID'])]
+                    lbl = "Selected_Sellers"
+                
+                filt_rej = filt_report[filt_report['Status']=='Rejected']
+                filt_app = filt_report[filt_report['Status']=='Approved']
+                
+                st.markdown("---")
+                st.header("Overall Results")
+                
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Total", len(data))
+                c2.metric("Approved", len(approved_df))
+                c3.metric("Rejected", len(rejected_df))
+                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+                c4.metric("Rate", f"{rt:.1f}%")
+                c5.metric("SKUs in Both Files", intersection_count)
+                
+                if intersection_count > 0:
+                    common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
+                    
+                    csv_buffer = BytesIO()
+                    common_skus_df.to_csv(csv_buffer, index=False)
+                    st.download_button(
+                        label=f"📥 Download Common SKUs ({intersection_count})",
+                        data=csv_buffer.getvalue(),
+                        file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv",
+                        mime="text/csv",
+                    )
+                
+                st.subheader("Validation Results by Flag")
+                for title, df_flagged in flag_dfs.items():
+                    with st.expander(f"{title} ({len(df_flagged)})"):
+                        if not df_flagged.empty:
+                            st.dataframe(df_flagged)
+                            st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
+                        else:
+                            st.success("No issues found.")
+                
+                st.markdown("---")
+                st.header("Overall Exports")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
+                c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
+                c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
+                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
+            else:
+                for e in errors: st.error(e)
         except Exception as e:
-            logger.error(f"Global error during validation: {e}\n{traceback.format_exc()}")
-            st.error(f"An unexpected error occurred: {e}")
+            st.error(f"Error: {e}")
+            st.code(traceback.format_exc())
 
 # -------------------------------------------------
-# TAB 2 & 3 (Placeholders)
+# TAB 2: WEEKLY ANALYSIS
 # -------------------------------------------------
 with tab2:
-    st.header("Weekly Analysis (To be implemented)")
-    st.markdown("This tab will host interactive charts and aggregations for weekly trends.")
+    st.header("Weekly Analysis Dashboard")
+    st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
+    
+    weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files")
+    
+    if weekly_files:
+        combined_df = pd.DataFrame()
+        with st.spinner("Aggregating files..."):
+            for f in weekly_files:
+                try:
+                    if f.name.endswith('.xlsx'):
+                        try:
+                            df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
+                        except:
+                            f.seek(0)
+                            df = pd.read_excel(f, engine='openpyxl', dtype=str)
+                    else:
+                        df = pd.read_csv(f, dtype=str)
+                    
+                    df.columns = df.columns.str.strip()
+                    df = standardize_input_data(df)
 
+                    required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
+                    for col in required_weekly_cols:
+                        if col not in df.columns:
+                            df[col] = pd.NA 
+                    
+                    combined_df = pd.concat([combined_df, df], ignore_index=True)
+                except Exception as e:
+                    st.error(f"Error reading {f.name}: {e}")
+        
+        if not combined_df.empty:
+            combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
+            
+            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy() 
+            
+            st.markdown("### Key Metrics")
+            m1, m2, m3, m4 = st.columns(4)
+            total = len(combined_df)
+            rej_count = len(rejected)
+            rej_rate = (rej_count/total * 100) if total else 0
+            
+            m1.metric("Total Products Checked", f"{total:,}")
+            m2.metric("Total Rejected", f"{rej_count:,}")
+            m3.metric("Rejection Rate", f"{rej_rate:.1f}%")
+            m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
+            
+            st.markdown("---")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("Top Rejection Reasons (Flags)")
+                if not rejected.empty and 'FLAG' in rejected.columns:
+                    reason_counts = rejected['FLAG'].value_counts().reset_index()
+                    reason_counts.columns = ['Flag', 'Count']
+                    chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Count', title='Number of Products'),
+                        y=alt.Y('Flag', sort='-x', title=None),
+                        color=alt.value('#FF6B6B'),
+                        tooltip=['Flag', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+
+            with c2:
+                st.subheader("Top Rejected Categories")
+                if not rejected.empty and 'CATEGORY' in rejected.columns:
+                    cat_counts = rejected['CATEGORY'].value_counts().reset_index()
+                    cat_counts.columns = ['Category', 'Count']
+                    chart = alt.Chart(cat_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Count', title='Number of Rejections'),
+                        y=alt.Y('Category', sort='-x', title=None),
+                        color=alt.value('#4ECDC4'),
+                        tooltip=['Category', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+
+            c3, c4 = st.columns(2)
+            with c3:
+                st.subheader("Top 10 Rejected Sellers")
+                if not rejected.empty and 'SELLER_NAME' in rejected.columns:
+                    seller_counts = rejected['SELLER_NAME'].value_counts().reset_index()
+                    seller_counts.columns = ['Seller', 'Count']
+                    chart = alt.Chart(seller_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Seller', sort='-y', axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y('Count', title='Rejections'),
+                        color=alt.value('#FFE66D'),
+                        tooltip=['Seller', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+
+            with c4:
+                st.subheader("Seller vs. Reason Breakdown (Top 5)")
+                if not rejected.empty and 'SELLER_NAME' in rejected.columns and 'Reason' in rejected.columns:
+                    top_sellers = rejected['SELLER_NAME'].value_counts().head(5).index.tolist()
+                    filtered_rej = rejected[rejected['SELLER_NAME'].isin(top_sellers)]
+                    if not filtered_rej.empty:
+                        breakdown = filtered_rej.groupby(['SELLER_NAME', 'Reason']).size().reset_index(name='Count')
+                        chart = alt.Chart(breakdown).mark_bar().encode(
+                            x=alt.X('SELLER_NAME', title='Seller'),
+                            y=alt.Y('Count', title='Count'),
+                            color=alt.Color('Reason', legend=alt.Legend(title="Rejection Reason", orient="bottom")),
+                            tooltip=['SELLER_NAME', 'Reason', 'Count']
+                        ).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("Top 5 Summaries")
+
+            if not rejected.empty:
+                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index()
+                top_reasons.columns = ['Flag', 'Count']
+                
+                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
+                top_sellers.columns = ['Seller', 'Rejection Count']
+                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
+                top_cats.columns = ['Category', 'Rejection Count']
+                
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown("**Top 5 Reasons (Flags)**")
+                    st.dataframe(top_reasons, hide_index=True, use_container_width=True)
+                with c2:
+                    st.markdown("**Top 5 Sellers**")
+                    st.dataframe(top_sellers, hide_index=True, use_container_width=True)
+                with c3:
+                    st.markdown("**Top 5 Categories**")
+                    st.dataframe(top_cats, hide_index=True, use_container_width=True)
+                
+                summary_excel = BytesIO()
+                with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
+                    pd.DataFrame([
+                        {'Metric': 'Total Rejected SKUs', 'Value': len(rejected)},
+                        {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
+                        {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
+                    ]).to_excel(writer, sheet_name='Summary', index=False)
+                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
+                    top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
+                    top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
+                    workbook = writer.book
+                    for sheet in writer.sheets.values():
+                        sheet.set_column(0, 1, 25)
+                
+                summary_excel.seek(0)
+                st.download_button(
+                    label="📥 Download Summary Excel",
+                    data=summary_excel,
+                    file_name=f"Weekly_Analysis_Summary_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+# -------------------------------------------------
+# TAB 3: DATA LAKE
+# -------------------------------------------------
 with tab3:
-    st.header("Data Lake Connection (To be implemented)")
-    st.markdown("This tab will allow connection to a data source (e.g., S3, Google Drive) for loading larger datasets.")
+    st.header("Data Lake Audit")
+    file = st.file_uploader("Upload audit file", type=['jsonl','csv','xlsx'], key="audit_file")
+    if file:
+        if file.name.endswith('.jsonl'): df = pd.read_json(file, lines=True)
+        elif file.name.endswith('.csv'): df = pd.read_csv(file)
+        else: df = pd.read_excel(file)
+        st.dataframe(df.head(50))
+    else:
+        try:
+            st.dataframe(pd.read_json('validation_audit.jsonl', lines=True).tail(50))
+        except:
+            st.info("No audit log found.")
