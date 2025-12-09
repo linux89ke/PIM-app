@@ -212,11 +212,10 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
     Checks if products in warranty-required categories have warranty information.
-    A product needs AT LEAST ONE of these filled: PRODUCT_WARRANTY, WARRANTY_DURATION, WARRANTY_TYPE, or WARRANTY_ADDRESS
+    A product needs AT LEAST ONE of: PRODUCT_WARRANTY or WARRANTY_DURATION filled.
     """
-    # 1. Ensure all warranty columns exist
-    warranty_cols = ['PRODUCT_WARRANTY', 'WARRANTY_DURATION', 'WARRANTY_TYPE', 'WARRANTY_ADDRESS']
-    for col in warranty_cols:
+    # 1. Ensure warranty columns exist
+    for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: 
             data[col] = ""
         # Ensure it's treated as a string and missing values are handled
@@ -242,11 +241,9 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     # Check each warranty field
     has_product_warranty = is_present(target_data['PRODUCT_WARRANTY'])
     has_duration = is_present(target_data['WARRANTY_DURATION'])
-    has_type = is_present(target_data['WARRANTY_TYPE'])
-    has_address = is_present(target_data['WARRANTY_ADDRESS'])
     
-    # Product is OK if it has ANY warranty field filled
-    has_any_warranty = has_product_warranty | has_duration | has_type | has_address
+    # Product is OK if it has EITHER field filled
+    has_any_warranty = has_product_warranty | has_duration
     
     # Flag products that have NO warranty information at all
     mask = ~has_any_warranty
@@ -628,6 +625,24 @@ with tab1:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
                 if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
+                
+                # DEBUG SECTION FOR WARRANTY
+                with st.expander("🔍 WARRANTY DEBUG INFO"):
+                    st.write(f"**Warranty categories from Warranty.txt:** {support_files['warranty_category_codes']}")
+                    
+                    if 'CATEGORY_CODE' in data.columns:
+                        data_temp = data.copy()
+                        data_temp['CAT_CLEAN'] = data_temp['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+                        warranty_products = data_temp[data_temp['CAT_CLEAN'].isin([str(c).strip() for c in support_files['warranty_category_codes']])]
+                        st.write(f"**Products in warranty categories:** {len(warranty_products)}")
+                        
+                        if len(warranty_products) > 0:
+                            pw_filled = (warranty_products['PRODUCT_WARRANTY'].astype(str).str.strip() != '').sum()
+                            wd_filled = (warranty_products['WARRANTY_DURATION'].astype(str).str.strip() != '').sum()
+                            st.write(f"**Products with PRODUCT_WARRANTY filled:** {pw_filled}")
+                            st.write(f"**Products with WARRANTY_DURATION filled:** {wd_filled}")
+                            st.write("**Sample warranty data:**")
+                            st.dataframe(warranty_products[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']].head(20))
                 
                 with st.spinner("Running validations..."):
                     final_report, flag_dfs = validate_products(data, support_files, country_validator)
