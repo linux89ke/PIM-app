@@ -127,7 +127,7 @@ def load_all_support_files() -> Dict:
         'reasons': load_excel_file('reasons.xlsx'),
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
-        'warranty_category_codes': load_txt_file('Warranty.txt'),
+        'warranty_category_codes': load_txt_file('warranty.txt'),
     }
     return files
 
