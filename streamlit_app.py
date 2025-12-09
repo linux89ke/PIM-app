@@ -34,7 +34,8 @@ FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG",
-    "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION"
+    "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION",
+    "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
 FX_RATE = 132.0
 
@@ -55,7 +56,9 @@ NEW_FILE_MAPPING = {
     'dsc_status': 'LISTING_STATUS',
     'dsc_shop_email': 'SELLER_EMAIL',
     'product_warranty': 'PRODUCT_WARRANTY',
-    'warranty_duration': 'WARRANTY_DURATION'
+    'warranty_duration': 'WARRANTY_DURATION',
+    'warranty_address': 'WARRANTY_ADDRESS',
+    'warranty_type': 'WARRANTY_TYPE'
 }
 
 # -------------------------------------------------
@@ -193,7 +196,7 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     Propagates metadata (COLOR_FAMILY, WARRANTY) across duplicate SIDs before filtering.
     """
     if df.empty: return df
-    cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']
+    cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION', 'WARRANTY_ADDRESS', 'WARRANTY_TYPE']
     
     for col in cols_to_propagate:
         if col not in df.columns: df[col] = pd.NA
@@ -208,36 +211,49 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
-    FIXED VERSION: Properly checks for missing warranty info in warranty-required categories.
+    Checks if products in warranty-required categories have warranty information.
+    A product needs AT LEAST ONE of these filled: PRODUCT_WARRANTY, WARRANTY_DURATION, WARRANTY_TYPE, or WARRANTY_ADDRESS
     """
-    # 1. Ensure columns exist and are of string type for consistent cleaning
-    for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
-        if col not in data.columns: data[col] = ""
+    # 1. Ensure all warranty columns exist
+    warranty_cols = ['PRODUCT_WARRANTY', 'WARRANTY_DURATION', 'WARRANTY_TYPE', 'WARRANTY_ADDRESS']
+    for col in warranty_cols:
+        if col not in data.columns: 
+            data[col] = ""
         # Ensure it's treated as a string and missing values are handled
-        data[col] = data[col].astype(str).fillna('') 
+        data[col] = data[col].astype(str).fillna('').str.strip()
     
-    # REMOVED THE FLAWED all_warranty_missing EARLY EXIT CHECK
+    if not warranty_category_codes: 
+        return pd.DataFrame(columns=data.columns)
     
-    if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
-    
-    # Strict cleaning for matching
+    # 2. Filter to warranty-required categories
     data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     target_cats = [str(c).strip() for c in warranty_category_codes]
     
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
-    if target_data.empty: return pd.DataFrame(columns=data.columns)
+    if target_data.empty: 
+        return pd.DataFrame(columns=data.columns)
     
+    # 3. Check if ANY warranty field has meaningful data
     def is_present(series):
+        """Check if a field has meaningful data (not empty, nan, none, etc.)"""
         s = series.astype(str).str.strip().str.lower()
-        return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat')
-
-    has_desc = is_present(target_data['PRODUCT_WARRANTY'])
-    has_duration = is_present(target_data['WARRANTY_DURATION'])
+        return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat') & (s != 'n/a')
     
-    mask = ~(has_desc | has_duration) # Flagged if NOT (has_desc OR has_duration)
+    # Check each warranty field
+    has_product_warranty = is_present(target_data['PRODUCT_WARRANTY'])
+    has_duration = is_present(target_data['WARRANTY_DURATION'])
+    has_type = is_present(target_data['WARRANTY_TYPE'])
+    has_address = is_present(target_data['WARRANTY_ADDRESS'])
+    
+    # Product is OK if it has ANY warranty field filled
+    has_any_warranty = has_product_warranty | has_duration | has_type | has_address
+    
+    # Flag products that have NO warranty information at all
+    mask = ~has_any_warranty
     flagged = target_data[mask]
     
-    if 'CAT_CLEAN' in flagged.columns: flagged = flagged.drop(columns=['CAT_CLEAN'])
+    if 'CAT_CLEAN' in flagged.columns: 
+        flagged = flagged.drop(columns=['CAT_CLEAN'])
     
     # Return only unique Product Set SIDs
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
