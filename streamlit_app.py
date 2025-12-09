@@ -143,7 +143,8 @@ def compile_regex_patterns(words: List[str]) -> re.Pattern:
 class CountryValidator:
     COUNTRY_CONFIG = {
         "Kenya": {"code": "KE", "skip_validations": [], "prohibited_products_file": "prohibited_productsKE.txt"},
-        "Uganda": {"code": "UG", "skip_validations": ["Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers"], "prohibited_products_file": "prohibited_productsUG.txt"}
+        # MODIFIED: Added "Product Warranty" to Uganda's skip list per user request
+        "Uganda": {"code": "UG", "skip_validations": ["Seller Approve to sell books", "Perfume Price Check", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Product Warranty"], "prohibited_products_file": "prohibited_productsUG.txt"}
     }
     def __init__(self, country: str):
         self.country = country
@@ -200,7 +201,7 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     
     for col in cols_to_propagate:
         if col not in df.columns: df[col] = pd.NA
-    
+        
     # Forward fill and Backward fill to spread data between rows of same SID
     for col in cols_to_propagate:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
@@ -236,6 +237,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     def is_present(series):
         """Check if a field has meaningful data (not empty, nan, none, etc.)"""
         s = series.astype(str).str.strip().str.lower()
+        # Checks for actual presence of data, ignoring common NA representations
         return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat') & (s != 'n/a')
     
     # Check each warranty field
@@ -379,7 +381,7 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
-def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator):
+def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None):
     flags_mapping = support_files['flags_mapping']
     
     # ORDER MATTERS: This list defines the priority of the rejection flags.
@@ -404,9 +406,32 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     results = {}
     
     for i, (name, func, kwargs) in enumerate(validations):
+        # Constraint 1: Skip based on country (handles Uganda)
         if country_validator.should_skip_validation(name): continue
-        status_text.text(f"Running: {name}")
+        
         ckwargs = {'data': data, **kwargs}
+        
+        # --- Custom Logic for 'Product Warranty' (Constraints 2 & 3) ---
+        if name == "Product Warranty":
+            if not data_has_warranty_cols:
+                # Constraint 2: Skip if necessary columns are missing (i.e., local file not uploaded)
+                continue
+
+            # Apply common SIDs filter (Constraint 3)
+            check_data = data.copy()
+            if common_sids is not None and len(common_sids) > 0:
+                check_data = check_data[check_data['PRODUCT_SET_SID'].isin(common_sids)]
+                if check_data.empty:
+                    # If no common SIDs, skip the check
+                    continue
+            
+            ckwargs = {'data': check_data, **kwargs} # Use the potentially filtered data
+        
+        # --- End Custom Logic ---
+
+        status_text.text(f"Running: {name}")
+        
+        # Re-assign ckwargs for non-warranty checks that need special handling
         if name == "Generic BRAND Issues":
               fas = support_files.get('category_fas', pd.DataFrame())
               ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
@@ -416,7 +441,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             results[name] = res if not res.empty else pd.DataFrame(columns=data.columns)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error in {name}: {e}\n{traceback.format_exc()}")
             results[name] = pd.DataFrame(columns=data.columns)
         progress_bar.progress((i + 1) / len(validations))
     
@@ -430,6 +456,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         if 'PRODUCT_SET_SID' not in res.columns: continue
         
         reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        # Only merge the flagged SIDs back to retain full data columns for the output report
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
         for _, r in flagged.iterrows():
@@ -444,10 +471,13 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     approved = data[~data['PRODUCT_SET_SID'].isin(processed)]
     for _, r in approved.iterrows():
-        rows.append({
-            'ProductSetSid': r['PRODUCT_SET_SID'], 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Approved',
-            'Reason': "", 'Comment': "", 'FLAG': "", 'SellerName': r.get('SELLER_NAME', '')
-        })
+        # Ensure we only add a row once per ProductSetSid to match the behavior of the original code
+        if r['PRODUCT_SET_SID'] not in processed:
+             rows.append({
+                'ProductSetSid': r['PRODUCT_SET_SID'], 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Approved',
+                'Reason': "", 'Comment': "", 'FLAG': "", 'SellerName': r.get('SELLER_NAME', '')
+            })
+             processed.add(r['PRODUCT_SET_SID']) # Add to processed list to avoid duplicates here
     
     progress_bar.empty()
     status_text.empty()
@@ -592,7 +622,7 @@ with tab1:
                     
                     if 'PRODUCT_SET_SID' in std_data.columns:
                         file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
-                        
+                    
                     all_dfs.append(std_data)
                     
                 except Exception as e:
@@ -621,6 +651,9 @@ with tab1:
                 
                 data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
                 
+                # Check if the necessary columns are present in the final data
+                data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
+                
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
@@ -645,7 +678,16 @@ with tab1:
                             st.dataframe(warranty_products[['PRODUCT_SET_SID', 'CATEGORY_CODE', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION']].head(20))
                 
                 with st.spinner("Running validations..."):
-                    final_report, flag_dfs = validate_products(data, support_files, country_validator)
+                    # Determine common SIDs set to pass (only if multiple files uploaded)
+                    common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                    
+                    final_report, flag_dfs = validate_products(
+                        data, 
+                        support_files, 
+                        country_validator, 
+                        data_has_warranty_cols, # Pass the boolean check for column presence
+                        common_sids_to_pass    # Pass the set of common SIDs
+                    )
                 
                 approved_df = final_report[final_report['Status'] == 'Approved']
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
