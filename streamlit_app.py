@@ -99,7 +99,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity...', "Please contact Jumia Seller Support to raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
-            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."),
+            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."),
         }
         return flag_mapping
     except Exception: return {}
@@ -207,14 +207,17 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
+    """
+    FIXED VERSION: Properly checks for missing warranty info in warranty-required categories.
+    """
     # 1. Ensure columns exist and are of string type for consistent cleaning
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: data[col] = ""
         # Ensure it's treated as a string and missing values are handled
         data[col] = data[col].astype(str).fillna('') 
     
-    # FIX APPLIED: Removed the flawed 'all_warranty_missing' early exit check.
-
+    # REMOVED THE FLAWED all_warranty_missing EARLY EXIT CHECK
+    
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
     # Strict cleaning for matching
@@ -314,7 +317,7 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     perf = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
     if perf.empty: return pd.DataFrame(columns=data.columns)
     perf['price_to_use'] = perf['GLOBAL_SALE_PRICE'].where((perf['GLOBAL_SALE_PRICE'].notna()) & (pd.to_numeric(perf['GLOBAL_SALE_PRICE'], errors='coerce') > 0), perf['GLOBAL_PRICE'])
-    perf['price_to_use'] = pd.to_numeric(perf['price_to_use'], errors='coerce').fillna(0) # Ensure price is numeric
+    perf['price_to_use'] = pd.to_numeric(perf['price_to_use'], errors='coerce').fillna(0)
     
     currency = perf.get('CURRENCY', pd.Series(['KES'] * len(perf)))
     perf['price_usd'] = perf['price_to_use'].where(currency.astype(str).str.upper() != 'KES', perf['price_to_use'] / FX_RATE)
@@ -328,9 +331,8 @@ def check_perfume_price_vectorized(data: pd.DataFrame, perfumes_df: pd.DataFrame
     if 'PRODUCT_NAME_LOWER' in merged.columns:
         merged = merged[merged.apply(lambda r: r['PRODUCT_NAME_LOWER'] in r['NAME_LOWER'] if pd.notna(r['PRODUCT_NAME_LOWER']) else False, axis=1)]
     if 'PRICE_USD' in merged.columns:
-        # Ensure PRICE_USD is float for comparison
         merged['PRICE_USD_ref'] = pd.to_numeric(merged['PRICE_USD'], errors='coerce')
-        merged = merged.dropna(subset=['PRICE_USD_ref']) # Only compare rows where we have a reference price
+        merged = merged.dropna(subset=['PRICE_USD_ref'])
         flagged = merged[merged['PRICE_USD_ref'] - merged['price_usd'] >= 30]
         return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
     return pd.DataFrame(columns=data.columns)
@@ -419,7 +421,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         for _, r in flagged.iterrows():
             sid = r['PRODUCT_SET_SID']
-            # PRIORITY CHECK: If the SID is already processed, skip it.
             if sid in processed: continue 
             
             processed.add(sid)
@@ -550,7 +551,6 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    # 1. Allow Multiple File Uploads
     uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
     
     if uploaded_files:
@@ -559,9 +559,8 @@ with tab1:
             file_prefix = country_validator.code
             
             all_dfs = []
-            file_sids_sets = []  # To track intersections
+            file_sids_sets = []
             
-            # 2. Load and Standardize Each File
             for uploaded_file in uploaded_files:
                 try:
                     if uploaded_file.name.endswith('.xlsx'):
@@ -600,19 +599,15 @@ with tab1:
                 intersection_sids = set.intersection(*file_sids_sets)
                 intersection_count = len(intersection_sids)
             
-            # Step 1: Propagate Metadata across duplicates
             data_prop = propagate_metadata(merged_data)
             
             is_valid, errors = validate_input_schema(data_prop)
             
             if is_valid:
-                # 2. Filter for Target Country
                 data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
                 
-                # 3. Deduplicate
                 data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
                 
-                # Cleanup
                 for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 
@@ -653,7 +648,6 @@ with tab1:
                 c5.metric("SKUs in Both Files", intersection_count)
                 
                 if intersection_count > 0:
-                    # Provide download for intersection SKUs
                     common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
                     
                     csv_buffer = BytesIO()
@@ -688,7 +682,7 @@ with tab1:
             st.code(traceback.format_exc())
 
 # -------------------------------------------------
-# TAB 2: WEEKLY ANALYSIS (FIXED)
+# TAB 2: WEEKLY ANALYSIS
 # -------------------------------------------------
 with tab2:
     st.header("Weekly Analysis Dashboard")
@@ -703,24 +697,19 @@ with tab2:
                 try:
                     if f.name.endswith('.xlsx'):
                         try:
-                            # Try reading 'ProductSets' sheet first
                             df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
                         except:
-                            # Fallback to reading the first sheet
                             f.seek(0)
                             df = pd.read_excel(f, engine='openpyxl', dtype=str)
                     else:
-                        # CSVs
                         df = pd.read_csv(f, dtype=str)
                     
-                    df.columns = df.columns.str.strip() # Ensure column names are clean
+                    df.columns = df.columns.str.strip()
                     df = standardize_input_data(df)
 
-                    # FIX: Ensure essential columns for analysis are present
                     required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
                     for col in required_weekly_cols:
                         if col not in df.columns:
-                            # Add missing columns with null values (pd.NA)
                             df[col] = pd.NA 
                     
                     combined_df = pd.concat([combined_df, df], ignore_index=True)
@@ -747,13 +736,12 @@ with tab2:
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("Top Rejection Reasons (Flags)")
-                # CHANGE: Use 'FLAG' column for the chart
                 if not rejected.empty and 'FLAG' in rejected.columns:
                     reason_counts = rejected['FLAG'].value_counts().reset_index()
                     reason_counts.columns = ['Flag', 'Count']
                     chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(
                         x=alt.X('Count', title='Number of Products'),
-                        y=alt.Y('Flag', sort='-x', title=None), # Use 'Flag'
+                        y=alt.Y('Flag', sort='-x', title=None),
                         color=alt.value('#FF6B6B'),
                         tooltip=['Flag', 'Count']
                     ).interactive()
@@ -805,9 +793,8 @@ with tab2:
             st.subheader("Top 5 Summaries")
 
             if not rejected.empty:
-                # CHANGE: Use 'FLAG' column for the summary table
                 top_reasons = rejected['FLAG'].value_counts().head(5).reset_index()
-                top_reasons.columns = ['Flag', 'Count'] # Renamed column to 'Flag'
+                top_reasons.columns = ['Flag', 'Count']
                 
                 top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
                 top_sellers.columns = ['Seller', 'Rejection Count']
@@ -816,7 +803,7 @@ with tab2:
                 
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    st.markdown("**Top 5 Reasons (Flags)**") # Updated title
+                    st.markdown("**Top 5 Reasons (Flags)**")
                     st.dataframe(top_reasons, hide_index=True, use_container_width=True)
                 with c2:
                     st.markdown("**Top 5 Sellers**")
@@ -832,8 +819,7 @@ with tab2:
                         {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
                         {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
                     ]).to_excel(writer, sheet_name='Summary', index=False)
-                    # The Excel export uses the column names defined in top_reasons ('Flag', 'Count')
-                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False) 
+                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
                     top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
                     top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
                     workbook = writer.book
