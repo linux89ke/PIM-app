@@ -87,6 +87,38 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
         return [] if column else pd.DataFrame()
 
 @st.cache_data(ttl=3600)
+def load_counterfeit_config() -> Dict:
+    """
+    Loads the hardcoded Lowest Original Price and Suspected Category Codes
+    derived from 'suspected_fake.xlsx - Sheet1.csv'.
+    """
+    # 1. Lowest Original Price Map (Brand -> Price)
+    brand_prices = {
+        'Sony': 40.0, 'JBL': 40.0, 'Adidas': 40.0, 'Nike': 40.0, 'Airforce': 40.0,
+        'Air Jordan': 46.0, 'Airpods': 100.0, 'Apple': 100.0, 'Samsung': 27.0, 'Wahl': 55.0
+    }
+    
+    # 2. Suspected Category Codes Map (Brand -> Set of Category Codes)
+    # The major category codes (before the decimal) found in the "suspected fake" file.
+    suspected_categories_map = {
+        'Sony': {'1009219', '1000067', '1001454', '1001707', '1009712', '1003052', '1004343', '1003859', '1003036', '1002165'},
+        'JBL': {'1009219', '1000067', '1001454', '1001707', '1009712', '1003052', '1004343', '1003859', '1003036', '1002165'},
+        'Adidas': {'1001810', '1003543', '1001691', '1003454', '1006940', '1029762', '1029756', '1029755', '1021405', '1021322'},
+        'Nike': {'1001810', '1003543', '1001691', '1003454', '1006940', '1029762', '1029756', '1029755', '1021405', '1021322'},
+        'Airforce': {'1001810', '1003543', '1001691', '1003454', '1006940', '1029762', '1029756', '1029755', '1021405', '1021322'},
+        'Air Jordan': {'1001810', '1003543', '1001691', '1003454', '1006940', '1029762', '1029756', '1029755', '1021405', '1021322'},
+        'Airpods': {'1009219', '1000067', '1001454', '1001707', '1009712', '1003052', '1004343', '1003859', '1003036', '1002165'},
+        'Apple': {'1009219', '1000067', '1001454', '1001707', '1009712', '1003052', '1004343', '1003859', '1003036', '1002165'},
+        'Samsung': {'1009219', '1000067', '1001454', '1001707', '1009712', '1003052', '1004343', '1003859', '1003036', '1002165'},
+        'Wahl': {'1024007', '1024008', '1024016', '1024017', '1024018', '1024287', '1024346', '1024347', '1024349', '1024350', '1024351'},
+    }
+    
+    return {
+        'brand_prices': brand_prices,
+        'suspected_categories': suspected_categories_map
+    }
+
+@st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
@@ -102,6 +134,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Perfume Price Check': ('1000029 - Kindly Contact Jumia Seller Support To Verify This Product\'s Authenticity...', "Please contact Jumia Seller Support to raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
+            'Suspected Fake product': ('1000031 - Suspected Fake Product by Price/Category', "Your listing has been rejected as it is suspected to be a fake product based on its price being lower than the minimum original price for the brand and the category code being flagged for counterfeit activity."),
             'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."),
         }
         return flag_mapping
@@ -128,6 +161,7 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
+        'counterfeit_config': load_counterfeit_config(), # Added Counterfeit Config
     }
     return files
 
@@ -210,6 +244,68 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
+def check_suspected_fake_product(data: pd.DataFrame, counterfeit_config: Dict) -> pd.DataFrame:
+    """
+    Flags a product if its price is less than the lowest original price for the brand
+    AND its category code is in the list of suspected category codes for that brand.
+    """
+    req = ['BRAND', 'CATEGORY_CODE', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
+    if not all(c in data.columns for c in req) or not counterfeit_config:
+        return pd.DataFrame(columns=data.columns)
+
+    brand_prices = counterfeit_config.get('brand_prices', {})
+    suspected_categories_map = counterfeit_config.get('suspected_categories', {})
+    if not brand_prices or not suspected_categories_map:
+        return pd.DataFrame(columns=data.columns)
+
+    data = data.copy()
+
+    # 1. Determine the price to use (GLOBAL_SALE_PRICE if valid, otherwise GLOBAL_PRICE)
+    # Price must be converted to numeric first
+    data['SALE_PRICE_NUM'] = pd.to_numeric(data['GLOBAL_SALE_PRICE'], errors='coerce')
+    data['GLOBAL_PRICE_NUM'] = pd.to_numeric(data['GLOBAL_PRICE'], errors='coerce')
+    
+    # Use SALE_PRICE if it is a valid positive number, otherwise use GLOBAL_PRICE
+    data['price_to_check'] = data['SALE_PRICE_NUM'].where(
+        (data['SALE_PRICE_NUM'].notna()) & (data['SALE_PRICE_NUM'] > 0),
+        data['GLOBAL_PRICE_NUM']
+    )
+    data['price_to_check'] = data['price_to_check'].fillna(0)
+
+    # 2. Get the lowest original price for each product's brand
+    data['LOWEST_ORIGINAL_PRICE'] = data['BRAND'].astype(str).str.strip().apply(
+        lambda b: brand_prices.get(b, 0.0) # Default to 0.0 if brand not in map (will not flag)
+    )
+
+    # 3. Identify products whose price is strictly less than the lowest original price
+    # Only check if LOWEST_ORIGINAL_PRICE > 0 (meaning the brand is tracked)
+    price_flag_mask = (data['LOWEST_ORIGINAL_PRICE'] > 0) & (data['price_to_check'] < data['LOWEST_ORIGINAL_PRICE'])
+
+    # 4. Filter for price-suspected products
+    price_suspected_data = data[price_flag_mask].copy()
+
+    if price_suspected_data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # 5. Check if the Category Code is in the suspected list for that Brand
+    def is_suspected_category(row):
+        brand = str(row['BRAND']).strip()
+        # Use only the major category part (before the decimal point)
+        cat_code = str(row['CATEGORY_CODE']).split('.')[0].strip()
+        
+        # Get the set of suspected categories for the brand, default to empty set
+        suspected_cats = suspected_categories_map.get(brand, set())
+        
+        return cat_code in suspected_cats
+
+    # The final mask requires both price check and category code check to be True
+    category_flag_mask = price_suspected_data.apply(is_suspected_category, axis=1)
+
+    flagged = price_suspected_data[category_flag_mask]
+
+    # Return only unique Product Set SIDs that were flagged
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
     Checks if products in warranty-required categories have warranty information.
@@ -217,12 +313,12 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     """
     # 1. Ensure warranty columns exist
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
-        if col not in data.columns: 
+        if col not in data.columns:  
             data[col] = ""
         # Ensure it's treated as a string and missing values are handled
         data[col] = data[col].astype(str).fillna('').str.strip()
     
-    if not warranty_category_codes: 
+    if not warranty_category_codes:  
         return pd.DataFrame(columns=data.columns)
     
     # 2. Filter to warranty-required categories
@@ -230,7 +326,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     target_cats = [str(c).strip() for c in warranty_category_codes]
     
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
-    if target_data.empty: 
+    if target_data.empty:  
         return pd.DataFrame(columns=data.columns)
     
     # 3. Check if ANY warranty field has meaningful data
@@ -251,7 +347,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     mask = ~has_any_warranty
     flagged = target_data[mask]
     
-    if 'CAT_CLEAN' in flagged.columns: 
+    if 'CAT_CLEAN' in flagged.columns:  
         flagged = flagged.drop(columns=['CAT_CLEAN'])
     
     # Return only unique Product Set SIDs
@@ -288,7 +384,7 @@ def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.Dat
 
 def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
     if not {'BRAND','NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
-    mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower() 
+    mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower()  
                      if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask]
 
@@ -386,6 +482,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     # ORDER MATTERS: This list defines the priority of the rejection flags.
     validations = [
+        ("Suspected Fake product", check_suspected_fake_product, {'counterfeit_config': support_files['counterfeit_config']}),
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
         ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
@@ -433,8 +530,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         # Re-assign ckwargs for non-warranty checks that need special handling
         if name == "Generic BRAND Issues":
-              fas = support_files.get('category_fas', pd.DataFrame())
-              ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
+            fas = support_files.get('category_fas', pd.DataFrame())
+            ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
         
@@ -461,7 +558,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         for _, r in flagged.iterrows():
             sid = r['PRODUCT_SET_SID']
-            if sid in processed: continue 
+            if sid in processed: continue  
             
             processed.add(sid)
             rows.append({
@@ -488,7 +585,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
 # -------------------------------------------------
 def to_excel_base(df, sheet, cols, writer):
     df_p = df.copy()
-    for c in cols: 
+    for c in cols:  
         if c not in df_p.columns: df_p[c] = pd.NA
     df_p[[c for c in cols if c in df_p.columns]].to_excel(writer, index=False, sheet_name=sheet)
 
@@ -520,7 +617,7 @@ def to_excel_full_data(data_df, final_report_df):
                 merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
                 summ = merged.groupby('SELLER_NAME').agg(
                     Rejected=('Rejected_Count', 'sum'), Approved=('Approved_Count', 'sum'),
-                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()), 
+                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()),  
                     TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
                 ).reset_index().sort_values('Rejected', ascending=False)
                 summ.insert(0, 'Rank', range(1, len(summ) + 1))
@@ -609,7 +706,7 @@ with tab1:
                     if uploaded_file.name.endswith('.xlsx'):
                         raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
                     else:
-                        try: 
+                        try:  
                             raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
                             if len(raw_data.columns) <= 1:
                                 uploaded_file.seek(0)
@@ -682,11 +779,11 @@ with tab1:
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
                     
                     final_report, flag_dfs = validate_products(
-                        data, 
-                        support_files, 
-                        country_validator, 
+                        data,  
+                        support_files,  
+                        country_validator,  
                         data_has_warranty_cols, # Pass the boolean check for column presence
-                        common_sids_to_pass    # Pass the set of common SIDs
+                        common_sids_to_pass     # Pass the set of common SIDs
                     )
                 
                 approved_df = final_report[final_report['Status'] == 'Approved']
@@ -783,7 +880,7 @@ with tab2:
                     required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
                     for col in required_weekly_cols:
                         if col not in df.columns:
-                            df[col] = pd.NA 
+                            df[col] = pd.NA  
                     
                     combined_df = pd.concat([combined_df, df], ignore_index=True)
                 except Exception as e:
@@ -792,7 +889,7 @@ with tab2:
         if not combined_df.empty:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             
-            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy() 
+            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()  
             
             st.markdown("### Key Metrics")
             m1, m2, m3, m4 = st.columns(4)
