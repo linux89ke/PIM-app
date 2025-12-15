@@ -11,6 +11,56 @@ import xlsxwriter
 import altair as alt
 
 # -------------------------------------------------
+# APPROVED SELLER LIST (HARDCODED FOR DEBUGGING/RELIABILITY)
+# This list is used for the 'Seller Not approved to sell Refurb' check (KE).
+# -------------------------------------------------
+APPROVED_REFURB_KE_LIST = [
+    "refurbcenter", "Samkil outlets limited", "Kentouch Kenya", "DISKTECH", "TopLink Technologies", 
+    "Trudy Comps", "MAYCOMP TRADERS", "Toptics1 Online shop", "Ominel computers", "OFFICE MAC L", 
+    "Monrick_Technologies", "Laptop Garage _Ke", "Fina's online", "LapTech Computers systems", 
+    "Laptop Clinic", "Computers kenya LTD", "Steliam Computers", "Mictouch Technology Limited", 
+    "Deallogic", "Dansie Enterprise", "SILICON HUB LTD", "InterLude", "Sharom GTX", 
+    "Overview Solutions", "Techbiz", "Roadmap Tech Computers", "Megacomps ICT hub", "PATECH SUPPLIES", 
+    "meet technology", "Qoceptech", "MobiGlobe Ke", "DISKTECH SYSTEMS", "Symtech Enterprises", 
+    "Daytona", "TEXAS STREET COMPUTERS", "specialistcomp", "Westside Computer Hub", 
+    "WASHINGTON INVESTMENT COMPUTERS", "ARIZONA VILLA COMPUTERS", "SAK Online", "Lian Collections", 
+    "KICOMTECH COMPUTERS", "Yaleo Services", "Digitech Computers", "ERICK ENTERPRISE", 
+    "PRODUCTS ZONE", "Betty Tech Computers", "HAMEDA TECHNOLOGIES", "Brimat Computers", 
+    "Wain Collection", "GOLF TECH COMPUTERS", "Crystalchip Limited", "MAXPORTS MERCHANTS LIMITED", 
+    "Bluecode Kenya", "Myketronics Computer & Accessories Ltd", "Bestoption Technologies", 
+    "Wasini Technologies", "ANOVA Technologies", "TANSIC TECHNOLOGIES", "Siete Enterprise", 
+    "ubuntu Technologies Kenya", "Digitalsmart Print", "Charlie Chan", "charliehub254", 
+    "ALLOYS HUB", "Wynn Enterprise", "EnockHub Technologies", "Best_Mom", "Ngugitech Online", 
+    "RANKS COMPUTERS AND ACCESSORIES", "Lantel Systems", "BOSY TECHNOLOGIES", "Neileys Technologies", 
+    "Badili Phones", "Cradle Solutions", "GEFORCE", "veratech hub", "My Tech Hub", 
+    "Techno Suppliers", "JULTECH GENERAL SUPPLIES", "MOBI STORES", "JULTECH TECHNOLOGIES", 
+    "Techiq solutons", "TECH DG", "WAISY", "Computer Spot Kenya", "PRODUCT CENTER.", 
+    "Phonehub Kenya", "Phonelegit Kenya", "Lily tech", "Pikhub", "Novetech supplies", 
+    "Zone of Tech", "Alloys hub tech", "TheRoberts KE enterprise", "DREAMCOM TECHONOGY", 
+    "Hameda Technologies shop", "MWEMBA ECH", "Vinkel Computers shop", "HamnduEnterprise", 
+    "Vincomputers", "LabTech Kenya", "Fafantech computers", "SEAN TECH COMPUTERS", 
+    "Zettech Computers", "MEGAWORLD SPACE SOLUTIONS LIMITED", "MAYAZ EMPIRE", 
+    "Radox Technology Limited", "Certified Laptops", "Delta System", "Onclick Technologies", 
+    "Hamez Technologies", "EcoTech Hub", "Lantel System", "RICKTECH COMPUTERS", 
+    "Bundo Tech", "AVELORA INNOVATIONS LTD", "Tech Laptops", "Zetcom computers", 
+    "Onclick Technologies", "Covo technologies", "Julietech IT Solutions", "Megaworld Solutions", 
+    "DREAMCOM TECHNOLOGY", "LE DI TECH LIMITED", "MARKETSYNC FZ", "MSGT", 
+    "technosupremesuppliers", "TWENDY", "ZetcomComputers", "Lawre Digital Solution", 
+    "REYDIGITAL1", "NAIBTZ TECH BIZ", "BADAR COMPUTERS", "Tech and Craft", "Simple Tech", 
+    "Onclick Technologies", "RANKS COMPUTERS & ACCESSORIES", "FELTECKS COMPS", "PowerTech Gadgets", 
+    "Sonik computers & accesories", "Digital Link Computers", "slimtech system", "Lola Tech", 
+    "priscytech", "TECH SHOPIT", "GATECOM LAPTOP", "Tehillah Distributors", 
+    "Nova Africa Entreprise", "Mmas Techologies", "Imports By Sam", "Abon Solutions", 
+    "FOURkComputers", "Jakababa Enterprises", "madtitan technologies", "techzone solutions", 
+    "PC Point KE", "Ashler's Shop", "Vertex Innovations Hub", "Ellayden", "Laptoppalace", 
+    "Tolmo Technology", "dtech computers", "ZILT STORES", "Mo Electronics.", 
+    "Rhesa Gadgets", "AD Gadgetz", "SHOPPING HUB", "FIVE STAR SELLER", "Suitech", 
+    "JOALLY TECHNOLOGIES", "Nephic Global Agencies Ltd", "TechNestKE", "Britma Enterprises Ltd", 
+    "GEEWORLD TECHNOLOGIES", "LAPTOPS WORLD LTD", "NAIBZ TECH BIZ", "Alma Tech Savvy Solution Limited"
+]
+
+
+# -------------------------------------------------
 # Logging Configuration
 # -------------------------------------------------
 logging.basicConfig(
@@ -66,6 +116,7 @@ NEW_FILE_MAPPING = {
 # -------------------------------------------------
 @st.cache_data(ttl=3600)
 def load_txt_file(filename: str) -> List[str]:
+    # NOTE: This is kept for other files but bypassed for Refurb check
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
@@ -90,7 +141,7 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            # REPLACED 'Sensitive words' with 'Seller Not approved to sell Refurb'
+            # UPDATED: Replaced 'Sensitive words' with 'Seller Not approved to sell Refurb'
             'Seller Not approved to sell Refurb': ('1000001 - Seller Not Approved to Sell Refurb Product', "Your listing was rejected because it mentions \'Refurb\', \'Refurbished\', \'Renewed\' or the brand is \'Renewed\', but your seller account is not on the approved list for refurbished products in this country."),
             'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field..."),
             'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned..."),
@@ -119,7 +170,8 @@ def load_all_support_files() -> Dict:
         'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
         'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
         'sneaker_sensitive_brands': [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')],
-        # Removing sensitive_words.txt as it's replaced by the refurb check
+        # Removing old generic sensitive words check as it's replaced
+        # 'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')], 
         'colors': [c.lower() for c in load_txt_file('colors.txt')],
         'color_categories': load_txt_file('color_cats.txt'),
         'check_variation': load_excel_file('check_variation.xlsx'),
@@ -129,8 +181,10 @@ def load_all_support_files() -> Dict:
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
-        # NEW: Refurb Approved Sellers Lists
-        'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
+        
+        # NEW/UPDATED: Refurb Approved Sellers Lists (KE hardcoded for reliability)
+        'approved_refurb_sellers_ke': [s.lower() for s in APPROVED_REFURB_KE_LIST],
+        # Assuming Refurb_LaptopUG.txt exists locally, otherwise load_txt_file returns []
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
     }
     return files
@@ -219,21 +273,17 @@ def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[s
     is NOT in the country's approved list.
     """
     
-    # 1. Determine which approved list to use
     if country_code == 'KE':
         approved_sellers = set(approved_sellers_ke)
     elif country_code == 'UG':
         approved_sellers = set(approved_sellers_ug)
     else:
-        # If the country is not KE or UG, we skip this specific check for refurbished
         return pd.DataFrame(columns=data.columns)
 
-    if not {'NAME', 'BRAND', 'SELLER_NAME'}.issubset(data.columns): 
+    if not {'NAME', 'BRAND', 'SELLER_NAME', 'PRODUCT_SET_SID'}.issubset(data.columns): 
         return pd.DataFrame(columns=data.columns)
     
     data = data.copy()
-    
-    # 2. Define the refurb/renewed trigger words/brands
     refurb_words = r'\b(refurb|refurbished|renewed)\b'
     refurb_brand = 'renewed'
     
@@ -241,7 +291,7 @@ def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[s
     data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
     data['SELLER_LOWER'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
 
-    # Condition 1: Product is a suspected refurb item
+    # Condition 1: Product is a suspected refurb item (Name or Brand match)
     name_match = data['NAME_LOWER'].str.contains(refurb_words, regex=True, na=False)
     brand_match = data['BRAND_LOWER'] == refurb_brand
     
@@ -251,7 +301,7 @@ def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[s
     if triggered_data.empty:
         return pd.DataFrame(columns=data.columns)
         
-    # Condition 2: Seller is NOT in the approved list (case-insensitive check)
+    # Condition 2: Seller is NOT in the approved list
     seller_not_approved_mask = ~triggered_data['SELLER_LOWER'].isin(approved_sellers)
     
     # Final mask: Triggered AND Seller is NOT approved
@@ -261,7 +311,8 @@ def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[s
     columns_to_drop = ['NAME_LOWER', 'BRAND_LOWER', 'SELLER_LOWER']
     flagged = flagged.drop(columns=[col for col in columns_to_drop if col in flagged.columns])
     
-    return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
@@ -330,11 +381,10 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     return data[mask]
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
-    # This function is now OBSOLETE, but kept as a placeholder if other checks depended on it
-    # As the user replaced this flag with `check_refurb_seller_approval`, we will adapt the calling in validate_products
-    # but keep this stub just in case. However, based on the prompt, sensitive_words.txt is no longer needed.
-    # The actual implementation of the new logic is in check_refurb_seller_approval.
-    return pd.DataFrame(columns=data.columns)
+    # This function is kept for completeness as a placeholder, but is unused by the new refurb check.
+    if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
+    mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    return data[mask]
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
@@ -384,7 +434,7 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
 def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.DataFrame, fx_rate: float = 132.0) -> pd.DataFrame:
     """
     Checks for suspected fake products based on brand, category, and price.
-    Assumes product prices are in USD.
+    Assumes product prices and reference prices are in USD.
     """
     required_cols = ['CATEGORY_CODE', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
     
@@ -445,6 +495,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
             key = (row['BRAND_LOWER'], row['CAT_BASE'])
             if key in brand_category_price:
                 threshold = brand_category_price[key]
+                # Flag if product price is below threshold (suspected fake due to low price)
                 if row['price_usd'] < threshold:
                     return True
             return False
@@ -498,13 +549,13 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     # ORDER MATTERS: This list defines the priority of the rejection flags.
     validations = [
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
-        ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
-        # REPLACED 'Sensitive words' CHECK with 'Seller Not approved to sell Refurb'
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
             'approved_sellers_ke': support_files['approved_refurb_sellers_ke'],
             'approved_sellers_ug': support_files['approved_refurb_sellers_ug'],
             'country_code': country_validator.code
         }),
+        ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
+        # Note: The old 'Sensitive words' check is removed here to be fully replaced by the refurb check (1000001)
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
         ("Seller Approved to Sell Perfume", check_seller_approved_for_perfume, {'perfume_category_codes': support_files['perfume_category_codes'], 'approved_perfume_sellers': support_files['approved_perfume_sellers'], 'sensitive_perfume_brands': support_files['sensitive_perfume_brands']}),
         ("Counterfeit Sneakers", check_counterfeit_sneakers, {'sneaker_category_codes': support_files['sneaker_category_codes'], 'sneaker_sensitive_brands': support_files['sneaker_sensitive_brands']}),
