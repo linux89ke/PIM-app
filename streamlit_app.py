@@ -509,6 +509,9 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
+# UPDATED validate_products function
+# This version propagates higher-priority flags to all duplicate products
+
 def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None):
     flags_mapping = support_files['flags_mapping']
     
@@ -547,16 +550,31 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     status_text = st.empty()
     results = {}
     
+    # NEW: Create a mapping to track which products are duplicates of each other
+    duplicate_groups = {}
+    cols_for_dup = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
+    if len(cols_for_dup) == 4:
+        # Create a composite key for each product
+        data_temp = data.copy()
+        data_temp['dup_key'] = data_temp[cols_for_dup].apply(
+            lambda r: tuple(str(v).strip().lower() for v in r), axis=1
+        )
+        
+        # Find duplicate groups
+        dup_counts = data_temp.groupby('dup_key')['PRODUCT_SET_SID'].apply(list).to_dict()
+        for dup_key, sid_list in dup_counts.items():
+            if len(sid_list) > 1:  # Only groups with duplicates
+                for sid in sid_list:
+                    duplicate_groups[sid] = sid_list
+    
     for i, (name, func, kwargs) in enumerate(validations):
         # Constraint 1: Skip based on country (handles Uganda)
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name): 
-             # Skip 'Sensitive words' which is the old name for code 1000001
              if name == "Sensitive words": continue
-             if name == "Product Warranty" and country_validator.code == 'UG': continue # Explicitly skipped for UG
+             if name == "Product Warranty" and country_validator.code == 'UG': continue
              if name == "Seller Approve to sell books" and country_validator.code == 'UG': continue
              if name == "Seller Approved to Sell Perfume" and country_validator.code == 'UG': continue
              if name == "Counterfeit Sneakers" and country_validator.code == 'UG': continue
-             if name == "Product Warranty" and country_validator.code == 'UG': continue
              if country_validator.should_skip_validation(name): continue
         
         ckwargs = {'data': data, **kwargs}
@@ -564,24 +582,20 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         # --- Custom Logic for 'Product Warranty' (Constraints 2 & 3) ---
         if name == "Product Warranty":
             if not data_has_warranty_cols:
-                # Constraint 2: Skip if necessary columns are missing (i.e., local file not uploaded)
                 continue
 
-            # Apply common SIDs filter (Constraint 3)
             check_data = data.copy()
             if common_sids is not None and len(common_sids) > 0:
                 check_data = check_data[check_data['PRODUCT_SET_SID'].isin(common_sids)]
                 if check_data.empty:
-                    # If no common SIDs, skip the check
                     continue
             
-            ckwargs = {'data': check_data, **kwargs} # Use the potentially filtered data
+            ckwargs = {'data': check_data, **kwargs}
         
         # --- End Custom Logic ---
 
         status_text.text(f"Running: {name}")
         
-        # Re-assign ckwargs for non-warranty checks that need special handling
         if name == "Generic BRAND Issues":
             fas = support_files.get('category_fas', pd.DataFrame())
             ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
@@ -590,6 +604,22 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         try:
             res = func(**ckwargs)
+            
+            # NEW: If this is not the duplicate check, expand flagged SIDs to include their duplicates
+            if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
+                flagged_sids = set(res['PRODUCT_SET_SID'].unique())
+                expanded_sids = set()
+                
+                # For each flagged SID, add all its duplicates
+                for sid in flagged_sids:
+                    if sid in duplicate_groups:
+                        expanded_sids.update(duplicate_groups[sid])
+                    else:
+                        expanded_sids.add(sid)
+                
+                # Get all rows for the expanded SID set
+                res = data[data['PRODUCT_SET_SID'].isin(expanded_sids)].copy()
+            
             results[name] = res if not res.empty else pd.DataFrame(columns=data.columns)
         except Exception as e:
             logger.error(f"Error in {name}: {e}\n{traceback.format_exc()}")
@@ -605,15 +635,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         res = results[name]
         if 'PRODUCT_SET_SID' not in res.columns: continue
         
-        # Get the correct reason info from the mapping based on the flag name
-        # Note: 'Seller Not approved to sell Refurb' replaces the old 'Sensitive words' entry (code 1000001) in the map.
-        # We rely on the map lookup.
+        # Get the correct reason info from the mapping
         map_name = name
         if name == "Seller Not approved to sell Refurb":
-            # The mapping still uses 'Sensitive words' for code 1000001. We manually map the new flag name.
             reason_info = flags_mapping.get(name, ("1000001 - Seller Not Approved to Sell Refurb Product", f"Flagged by {name}"))
         else:
-            # For all other flags, use the name directly
             reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
             
         # Only merge the flagged SIDs back to retain full data columns for the output report
@@ -631,18 +657,16 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     approved = data[~data['PRODUCT_SET_SID'].isin(processed)]
     for _, r in approved.iterrows():
-        # Ensure we only add a row once per ProductSetSid to match the behavior of the original code
         if r['PRODUCT_SET_SID'] not in processed:
              rows.append({
                 'ProductSetSid': r['PRODUCT_SET_SID'], 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Approved',
                 'Reason': "", 'Comment': "", 'FLAG': "", 'SellerName': r.get('SELLER_NAME', '')
             })
-             processed.add(r['PRODUCT_SET_SID']) # Add to processed list to avoid duplicates here
+             processed.add(r['PRODUCT_SET_SID'])
     
     progress_bar.empty()
     status_text.empty()
     return country_validator.ensure_status_column(pd.DataFrame(rows)), results
-
 # -------------------------------------------------
 # Export Logic
 # -------------------------------------------------
