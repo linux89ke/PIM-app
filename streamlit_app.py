@@ -50,12 +50,13 @@ FLAG_PRIORITIES = {
     'Counterfeit Sneakers': 7,
     'Suspected counterfeit Jerseys': 8,
     'Prohibited products': 9,
-    'Unnecessary words in NAME': 10, # The new flag
+    'Unnecessary words in NAME': 10,
     'Single-word NAME': 11,
     'Generic BRAND Issues': 12,
     'BRAND name repeated in NAME': 13,
-    'Missing COLOR': 14,
-    'Duplicate product': 15, # LOWEST PRIORITY
+    'Duplicate words in NAME': 14, # NEWLY ADDED FLAG
+    'Missing COLOR': 15,
+    'Duplicate product': 16, # LOWEST PRIORITY
 }
 
 
@@ -118,6 +119,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Prohibited products': ('1000007 - Other Reason', "Kindly note this product is not allowed for listing on Jumia..."),
             'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format..."),
             'Unnecessary words in NAME': ('1000010 - Kindly remove unnecessary words from product name', "Your listing was rejected because the product name contains unnecessary promotional or keyword stuffing words. Please remove them to comply with platform guidelines."),
+            'Duplicate words in NAME': ('1000011 - Kindly remove redundant words from the product name', "Your listing was rejected because the product name contains repeated words (e.g., 'shoe shoe'). Please remove the redundancy."),
             'Generic BRAND Issues': ('1000014 - Kindly request for the creation of this product\'s actual brand name...', "To create the actual brand name for this product..."),
             'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product by Jumia technical team...', "Your listing has been rejected as Jumia\'s technical team has confirmed..."),
             'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
@@ -151,7 +153,7 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
-        # Using the latest uploaded file for suspected fake data
+        # Assuming the CSV version of the suspected_fake file is the correct one being referenced:
         'suspected_fake': pd.read_csv("suspected_fake.xlsx - suspected_fake.csv", header=None, dtype=str),
         
         # Dynamic loading for Refurb lists 
@@ -271,6 +273,33 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     return data[mask][['PRODUCT_SET_SID']].drop_duplicates()
 
 
+def check_duplicate_words_in_name(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Flags products where a word (or sequence of words) appears immediately repeated in the NAME.
+    E.g., 'Nike Shoe Shoe' or 'Red Red Dress'.
+    """
+    if 'NAME' not in data.columns or data.empty:
+        return pd.DataFrame(columns=['PRODUCT_SET_SID'])
+
+    data_copy = data.copy()
+    
+    # 1. Normalize and split the name into words
+    # Use simple word splitting for efficiency; regex will catch the core duplicates.
+    data_copy['NAME_WORDS'] = data_copy['NAME'].astype(str).str.lower().str.findall(r'\b\w+\b')
+
+    # 2. Check for immediate repetition in the word list (e.g., [..., 'shoe', 'shoe', ...])
+    def has_immediate_duplicate_word(word_list):
+        if not word_list: return False
+        for i in range(len(word_list) - 1):
+            if word_list[i] == word_list[i+1]:
+                return True
+        return False
+
+    mask = data_copy['NAME_WORDS'].apply(has_immediate_duplicate_word)
+    
+    return data_copy[mask][['PRODUCT_SET_SID']].drop_duplicates()
+
+
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
         if col not in data.columns: data[col] = ""
@@ -337,14 +366,10 @@ def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
     if len(cols_for_duplication) < 3:
         return pd.DataFrame(columns=['PRODUCT_SET_SID', 'DUPLICATE_KEY'])
 
-    # Create the key for grouping
     data = data.copy()
     data['DUPLICATE_KEY'] = data[cols_for_duplication].astype(str).agg('::'.join, axis=1)
     
-    # Identify all rows that are duplicates (by marking all occurrences, including the first)
     is_duplicate = data.duplicated(subset=cols_for_duplication, keep=False)
-    
-    # Filter for only the duplicate rows
     duplicate_rows = data[is_duplicate].copy()
     
     return duplicate_rows[['PRODUCT_SET_SID', 'DUPLICATE_KEY']].drop_duplicates()
@@ -474,7 +499,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     flags_mapping = support_files['flags_mapping']
     
-    # Define the checks and their priority rank (P1=Highest, P14=Lowest Non-Duplicate)
+    # Define the checks and their priority rank (P1=Highest, P15=Lowest Non-Duplicate)
     # The order MUST align with the FLAG_PRIORITIES map
     NON_DUPLICATE_CHECKS = [
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}), # P1
@@ -494,7 +519,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Single-word NAME", check_single_word_name, {'book_category_codes': support_files['book_category_codes']}), # P11
         ("Generic BRAND Issues", check_generic_brand_issues, {}), # P12
         ("BRAND name repeated in NAME", check_brand_in_name, {}), # P13
-        ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}), # P14
+        ("Duplicate words in NAME", check_duplicate_words_in_name, {}), # P14
+        ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}), # P15
     ]
     
     progress_bar = st.progress(0)
@@ -502,9 +528,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     # 1. PHASE 1: Run all non-duplicate checks and record highest priority flag per SID
     all_flagged_sids = pd.DataFrame(columns=['PRODUCT_SET_SID', 'FLAG', 'PRIORITY'])
-    flag_results_tracker = {} # To store the original results (for debugging/expander view)
+    flag_results_tracker = {} 
 
-    # Note: data must contain all columns used by checks, but is not filtered by unique SID yet.
     data_for_checks = data.copy()
     
     for rank, (name, func, kwargs) in enumerate(NON_DUPLICATE_CHECKS):
@@ -547,7 +572,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             
         progress_bar.progress((rank + 1) / len(NON_DUPLICATE_CHECKS))
 
-    # 2. PHASE 2: Duplicate Check and Propagation (P15)
+    # 2. PHASE 2: Duplicate Check and Propagation (P16)
     
     # a. Identify all duplicates
     duplicates_df = check_duplicate_products(data)
@@ -565,13 +590,12 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             high_priority_matches = all_flagged_sids[all_flagged_sids['PRODUCT_SET_SID'].isin(group_sids)].sort_values('PRIORITY')
             
             if not high_priority_matches.empty:
-                # Assign the highest priority flag (P1-P14) found in the set to ALL members
+                # Assign the highest priority flag (P1-P15) found in the set to ALL members
                 highest_flag_name = high_priority_matches.iloc[0]['FLAG']
                 
                 reason_info = flags_mapping.get(highest_flag_name, ("1000007 - Other Reason", f"Flagged by {highest_flag_name}"))
                 
                 for sid in group_sids:
-                    # We ensure that this SID is added to final rejections only once
                     if sid not in processed_sids: 
                          final_rejections.loc[len(final_rejections)] = {
                             'ProductSetSid': sid,
@@ -581,7 +605,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         }
                          processed_sids.add(sid)
             else:
-                # Assign the lowest priority flag: Duplicate product (P15)
+                # Assign the lowest priority flag: Duplicate product (P16)
                 duplicate_flag_name = 'Duplicate product'
                 reason_info = flags_mapping.get(duplicate_flag_name, ("1000007 - Other Reason", f"Flagged by {duplicate_flag_name}"))
                 
@@ -596,9 +620,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         }
                         processed_sids.add(sid)
 
-    # c. Process SIDs with a P1-P14 Flag that are NOT Duplicates
-    # These are SIDs in all_flagged_sids that were not part of any duplicate group processed above.
-    
+    # c. Process SIDs with a P1-P15 Flag that are NOT Duplicates
     non_duplicate_flagged = all_flagged_sids[~all_flagged_sids['PRODUCT_SET_SID'].isin(processed_sids)].copy()
     
     for _, r in non_duplicate_flagged.iterrows():
@@ -618,7 +640,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     # 3. Finalization: Merge results back to data to get full metadata and 'Approved' status
     
     # We must use unique SIDs from the original data as the final report index
-    report_df = data[['PRODUCT_SET_SID', 'PARENTSKU', 'SELLER_NAME', 'NAME', 'BRAND', 'CATEGORY_CODE']].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    report_df = data[['PRODUCT_SET_SID', 'PARENTSKU', 'SELLER_NAME']].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
     report_df = report_df.rename(columns={'PRODUCT_SET_SID': 'ProductSetSid', 'PARENTSKU': 'ParentSKU', 'SELLER_NAME': 'SellerName'})
 
     # Merge final rejections
