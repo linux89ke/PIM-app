@@ -3,7 +3,6 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import re
-from collections import defaultdict
 import logging
 from typing import Dict, List, Tuple, Optional
 import traceback
@@ -152,8 +151,9 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
-        # Assuming the CSV version of the suspected_fake file is accessible as its original name:
-        'suspected_fake': pd.read_csv("suspected_fake.xlsx", header=None, dtype=str),
+        
+        # FIX: Reverting to the expected load_excel_file for the suspected_fake data
+        'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         
         # Dynamic loading for Refurb lists 
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
@@ -514,6 +514,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         data_temp['dup_key'] = data_temp[cols_for_dup_key].astype(str).agg('::'.join, axis=1)
         
         # Find all duplicate SIDs based on the key
+        # NOTE: We use data_temp to ensure the keys are calculated consistently across all rows
         dup_counts = data_temp.groupby('dup_key')['PRODUCT_SET_SID'].apply(list).to_dict()
         
         # Map each SID to its full list of duplicates (including itself)
@@ -563,9 +564,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             
         progress_bar.progress((rank + 1) / len(NON_DUPLICATE_CHECKS))
 
-    # 2. PHASE 2: Final Rejection Assignment with Propagation (P15)
+    # 2. PHASE 2: Duplicate Check and Propagation (P15)
     
-    # a. Identify all unique duplicate keys
+    # a. Identify all duplicates
     duplicates_df = check_duplicate_products(data)
     
     final_rejections = pd.DataFrame(columns=['ProductSetSid', 'Reason', 'Comment', 'FLAG'])
@@ -578,6 +579,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             group_sids = set(group['PRODUCT_SET_SID'].unique())
             
             # Find the highest-priority flag among the members of this duplicate group
+            # Note: We must look at all_flagged_sids, which contains the highest flag assigned to any unique SID
             high_priority_matches = all_flagged_sids[all_flagged_sids['PRODUCT_SET_SID'].isin(group_sids)].sort_values('PRIORITY')
             
             if not high_priority_matches.empty:
@@ -612,7 +614,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         processed_sids.add(sid)
 
     # c. Process SIDs with a P1-P14 Flag that are NOT Duplicates
-    # This step handles single listings that had an issue (P1-P14) but had no duplicates.
     non_duplicate_flagged = all_flagged_sids[~all_flagged_sids['PRODUCT_SET_SID'].isin(processed_sids)].copy()
     
     for _, r in non_duplicate_flagged.iterrows():
