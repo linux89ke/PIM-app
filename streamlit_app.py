@@ -153,7 +153,7 @@ def load_all_support_files() -> Dict:
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
         # Assuming the CSV version of the suspected_fake file is accessible as its original name:
-        'suspected_fake': pd.read_csv("suspected_fake.xlsx - suspected_fake.csv", header=None, dtype=str),
+        'suspected_fake': pd.read_csv("suspected_fake.xlsx", header=None, dtype=str),
         
         # Dynamic loading for Refurb lists 
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
