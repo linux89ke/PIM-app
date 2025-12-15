@@ -37,7 +37,7 @@ FULL_DATA_COLS = [
     "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION",
     "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
-FX_RATE = 132.0 # Kept as a constant but is ignored in the check_suspected_fake_products function based on user feedback.
+FX_RATE = 132.0 
 
 # MAPPING: New File Columns -> Script Internal Columns
 NEW_FILE_MAPPING = {
@@ -90,7 +90,8 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia..."),
+            # REPLACED 'Sensitive words' with 'Seller Not approved to sell Refurb'
+            'Seller Not approved to sell Refurb': ('1000001 - Seller Not Approved to Sell Refurb Product', "Your listing was rejected because it mentions \'Refurb\', \'Refurbished\', \'Renewed\' or the brand is \'Renewed\', but your seller account is not on the approved list for refurbished products in this country."),
             'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field..."),
             'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned..."),
             'Duplicate product': ('1000007 - Other Reason', "kindly note product was rejected because its a duplicate product"),
@@ -118,7 +119,7 @@ def load_all_support_files() -> Dict:
         'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
         'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
         'sneaker_sensitive_brands': [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')],
-        'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')],
+        # Removing sensitive_words.txt as it's replaced by the refurb check
         'colors': [c.lower() for c in load_txt_file('colors.txt')],
         'color_categories': load_txt_file('color_cats.txt'),
         'check_variation': load_excel_file('check_variation.xlsx'),
@@ -128,6 +129,9 @@ def load_all_support_files() -> Dict:
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
+        # NEW: Refurb Approved Sellers Lists
+        'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
+        'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
     }
     return files
 
@@ -209,6 +213,56 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
+def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
+    """
+    Flags a product if it mentions 'Refurb/Renewed' in NAME/BRAND, and the seller
+    is NOT in the country's approved list.
+    """
+    
+    # 1. Determine which approved list to use
+    if country_code == 'KE':
+        approved_sellers = set(approved_sellers_ke)
+    elif country_code == 'UG':
+        approved_sellers = set(approved_sellers_ug)
+    else:
+        # If the country is not KE or UG, we skip this specific check for refurbished
+        return pd.DataFrame(columns=data.columns)
+
+    if not {'NAME', 'BRAND', 'SELLER_NAME'}.issubset(data.columns): 
+        return pd.DataFrame(columns=data.columns)
+    
+    data = data.copy()
+    
+    # 2. Define the refurb/renewed trigger words/brands
+    refurb_words = r'\b(refurb|refurbished|renewed)\b'
+    refurb_brand = 'renewed'
+    
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+    data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
+    data['SELLER_LOWER'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
+
+    # Condition 1: Product is a suspected refurb item
+    name_match = data['NAME_LOWER'].str.contains(refurb_words, regex=True, na=False)
+    brand_match = data['BRAND_LOWER'] == refurb_brand
+    
+    trigger_mask = name_match | brand_match
+    
+    triggered_data = data[trigger_mask].copy()
+    if triggered_data.empty:
+        return pd.DataFrame(columns=data.columns)
+        
+    # Condition 2: Seller is NOT in the approved list (case-insensitive check)
+    seller_not_approved_mask = ~triggered_data['SELLER_LOWER'].isin(approved_sellers)
+    
+    # Final mask: Triggered AND Seller is NOT approved
+    flagged = triggered_data[seller_not_approved_mask]
+    
+    # Clean up and return
+    columns_to_drop = ['NAME_LOWER', 'BRAND_LOWER', 'SELLER_LOWER']
+    flagged = flagged.drop(columns=[col for col in columns_to_drop if col in flagged.columns])
+    
+    return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     """
     Checks if products in warranty-required categories have warranty information.
@@ -276,9 +330,11 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     return data[mask]
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
-    if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
-    mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    return data[mask]
+    # This function is now OBSOLETE, but kept as a placeholder if other checks depended on it
+    # As the user replaced this flag with `check_refurb_seller_approval`, we will adapt the calling in validate_products
+    # but keep this stub just in case. However, based on the prompt, sensitive_words.txt is no longer needed.
+    # The actual implementation of the new logic is in check_refurb_seller_approval.
+    return pd.DataFrame(columns=data.columns)
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
@@ -328,43 +384,28 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
 def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.DataFrame, fx_rate: float = 132.0) -> pd.DataFrame:
     """
     Checks for suspected fake products based on brand, category, and price.
-    
-    MODIFICATION: Product prices (GLOBAL_PRICE/SALE_PRICE) are now assumed to be in USD,
-    as confirmed by the user, and no currency conversion is performed.
+    Assumes product prices are in USD.
     """
     required_cols = ['CATEGORY_CODE', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
     
-    # Validate inputs
-    if not all(c in data.columns for c in required_cols):
-        missing = [c for c in required_cols if c not in data.columns]
-        logger.warning(f"Missing columns for suspected fake check: {missing}")
-        return pd.DataFrame(columns=data.columns)
-    
-    if suspected_fake_df.empty:
-        logger.warning("Suspected fake reference data is empty")
+    if not all(c in data.columns for c in required_cols) or suspected_fake_df.empty:
         return pd.DataFrame(columns=data.columns)
     
     try:
         # Parse the reference file structure
         ref_data = suspected_fake_df.copy()
         
-        # Determine brand columns (columns that contain the brand name as the header)
         brand_cols = [col for col in ref_data.columns if col not in ['Unnamed: 0', 'Brand', 'Price'] and pd.notna(col)]
-        
-        # Build a lookup structure: {(brand_lower, category_code): price_threshold}
         brand_category_price = {}
         
         for brand in brand_cols:
-            # Price threshold is in the first data row (index 0) of the Brand column
             try:
-                # Use .loc[0] because standard Excel reading with header=0 makes the prices the first data row (index 0)
                 price_threshold = pd.to_numeric(ref_data[brand].iloc[0], errors='coerce')
                 if pd.isna(price_threshold) or price_threshold <= 0:
                     continue
             except:
                 continue
             
-            # Get all category codes for this brand (from row 1 onwards, skipping the price threshold row)
             categories = ref_data[brand].iloc[1:].dropna()
             categories = categories[categories.astype(str).str.strip() != '']
             
@@ -372,21 +413,16 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
             
             for cat in categories:
                 cat_str = str(cat).strip()
-                # Extract base category (before decimal point)
                 cat_base = cat_str.split('.')[0]
                 
                 if cat_base and cat_base.lower() != 'nan':
                     key = (brand_lower, cat_base)
-                    # All categories for a brand share the same price threshold.
                     brand_category_price[key] = price_threshold
         
         if not brand_category_price:
             logger.warning("No valid brand-category-price combinations found in reference file. Check reference file structure.")
             return pd.DataFrame(columns=data.columns)
         
-        logger.info(f"Loaded {len(brand_category_price)} brand-category combinations for fake product detection")
-        
-        # Prepare data for checking
         check_data = data.copy()
         
         # 1. Determine price to use (prefer sale price if valid)
@@ -397,9 +433,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
         )
         check_data['price_to_use'] = pd.to_numeric(check_data['price_to_use'], errors='coerce').fillna(0)
         
-        # 2. Assign price for comparison (price_usd)
-        # Per user request, the price is in USD and no currency conversion is needed.
-        # This replaces the old logic that handled KES conversion using FX_RATE.
+        # 2. Assign price for comparison (price_usd) - NO FX CONVERSION
         check_data['price_usd'] = check_data['price_to_use']
         
         # 3. Normalize brand and extract base category
@@ -411,16 +445,12 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
             key = (row['BRAND_LOWER'], row['CAT_BASE'])
             if key in brand_category_price:
                 threshold = brand_category_price[key]
-                # Flag if product price is below threshold (suspected fake due to low price)
                 if row['price_usd'] < threshold:
                     return True
             return False
         
         check_data['is_fake'] = check_data.apply(is_suspected_fake, axis=1)
         flagged = check_data[check_data['is_fake'] == True].copy()
-        
-        if not flagged.empty:
-            logger.info(f"Flagged {len(flagged)} suspected fake products")
         
         # Clean up temporary columns and return
         columns_to_drop = ['price_to_use', 'price_usd', 'BRAND_LOWER', 'CAT_BASE', 'is_fake']
@@ -467,10 +497,14 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     # ORDER MATTERS: This list defines the priority of the rejection flags.
     validations = [
-        # NEW HIGH-PRIORITY CHECK (now assuming USD prices for check)
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
-        ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
+        # REPLACED 'Sensitive words' CHECK with 'Seller Not approved to sell Refurb'
+        ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
+            'approved_sellers_ke': support_files['approved_refurb_sellers_ke'],
+            'approved_sellers_ug': support_files['approved_refurb_sellers_ug'],
+            'country_code': country_validator.code
+        }),
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
         ("Seller Approved to Sell Perfume", check_seller_approved_for_perfume, {'perfume_category_codes': support_files['perfume_category_codes'], 'approved_perfume_sellers': support_files['approved_perfume_sellers'], 'sensitive_perfume_brands': support_files['sensitive_perfume_brands']}),
         ("Counterfeit Sneakers", check_counterfeit_sneakers, {'sneaker_category_codes': support_files['sneaker_category_codes'], 'sneaker_sensitive_brands': support_files['sneaker_sensitive_brands']}),
