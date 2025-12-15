@@ -151,7 +151,8 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
-        'suspected_fake': load_excel_file('suspected_fake.xlsx'),
+        # Using the latest uploaded file for suspected fake data
+        'suspected_fake': pd.read_csv("suspected_fake.xlsx - suspected_fake.csv", header=None, dtype=str),
         
         # Dynamic loading for Refurb lists 
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
@@ -379,15 +380,15 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
     return sneaker_data[fake_brand_mask & name_contains_brand][['PRODUCT_SET_SID']].drop_duplicates()
 
 def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.DataFrame, fx_rate: float = 132.0) -> pd.DataFrame:
-    # (Implementation remains the same, returning only ['PRODUCT_SET_SID'])
     required_cols = ['CATEGORY_CODE', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE', 'PRODUCT_SET_SID']
     
     if not all(c in data.columns for c in required_cols) or suspected_fake_df.empty: return pd.DataFrame(columns=['PRODUCT_SET_SID'])
     
     try:
+        # 1. Parse the reference file structure
         ref_data = suspected_fake_df.copy()
         
-        # NOTE: Using the assumption that the suspected_fake_df has already been loaded as raw CSV or Excel
+        # Assume the first row contains headers/brands
         if ref_data.iloc[0].str.contains('Price').any():
             ref_data.columns = ref_data.iloc[0]
             ref_data = ref_data[1:].reset_index(drop=True)
@@ -411,6 +412,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
         
         if not brand_category_price: return pd.DataFrame(columns=['PRODUCT_SET_SID'])
         
+        # 2. Prepare Check Data and Prices
         check_data = data.copy()
         check_data['price_to_use'] = pd.to_numeric(check_data['GLOBAL_SALE_PRICE'], errors='coerce').where(
             (pd.to_numeric(check_data['GLOBAL_SALE_PRICE'], errors='coerce').notna()) & 
@@ -422,6 +424,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
         check_data['BRAND_LOWER'] = check_data['BRAND'].astype(str).str.strip().str.lower()
         check_data['CAT_BASE'] = check_data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
         
+        # 3. Check Logic
         def is_suspected_fake(row):
             key = (row['BRAND_LOWER'], row['CAT_BASE'])
             if key in brand_category_price:
@@ -501,14 +504,14 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     all_flagged_sids = pd.DataFrame(columns=['PRODUCT_SET_SID', 'FLAG', 'PRIORITY'])
     flag_results_tracker = {} # To store the original results (for debugging/expander view)
 
-    # Convert data for propagation logic
-    data_for_propagation = data.drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    # Note: data must contain all columns used by checks, but is not filtered by unique SID yet.
+    data_for_checks = data.copy()
     
     for rank, (name, func, kwargs) in enumerate(NON_DUPLICATE_CHECKS):
         # Apply country skip logic
         if country_validator.should_skip_validation(name): continue
         
-        ckwargs = {'data': data_for_propagation, **kwargs}
+        ckwargs = {'data': data_for_checks, **kwargs}
 
         # Handle specific logic for Generic Brand Issues and Missing Color (uses extra kwargs)
         if name == "Generic BRAND Issues":
@@ -517,12 +520,17 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
         
+        # Handle custom logic for Product Warranty
+        if name == "Product Warranty":
+            if not data_has_warranty_cols:
+                continue
+
         status_text.text(f"Running: {name}")
         
         try:
             # Result contains only [PRODUCT_SET_SID] column(s)
             flagged_res = func(**ckwargs)
-            flag_results_tracker[name] = flagged_res.copy() # Store full result
+            flag_results_tracker[name] = flagged_res.copy() # Store full result (SIDs only)
             
             if not flagged_res.empty:
                 new_flags = flagged_res[['PRODUCT_SET_SID']].drop_duplicates().copy()
@@ -545,7 +553,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     duplicates_df = check_duplicate_products(data)
     
     final_rejections = pd.DataFrame(columns=['ProductSetSid', 'Reason', 'Comment', 'FLAG'])
-    processed_sids = set()
+    processed_sids = set() # Tracks SIDs that have received a final rejection reason
     
     # b. Process Duplicate Sets (Propagation Logic)
     if not duplicates_df.empty:
@@ -554,7 +562,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             group_sids = set(group['PRODUCT_SET_SID'].unique())
             
             # Find the highest-priority flag among the members of this duplicate group
-            # Note: A product is "clean" if it doesn't appear in all_flagged_sids
             high_priority_matches = all_flagged_sids[all_flagged_sids['PRODUCT_SET_SID'].isin(group_sids)].sort_values('PRIORITY')
             
             if not high_priority_matches.empty:
@@ -564,6 +571,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 reason_info = flags_mapping.get(highest_flag_name, ("1000007 - Other Reason", f"Flagged by {highest_flag_name}"))
                 
                 for sid in group_sids:
+                    # We ensure that this SID is added to final rejections only once
                     if sid not in processed_sids: 
                          final_rejections.loc[len(final_rejections)] = {
                             'ProductSetSid': sid,
@@ -588,10 +596,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         }
                         processed_sids.add(sid)
 
-    # c. Process Non-Duplicate SIDs with a P1-P14 Flag (these were single items with issues)
+    # c. Process SIDs with a P1-P14 Flag that are NOT Duplicates
+    # These are SIDs in all_flagged_sids that were not part of any duplicate group processed above.
     
-    # Find all SIDs that are flagged but NOT duplicates (i.e., SIDs in all_flagged_sids but not processed yet)
-    # This is handled implicitly by ensuring SIDs are only added once using processed_sids
     non_duplicate_flagged = all_flagged_sids[~all_flagged_sids['PRODUCT_SET_SID'].isin(processed_sids)].copy()
     
     for _, r in non_duplicate_flagged.iterrows():
@@ -610,7 +617,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
 
     # 3. Finalization: Merge results back to data to get full metadata and 'Approved' status
     
-    report_df = data[['PRODUCT_SET_SID', 'PARENTSKU', 'SELLER_NAME']].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    # We must use unique SIDs from the original data as the final report index
+    report_df = data[['PRODUCT_SET_SID', 'PARENTSKU', 'SELLER_NAME', 'NAME', 'BRAND', 'CATEGORY_CODE']].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
     report_df = report_df.rename(columns={'PRODUCT_SET_SID': 'ProductSetSid', 'PARENTSKU': 'ParentSKU', 'SELLER_NAME': 'SellerName'})
 
     # Merge final rejections
@@ -625,17 +633,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     # Ensure required columns exist
     final_cols = [c for c in PRODUCTSETS_COLS if c in report_df.columns]
     
-    # Also return the full tracker data for the debug/expander view
-    # Convert tracker results from SIDs back to full data using a left merge
-    full_flag_results = {}
-    for flag_name, sid_df in flag_results_tracker.items():
-        if 'PRODUCT_SET_SID' in sid_df.columns and not sid_df.empty:
-            # Merge SIDs back to original data to show the full row for debugging
-            full_flag_results[flag_name] = pd.merge(sid_df, data, on='PRODUCT_SET_SID', how='left').drop_duplicates(subset=['PRODUCT_SET_SID'])
-        else:
-            full_flag_results[flag_name] = pd.DataFrame(columns=data.columns)
-
-    return report_df[final_cols], full_flag_results
+    # Return the final report structure and the raw flag tracker results (for expander views)
+    return report_df[final_cols], flag_results_tracker
 
 # -------------------------------------------------
 # Export Logic
@@ -654,13 +653,18 @@ def to_excel_full_data(data_df, final_report_df):
         
         d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
         r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
-        merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
-                          left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
         
-        if 'ProductSetSid_y' in merged.columns: merged.drop(columns=['ProductSetSid_y'], inplace=True)
-        if 'ProductSetSid_x' in merged.columns: merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
+        # Merge by the unique SIDs in the final report
+        merged = pd.merge(d_cp.drop_duplicates(subset=['PRODUCT_SET_SID']), 
+                          r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
+                          left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left', suffixes=('_data', '_report'))
         
-        export_cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
+        # Harmonize column names and drop redundancy
+        merged['SELLER_NAME'] = merged['SellerName_report'].fillna(merged['SellerName_data'])
+        merged.drop(columns=['ProductSetSid_report', 'SellerName_report', 'SellerName_data'], inplace=True, errors='ignore')
+        merged.rename(columns={'ProductSetSid_data': 'PRODUCT_SET_SID'}, inplace=True)
+        
+        export_cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG"] if c not in FULL_DATA_COLS]
         
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             to_excel_base(merged, "ProductSets", export_cols, writer)
@@ -803,8 +807,7 @@ with tab1:
             if is_valid:
                 data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
                 
-                # We need to run the validation on ALL products, not just unique SIDs initially,
-                # as the duplicate check requires all rows. We drop duplicates *later*.
+                # Run checks on all rows initially (not just unique SIDs) for accurate duplicate detection
                 data = data_filtered 
                 
                 # Check if the necessary columns are present in the final data
@@ -829,7 +832,13 @@ with tab1:
                 
                 approved_df = final_report[final_report['Status'] == 'Approved']
                 rejected_df = final_report[final_report['Status'] == 'Rejected']
-                log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+                
+                # We log the unique SIDs counted as rejected/approved
+                unique_rejected_count = final_report[final_report['Status'] == 'Rejected']['ProductSetSid'].nunique()
+                unique_approved_count = final_report[final_report['Status'] == 'Approved']['ProductSetSid'].nunique()
+                unique_total_count = final_report['ProductSetSid'].nunique()
+
+                log_validation_run(country, "Multi-Upload", unique_total_count, unique_approved_count, unique_rejected_count)
                 
                 st.sidebar.header("Seller Options")
                 seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
@@ -851,21 +860,24 @@ with tab1:
                 st.header("Overall Results")
                 
                 c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("Total", len(data))
-                c2.metric("Approved", len(approved_df))
-                c3.metric("Rejected", len(rejected_df))
-                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+                c1.metric("Total Unique SKUs", unique_total_count)
+                c2.metric("Approved Unique SKUs", unique_approved_count)
+                c3.metric("Rejected Unique SKUs", unique_rejected_count)
+                rt = (unique_rejected_count/unique_total_count*100) if unique_total_count>0 else 0
                 c4.metric("Rate", f"{rt:.1f}%")
                 c5.metric("SKUs in Both Files", intersection_count)
                 
                 st.subheader("Validation Results by Flag")
-                # Need to update flag_dfs to only include SIDs, not full row data, for the expander view
-                # This is handled internally in the validate_products function return now (flag_results_tracker)
-                for title, df_flagged in flag_dfs.items():
-                    with st.expander(f"{title} ({len(df_flagged)})"):
-                        if 'PRODUCT_SET_SID' in df_flagged.columns:
-                            # Re-merge to show full data rows for the expander view
-                            display_df = pd.merge(df_flagged[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
+                
+                for title, df_flagged_sids in flag_dfs.items():
+                    # flag_dfs now contains only SIDs, which need to be merged back for display
+                    if 'PRODUCT_SET_SID' in df_flagged_sids.columns:
+                        display_df = pd.merge(df_flagged_sids[['PRODUCT_SET_SID']].drop_duplicates(), merged_data, on='PRODUCT_SET_SID', how='left')
+                    else:
+                        display_df = pd.DataFrame(columns=merged_data.columns)
+
+                    with st.expander(f"{title} ({len(display_df)})"):
+                        if not display_df.empty:
                             st.dataframe(display_df)
                             st.download_button(f"Export {title}", to_excel_flag_data(display_df, title), f"{file_prefix}_{title}.xlsx")
                         else:
@@ -877,7 +889,7 @@ with tab1:
                 c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
                 c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
                 c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
-                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
+                c4.download_button("Full Data", to_excel_full_data(merged_data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
             else:
                 for e in errors: st.error(e)
         except Exception as e:
