@@ -3,6 +3,7 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import re
+from collections import defaultdict
 import logging
 from typing import Dict, List, Tuple, Optional
 import traceback
@@ -54,8 +55,8 @@ FLAG_PRIORITIES = {
     'Single-word NAME': 11,
     'Generic BRAND Issues': 12,
     'BRAND name repeated in NAME': 13,
-    'Missing COLOR': 14, # Re-aligned priority (was P15)
-    'Duplicate product': 15, # LOWEST PRIORITY (was P16)
+    'Missing COLOR': 14,
+    'Duplicate product': 15, # LOWEST PRIORITY - Handled via Propagation Logic
 }
 
 
@@ -151,7 +152,7 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
-        # Assuming the CSV version of the suspected_fake file is the correct one being referenced:
+        # Assuming the CSV version of the suspected_fake file is accessible as its original name:
         'suspected_fake': pd.read_csv("suspected_fake.xlsx - suspected_fake.csv", header=None, dtype=str),
         
         # Dynamic loading for Refurb lists 
@@ -503,6 +504,25 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
 
     data_for_checks = data.copy()
     
+    # --- 1a: Pre-calculate Duplicate Groups for Propagation ---
+    duplicate_groups = {}
+    cols_for_dup_key = [c for c in ['NAME','BRAND','SELLER_NAME'] if c in data.columns]
+    
+    if len(cols_for_dup_key) >= 3:
+        data_temp = data.copy()
+        # Create a consistent key for grouping
+        data_temp['dup_key'] = data_temp[cols_for_dup_key].astype(str).agg('::'.join, axis=1)
+        
+        # Find all duplicate SIDs based on the key
+        dup_counts = data_temp.groupby('dup_key')['PRODUCT_SET_SID'].apply(list).to_dict()
+        
+        # Map each SID to its full list of duplicates (including itself)
+        for sid_list in dup_counts.values():
+             if len(sid_list) > 1:
+                for sid in sid_list:
+                    duplicate_groups[sid] = sid_list
+
+    # --- 1b: Run all Non-Duplicate Checks ---
     for rank, (name, func, kwargs) in enumerate(NON_DUPLICATE_CHECKS):
         # Apply country skip logic
         if country_validator.should_skip_validation(name): continue
@@ -543,9 +563,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             
         progress_bar.progress((rank + 1) / len(NON_DUPLICATE_CHECKS))
 
-    # 2. PHASE 2: Duplicate Check and Propagation (P15)
+    # 2. PHASE 2: Final Rejection Assignment with Propagation (P15)
     
-    # a. Identify all duplicates
+    # a. Identify all unique duplicate keys
     duplicates_df = check_duplicate_products(data)
     
     final_rejections = pd.DataFrame(columns=['ProductSetSid', 'Reason', 'Comment', 'FLAG'])
@@ -592,6 +612,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         processed_sids.add(sid)
 
     # c. Process SIDs with a P1-P14 Flag that are NOT Duplicates
+    # This step handles single listings that had an issue (P1-P14) but had no duplicates.
     non_duplicate_flagged = all_flagged_sids[~all_flagged_sids['PRODUCT_SET_SID'].isin(processed_sids)].copy()
     
     for _, r in non_duplicate_flagged.iterrows():
