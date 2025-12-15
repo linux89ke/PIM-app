@@ -11,56 +11,6 @@ import xlsxwriter
 import altair as alt
 
 # -------------------------------------------------
-# APPROVED SELLER LIST (HARDCODED FOR DEBUGGING/RELIABILITY)
-# This list is used for the 'Seller Not approved to sell Refurb' check (KE).
-# -------------------------------------------------
-APPROVED_REFURB_KE_LIST = [
-    "refurbcenter", "Samkil outlets limited", "Kentouch Kenya", "DISKTECH", "TopLink Technologies", 
-    "Trudy Comps", "MAYCOMP TRADERS", "Toptics1 Online shop", "Ominel computers", "OFFICE MAC L", 
-    "Monrick_Technologies", "Laptop Garage _Ke", "Fina's online", "LapTech Computers systems", 
-    "Laptop Clinic", "Computers kenya LTD", "Steliam Computers", "Mictouch Technology Limited", 
-    "Deallogic", "Dansie Enterprise", "SILICON HUB LTD", "InterLude", "Sharom GTX", 
-    "Overview Solutions", "Techbiz", "Roadmap Tech Computers", "Megacomps ICT hub", "PATECH SUPPLIES", 
-    "meet technology", "Qoceptech", "MobiGlobe Ke", "DISKTECH SYSTEMS", "Symtech Enterprises", 
-    "Daytona", "TEXAS STREET COMPUTERS", "specialistcomp", "Westside Computer Hub", 
-    "WASHINGTON INVESTMENT COMPUTERS", "ARIZONA VILLA COMPUTERS", "SAK Online", "Lian Collections", 
-    "KICOMTECH COMPUTERS", "Yaleo Services", "Digitech Computers", "ERICK ENTERPRISE", 
-    "PRODUCTS ZONE", "Betty Tech Computers", "HAMEDA TECHNOLOGIES", "Brimat Computers", 
-    "Wain Collection", "GOLF TECH COMPUTERS", "Crystalchip Limited", "MAXPORTS MERCHANTS LIMITED", 
-    "Bluecode Kenya", "Myketronics Computer & Accessories Ltd", "Bestoption Technologies", 
-    "Wasini Technologies", "ANOVA Technologies", "TANSIC TECHNOLOGIES", "Siete Enterprise", 
-    "ubuntu Technologies Kenya", "Digitalsmart Print", "Charlie Chan", "charliehub254", 
-    "ALLOYS HUB", "Wynn Enterprise", "EnockHub Technologies", "Best_Mom", "Ngugitech Online", 
-    "RANKS COMPUTERS AND ACCESSORIES", "Lantel Systems", "BOSY TECHNOLOGIES", "Neileys Technologies", 
-    "Badili Phones", "Cradle Solutions", "GEFORCE", "veratech hub", "My Tech Hub", 
-    "Techno Suppliers", "JULTECH GENERAL SUPPLIES", "MOBI STORES", "JULTECH TECHNOLOGIES", 
-    "Techiq solutons", "TECH DG", "WAISY", "Computer Spot Kenya", "PRODUCT CENTER.", 
-    "Phonehub Kenya", "Phonelegit Kenya", "Lily tech", "Pikhub", "Novetech supplies", 
-    "Zone of Tech", "Alloys hub tech", "TheRoberts KE enterprise", "DREAMCOM TECHONOGY", 
-    "Hameda Technologies shop", "MWEMBA ECH", "Vinkel Computers shop", "HamnduEnterprise", 
-    "Vincomputers", "LabTech Kenya", "Fafantech computers", "SEAN TECH COMPUTERS", 
-    "Zettech Computers", "MEGAWORLD SPACE SOLUTIONS LIMITED", "MAYAZ EMPIRE", 
-    "Radox Technology Limited", "Certified Laptops", "Delta System", "Onclick Technologies", 
-    "Hamez Technologies", "EcoTech Hub", "Lantel System", "RICKTECH COMPUTERS", 
-    "Bundo Tech", "AVELORA INNOVATIONS LTD", "Tech Laptops", "Zetcom computers", 
-    "Onclick Technologies", "Covo technologies", "Julietech IT Solutions", "Megaworld Solutions", 
-    "DREAMCOM TECHNOLOGY", "LE DI TECH LIMITED", "MARKETSYNC FZ", "MSGT", 
-    "technosupremesuppliers", "TWENDY", "ZetcomComputers", "Lawre Digital Solution", 
-    "REYDIGITAL1", "NAIBTZ TECH BIZ", "BADAR COMPUTERS", "Tech and Craft", "Simple Tech", 
-    "Onclick Technologies", "RANKS COMPUTERS & ACCESSORIES", "FELTECKS COMPS", "PowerTech Gadgets", 
-    "Sonik computers & accesories", "Digital Link Computers", "slimtech system", "Lola Tech", 
-    "priscytech", "TECH SHOPIT", "GATECOM LAPTOP", "Tehillah Distributors", 
-    "Nova Africa Entreprise", "Mmas Techologies", "Imports By Sam", "Abon Solutions", 
-    "FOURkComputers", "Jakababa Enterprises", "madtitan technologies", "techzone solutions", 
-    "PC Point KE", "Ashler's Shop", "Vertex Innovations Hub", "Ellayden", "Laptoppalace", 
-    "Tolmo Technology", "dtech computers", "ZILT STORES", "Mo Electronics.", 
-    "Rhesa Gadgets", "AD Gadgetz", "SHOPPING HUB", "FIVE STAR SELLER", "Suitech", 
-    "JOALLY TECHNOLOGIES", "Nephic Global Agencies Ltd", "TechNestKE", "Britma Enterprises Ltd", 
-    "GEEWORLD TECHNOLOGIES", "LAPTOPS WORLD LTD", "NAIBZ TECH BIZ", "Alma Tech Savvy Solution Limited"
-]
-
-
-# -------------------------------------------------
 # Logging Configuration
 # -------------------------------------------------
 logging.basicConfig(
@@ -116,13 +66,14 @@ NEW_FILE_MAPPING = {
 # -------------------------------------------------
 @st.cache_data(ttl=3600)
 def load_txt_file(filename: str) -> List[str]:
-    # NOTE: This is kept for other files but bypassed for Refurb check
+    """Loads a list of strings from a file, handling UTF-8 encoding."""
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
         return data
     except Exception as e:
         logger.error(f"Error reading {filename}: {e}")
+        # IMPORTANT: Returns empty list on failure, ensuring the checks can run safely.
         return []
 
 @st.cache_data(ttl=3600)
@@ -141,7 +92,6 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            # UPDATED: Replaced 'Sensitive words' with 'Seller Not approved to sell Refurb'
             'Seller Not approved to sell Refurb': ('1000001 - Seller Not Approved to Sell Refurb Product', "Your listing was rejected because it mentions \'Refurb\', \'Refurbished\', \'Renewed\' or the brand is \'Renewed\', but your seller account is not on the approved list for refurbished products in this country."),
             'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field..."),
             'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned..."),
@@ -155,6 +105,9 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
             'Suspected Fake product': ('1000031 - Suspected Fake Product', "Your listing has been rejected as the pricing suggests this may be a counterfeit or fake product. Products from reputable brands like Sony, JBL, Adidas, Nike, Apple, Samsung, and others must meet minimum price thresholds to ensure authenticity. Please verify the product\'s authenticity and adjust the pricing accordingly, or contact Jumia Seller Support if you believe this is an error."),
             'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia\'s requirements."),
+            # Keeping 'Sensitive words' in mapping in case other code paths rely on it, 
+            # though it's removed from validations list and replaced by the refurb check logic.
+            'Sensitive words': ('1000001 - Brand NOT Allowed', "Your listing was rejected because it includes brands that are not allowed on Jumia..."),
         }
         return flag_mapping
     except Exception: return {}
@@ -170,8 +123,7 @@ def load_all_support_files() -> Dict:
         'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
         'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
         'sneaker_sensitive_brands': [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')],
-        # Removing old generic sensitive words check as it's replaced
-        # 'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')], 
+        'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')],
         'colors': [c.lower() for c in load_txt_file('colors.txt')],
         'color_categories': load_txt_file('color_cats.txt'),
         'check_variation': load_excel_file('check_variation.xlsx'),
@@ -182,9 +134,8 @@ def load_all_support_files() -> Dict:
         'warranty_category_codes': load_txt_file('warranty.txt'),
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         
-        # NEW/UPDATED: Refurb Approved Sellers Lists (KE hardcoded for reliability)
-        'approved_refurb_sellers_ke': [s.lower() for s in APPROVED_REFURB_KE_LIST],
-        # Assuming Refurb_LaptopUG.txt exists locally, otherwise load_txt_file returns []
+        # UPDATED: Load from files dynamically
+        'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
     }
     return files
@@ -381,7 +332,9 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     return data[mask]
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
-    # This function is kept for completeness as a placeholder, but is unused by the new refurb check.
+    # This is the old, generic sensitive word check (Code 1000001). 
+    # It is kept here as a placeholder in case other logic relies on this name, 
+    # but the priority slot (1000001) is now occupied by the refurb check.
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     return data[mask]
@@ -555,7 +508,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             'country_code': country_validator.code
         }),
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
-        # Note: The old 'Sensitive words' check is removed here to be fully replaced by the refurb check (1000001)
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
         ("Seller Approved to Sell Perfume", check_seller_approved_for_perfume, {'perfume_category_codes': support_files['perfume_category_codes'], 'approved_perfume_sellers': support_files['approved_perfume_sellers'], 'sensitive_perfume_brands': support_files['sensitive_perfume_brands']}),
         ("Counterfeit Sneakers", check_counterfeit_sneakers, {'sneaker_category_codes': support_files['sneaker_category_codes'], 'sneaker_sensitive_brands': support_files['sneaker_sensitive_brands']}),
