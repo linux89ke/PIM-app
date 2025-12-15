@@ -37,7 +37,7 @@ FULL_DATA_COLS = [
     "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION",
     "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
-FX_RATE = 132.0
+FX_RATE = 132.0 # Kept as a constant but is ignored in the check_suspected_fake_products function based on user feedback.
 
 # MAPPING: New File Columns -> Script Internal Columns
 NEW_FILE_MAPPING = {
@@ -97,7 +97,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Prohibited products': ('1000007 - Other Reason', "Kindly note this product is not allowed for listing on Jumia..."),
             'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format..."),
             'Generic BRAND Issues': ('1000014 - Kindly request for the creation of this product\'s actual brand name...', "To create the actual brand name for this product..."),
-            'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product by Jumia technical team...', "Your listing has been rejected as Jumia's technical team has confirmed..."),
+            'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product by Jumia technical team...', "Your listing has been rejected as Jumia\'s technical team has confirmed..."),
             'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
             'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit Product', "Your listing has been rejected as it is suspected to be a counterfeit jersey..."),
@@ -328,6 +328,9 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
 def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.DataFrame, fx_rate: float = 132.0) -> pd.DataFrame:
     """
     Checks for suspected fake products based on brand, category, and price.
+    
+    MODIFICATION: Product prices (GLOBAL_PRICE/SALE_PRICE) are now assumed to be in USD,
+    as confirmed by the user, and no currency conversion is performed.
     """
     required_cols = ['CATEGORY_CODE', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
     
@@ -343,12 +346,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
     
     try:
         # Parse the reference file structure
-        # Assumes the Excel file loads with the first row as headers (Brand, Sony, JBL, etc.)
         ref_data = suspected_fake_df.copy()
-        
-        # Get brands (column names starting from the second one, skipping the first one which is an index/label)
-        # Note: The original data snippet suggests a structure where the first non-brand column is used for price/category indexing
-        # We need to map the headers (Brands) to their corresponding price and list of categories
         
         # Determine brand columns (columns that contain the brand name as the header)
         brand_cols = [col for col in ref_data.columns if col not in ['Unnamed: 0', 'Brand', 'Price'] and pd.notna(col)]
@@ -379,8 +377,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
                 
                 if cat_base and cat_base.lower() != 'nan':
                     key = (brand_lower, cat_base)
-                    # Use a set to store price thresholds if multiple exist, but here we just store the lowest one
-                    # Based on the file structure, all categories for a brand share the same price threshold.
+                    # All categories for a brand share the same price threshold.
                     brand_category_price[key] = price_threshold
         
         if not brand_category_price:
@@ -392,7 +389,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
         # Prepare data for checking
         check_data = data.copy()
         
-        # Determine price to use (prefer sale price if valid)
+        # 1. Determine price to use (prefer sale price if valid)
         check_data['price_to_use'] = check_data['GLOBAL_SALE_PRICE'].where(
             (check_data['GLOBAL_SALE_PRICE'].notna()) & 
             (pd.to_numeric(check_data['GLOBAL_SALE_PRICE'], errors='coerce') > 0),
@@ -400,24 +397,21 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
         )
         check_data['price_to_use'] = pd.to_numeric(check_data['price_to_use'], errors='coerce').fillna(0)
         
-        # Convert to USD if in KES (Assuming the reference prices are in USD for this FX_RATE conversion)
-        currency = check_data.get('CURRENCY', pd.Series(['KES'] * len(check_data)))
-        check_data['price_usd'] = check_data['price_to_use'].where(
-            currency.astype(str).str.upper() != 'KES',
-            check_data['price_to_use'] / fx_rate
-        )
+        # 2. Assign price for comparison (price_usd)
+        # Per user request, the price is in USD and no currency conversion is needed.
+        # This replaces the old logic that handled KES conversion using FX_RATE.
+        check_data['price_usd'] = check_data['price_to_use']
         
-        # Normalize brand and extract base category
+        # 3. Normalize brand and extract base category
         check_data['BRAND_LOWER'] = check_data['BRAND'].astype(str).str.strip().str.lower()
         check_data['CAT_BASE'] = check_data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
         
-        # Check each product against reference data
+        # 4. Check each product against reference data
         def is_suspected_fake(row):
             key = (row['BRAND_LOWER'], row['CAT_BASE'])
             if key in brand_category_price:
                 threshold = brand_category_price[key]
                 # Flag if product price is below threshold (suspected fake due to low price)
-                # Use a small tolerance for floating point comparison if necessary, but direct comparison is usually fine
                 if row['price_usd'] < threshold:
                     return True
             return False
@@ -473,13 +467,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     # ORDER MATTERS: This list defines the priority of the rejection flags.
     validations = [
-        # NEW HIGH-PRIORITY CHECK
+        # NEW HIGH-PRIORITY CHECK (now assuming USD prices for check)
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Product Warranty", check_product_warranty, {'warranty_category_codes': support_files['warranty_category_codes']}),
         ("Sensitive words", check_sensitive_words, {'pattern': compile_regex_patterns(support_files['sensitive_words'])}),
         ("Seller Approve to sell books", check_seller_approved_for_books, {'book_category_codes': support_files['book_category_codes'], 'approved_book_sellers': support_files['approved_book_sellers']}),
-        # Removed "Perfume Price Check" as it was implicitly requested by the user's last edit where the check function was removed from the code, 
-        # and it's not present in the provided validation list.
         ("Seller Approved to Sell Perfume", check_seller_approved_for_perfume, {'perfume_category_codes': support_files['perfume_category_codes'], 'approved_perfume_sellers': support_files['approved_perfume_sellers'], 'sensitive_perfume_brands': support_files['sensitive_perfume_brands']}),
         ("Counterfeit Sneakers", check_counterfeit_sneakers, {'sneaker_category_codes': support_files['sneaker_category_codes'], 'sneaker_sensitive_brands': support_files['sneaker_sensitive_brands']}),
         ("Suspected counterfeit Jerseys", check_counterfeit_jerseys, {'jerseys_df': support_files['jerseys_config']}),
