@@ -40,6 +40,7 @@ FULL_DATA_COLS = [
 FX_RATE = 132.0 
 
 # Define numerical priority for all flags (Lower number = Higher Priority)
+# NOTE: Duplicate words in NAME removed, priorities re-aligned.
 FLAG_PRIORITIES = {
     'Suspected Fake product': 1,
     'Seller Not approved to sell Refurb': 2,
@@ -50,13 +51,12 @@ FLAG_PRIORITIES = {
     'Counterfeit Sneakers': 7,
     'Suspected counterfeit Jerseys': 8,
     'Prohibited products': 9,
-    'Unnecessary words in NAME': 10,
+    'Unnecessary words in NAME': 10, 
     'Single-word NAME': 11,
     'Generic BRAND Issues': 12,
     'BRAND name repeated in NAME': 13,
-    'Duplicate words in NAME': 14, # NEWLY ADDED FLAG
-    'Missing COLOR': 15,
-    'Duplicate product': 16, # LOWEST PRIORITY - Handled via Propagation Logic
+    'Missing COLOR': 14,
+    'Duplicate product': 15, # LOWEST PRIORITY (Final check handled by propagation logic)
 }
 
 
@@ -119,7 +119,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Prohibited products': ('1000007 - Other Reason', "Kindly note this product is not allowed for listing on Jumia..."),
             'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format..."),
             'Unnecessary words in NAME': ('1000010 - Kindly remove unnecessary words from product name', "Your listing was rejected because the product name contains unnecessary promotional or keyword stuffing words. Please remove them to comply with platform guidelines."),
-            'Duplicate words in NAME': ('1000011 - Kindly remove redundant words from the product name', "Your listing was rejected because the product name contains repeated words (e.g., 'shoe shoe'). Please remove the redundancy."),
+            # 'Duplicate words in NAME' entry removed as per user request
             'Generic BRAND Issues': ('1000014 - Kindly request for the creation of this product\'s actual brand name...', "To create the actual brand name for this product..."),
             'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product by Jumia technical team...', "Your listing has been rejected as Jumia\'s technical team has confirmed..."),
             'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support...', "Please contact Jumia Seller Support and raise a claim..."),
@@ -153,7 +153,8 @@ def load_all_support_files() -> Dict:
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
         'warranty_category_codes': load_txt_file('warranty.txt'),
-        'suspected_fake': load_excel_file('suspected_fake.xlsx'),
+        # Using the latest uploaded file for suspected fake data:
+        'suspected_fake': pd.read_csv("suspected_fake.xlsx - suspected_fake.csv", header=None, dtype=str),
         
         # Dynamic loading for Refurb lists 
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
@@ -431,6 +432,7 @@ def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.Data
             for cat in categories:
                 cat_base = str(cat).split('.')[0].strip()
                 if cat_base and cat_base.lower() != 'nan':
+                    key = (brand_lower, cat_base)
                     brand_category_price[key] = price_threshold
         
         if not brand_category_price: return pd.DataFrame(columns=['PRODUCT_SET_SID'])
@@ -517,8 +519,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Single-word NAME", check_single_word_name, {'book_category_codes': support_files['book_category_codes']}), # P11
         ("Generic BRAND Issues", check_generic_brand_issues, {}), # P12
         ("BRAND name repeated in NAME", check_brand_in_name, {}), # P13
-        ("Duplicate words in NAME", check_duplicate_words_in_name, {}), # P14
-        ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}), # P15
+        # Removed "Duplicate words in NAME"
+        ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}), # P14 (P15 in old list)
     ]
     
     progress_bar = st.progress(0)
@@ -570,7 +572,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             
         progress_bar.progress((rank + 1) / len(NON_DUPLICATE_CHECKS))
 
-    # 2. PHASE 2: Duplicate Check and Propagation (P16)
+    # 2. PHASE 2: Duplicate Check and Propagation (P15)
     
     # a. Identify all duplicates
     duplicates_df = check_duplicate_products(data)
@@ -588,7 +590,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             high_priority_matches = all_flagged_sids[all_flagged_sids['PRODUCT_SET_SID'].isin(group_sids)].sort_values('PRIORITY')
             
             if not high_priority_matches.empty:
-                # Assign the highest priority flag (P1-P15) found in the set to ALL members
+                # Assign the highest priority flag (P1-P14) found in the set to ALL members
                 highest_flag_name = high_priority_matches.iloc[0]['FLAG']
                 
                 reason_info = flags_mapping.get(highest_flag_name, ("1000007 - Other Reason", f"Flagged by {highest_flag_name}"))
@@ -603,7 +605,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         }
                          processed_sids.add(sid)
             else:
-                # Assign the lowest priority flag: Duplicate product (P16)
+                # Assign the lowest priority flag: Duplicate product (P15)
                 duplicate_flag_name = 'Duplicate product'
                 reason_info = flags_mapping.get(duplicate_flag_name, ("1000007 - Other Reason", f"Flagged by {duplicate_flag_name}"))
                 
@@ -618,7 +620,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         }
                         processed_sids.add(sid)
 
-    # c. Process SIDs with a P1-P15 Flag that are NOT Duplicates
+    # c. Process SIDs with a P1-P14 Flag that are NOT Duplicates
     non_duplicate_flagged = all_flagged_sids[~all_flagged_sids['PRODUCT_SET_SID'].isin(processed_sids)].copy()
     
     for _, r in non_duplicate_flagged.iterrows():
@@ -995,7 +997,6 @@ with tab2:
                     ).interactive()
                     st.altair_chart(chart, use_container_width=True)
 
-            c3, c4 = st.columns(2)
             with c3:
                 st.subheader("Top 10 Rejected Sellers")
                 if not rejected.empty and 'SELLER_NAME' in rejected.columns:
