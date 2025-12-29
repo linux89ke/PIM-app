@@ -9,7 +9,12 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
-
+import requests
+import hashlib
+from PIL import Image
+import numpy as np
+from scipy import fftpack
+from itertools import combinations
 # -------------------------------------------------
 # Logging Configuration
 # -------------------------------------------------
@@ -19,12 +24,10 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
 # -------------------------------------------------
 # Page config
 # -------------------------------------------------
 st.set_page_config(page_title="Product Validation Tool", layout="wide")
-
 # -------------------------------------------------
 # Constants & Mapping
 # -------------------------------------------------
@@ -33,13 +36,10 @@ REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
 FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
-    "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG",
-    "LISTING_STATUS", "SELLER_RATING", "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION",
-    "WARRANTY_ADDRESS", "WARRANTY_TYPE"
+    "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", "SELLER_RATING",
+    "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
-FX_RATE = 132.0 
-
-# MAPPING: New File Columns -> Script Internal Columns
+FX_RATE = 132.0
 NEW_FILE_MAPPING = {
     'cod_productset_sid': 'PRODUCT_SET_SID',
     'dsc_name': 'NAME',
@@ -60,13 +60,11 @@ NEW_FILE_MAPPING = {
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE'
 }
-
 # -------------------------------------------------
 # CACHED FILE LOADING
 # -------------------------------------------------
 @st.cache_data(ttl=3600)
 def load_txt_file(filename: str) -> List[str]:
-    """Loads a list of strings from a file, handling UTF-8 encoding."""
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
@@ -74,9 +72,8 @@ def load_txt_file(filename: str) -> List[str]:
     except Exception as e:
         logger.error(f"Error reading {filename}: {e}")
         return []
-
 @st.cache_data(ttl=3600)
-def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame:
+def load_excel_file(filename: str, column: Optional[str] = None):
     try:
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
@@ -86,72 +83,71 @@ def load_excel_file(filename: str, column: Optional[str] = None) -> pd.DataFrame
     except Exception as e:
         logger.error(f"Error reading {filename}: {e}")
         return [] if column else pd.DataFrame()
-
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
             'Seller Not approved to sell Refurb': (
                 '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing."
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
             ),
             'BRAND name repeated in NAME': (
                 '1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name',
-                "Please do not write the brand name in the Product Name field."
+                "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"
             ),
             'Missing COLOR': (
                 '1000005 - Kindly confirm the actual product colour',
-                "Please make sure that the product color is clearly mentioned in both the title and in the color tab."
+                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
             ),
-            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs. Duplicate detected via Name/Brand/Image comparison."),
+            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs"),
             'Prohibited products': (
                 '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
-                "Your product listing has been rejected due to the absence of a required license."
+                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
             ),
             'Single-word NAME': (
                 '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title using this format: Name – Type of the Products – Color."
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
             ),
             'Unnecessary words in NAME': (
                 '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title. Kindly avoid unnecesary words."
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers.Kindly avoid unnecesary words "
             ),
             'Generic BRAND Issues': (
-                '1000014 - Kindly request for the creation of this product\'s actual brand name',
-                "To create the actual brand name for this product, please fill out the form."
+                '1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8',
+                "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it's approved or rejected, along with the reason..Avoid using Generic for fashion items"
             ),
             'Counterfeit Sneakers': (
-                '1000030 - Suspected Counterfeit/Fake Product',
-                "This product is suspected to be counterfeit or fake."
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
             ),
             'Seller Approve to sell books': (
-                '1000028 - Kindly Contact Jumia Seller Support',
-                "Please contact Jumia Seller Support to confirm eligibility for book sales."
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
             ),
             'Seller Approved to Sell Perfume': (
-                '1000028 - Kindly Contact Jumia Seller Support',
-                "Please contact Jumia Seller Support for perfume listing approvals."
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
             ),
             'Suspected counterfeit Jerseys': (
-                '1000030 - Suspected Counterfeit/Fake Product',
-                "This product is suspected to be counterfeit or fake."
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
             ),
             'Suspected Fake product': (
-                '1000030 - Suspected Counterfeit/Fake Product',
-                "Suspected counterfeit based on category and global price threshold."
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
             ),
             'Product Warranty': (
                 '1000013 - Kindly Provide Product Warranty Details',
-                "For listing this type of product requires a valid warranty."
+                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."
             ),
             'Sensitive words': (
-                '1000001 - Brand NOT Allowed', 
-                "Your listing was rejected because it includes brands that are not allowed on Jumia."
+                '1000001 - Brand NOT Allowed',
+                "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
             ),
         }
         return flag_mapping
-    except Exception: return {}
-
+    except Exception:
+        return {}
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
     files = {
@@ -178,13 +174,12 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
     }
     return files
-
 @st.cache_data(ttl=3600)
 def compile_regex_patterns(words: List[str]) -> re.Pattern:
-    if not words: return None
+    if not words:
+        return None
     pattern = '|'.join(r'\b' + re.escape(w) + r'\b' for w in words)
     return re.compile(pattern, re.IGNORECASE)
-
 # -------------------------------------------------
 # Country & Helper Classes
 # -------------------------------------------------
@@ -193,24 +188,29 @@ class CountryValidator:
         "Kenya": {"code": "KE", "skip_validations": [], "prohibited_products_file": "prohibited_productsKE.txt"},
         "Uganda": {"code": "UG", "skip_validations": ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Product Warranty"], "prohibited_products_file": "prohibited_productsUG.txt"}
     }
+   
     def __init__(self, country: str):
         self.country = country
         self.config = self.COUNTRY_CONFIG.get(country, self.COUNTRY_CONFIG["Kenya"])
         self.code = self.config["code"]
         self.skip_validations = self.config["skip_validations"]
+   
     def should_skip_validation(self, validation_name: str) -> bool:
         return validation_name in self.skip_validations
+   
     def ensure_status_column(self, df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty: return df
-        if 'Status' not in df.columns: df['Status'] = 'Approved'
+        if df.empty:
+            return df
+        if 'Status' not in df.columns:
+            df['Status'] = 'Approved'
         return df
+   
     @st.cache_data(ttl=3600)
     def load_prohibited_products(_self) -> List[str]:
         filename = _self.config["prohibited_products_file"]
         return [w.lower() for w in load_txt_file(filename)]
-
 # -------------------------------------------------
-# Logic Helpers
+# Data Loading & Validation Functions
 # -------------------------------------------------
 def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -221,16 +221,16 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
             .str.replace('jumia-', '', regex=False).str.strip().str.upper()
         )
     return df
-
 def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
     errors = []
     required = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY_CODE', 'ACTIVE_STATUS_COUNTRY']
     for field in required:
-        if field not in df.columns: errors.append(f"Missing: {field}")
+        if field not in df.columns:
+            errors.append(f"Missing: {field}")
     return len(errors) == 0, errors
-
 def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, source: str) -> pd.DataFrame:
-    if 'ACTIVE_STATUS_COUNTRY' not in df.columns: return df
+    if 'ACTIVE_STATUS_COUNTRY' not in df.columns:
+        return df
     df['ACTIVE_STATUS_COUNTRY'] = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
     mask = df['ACTIVE_STATUS_COUNTRY'] == country_validator.code
     filtered = df[mask].copy()
@@ -238,143 +238,336 @@ def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, sou
         st.error(f"No {country_validator.code} rows left in {source}")
         st.stop()
     return filtered
-
 def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty: return df
+    if df.empty:
+        return df
     cols_to_propagate = ['COLOR_FAMILY', 'PRODUCT_WARRANTY', 'WARRANTY_DURATION', 'WARRANTY_ADDRESS', 'WARRANTY_TYPE']
     for col in cols_to_propagate:
-        if col not in df.columns: df[col] = pd.NA
+        if col not in df.columns:
+            df[col] = pd.NA
     for col in cols_to_propagate:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
     return df
-
+def normalize_text(text):
+    return re.sub(r'[^a-z0-9]', '', str(text).lower().strip())
+def phash_url(url, hash_size=8, highfreq_factor=4):
+    try:
+        resp = requests.get(url, timeout=5)
+        if resp.status_code != 200:
+            return None
+        img = Image.open(BytesIO(resp.content))
+        img_size = hash_size * highfreq_factor
+        img = img.convert("L").resize((img_size, img_size), Image.LANCZOS)
+        pixels = np.asarray(img, dtype=np.float32)
+        dct = fftpack.dct(fftpack.dct(pixels, axis=0), axis=1)
+        dctlowfreq = dct[:hash_size, :hash_size]
+        med = np.median(dctlowfreq)
+        diff = dctlowfreq > med
+        bit_string = ''.join('1' if b else '0' for b in diff.flatten())
+        width = len(bit_string) // 4
+        hash_val = format(int(bit_string, 2), f'0{width}x')
+        return hash_val
+    except Exception as e:
+        logger.error(f"Error computing pHash for {url}: {e}")
+        return None
+def hamming_distance(h1, h2):
+    if h1 is None or h2 is None:
+        return 64  # Assume large distance
+    return bin(int(h1, 16) ^ int(h2, 16)).count('1')
 # --- Validation Logic Functions ---
-
-def check_refurb_seller_approval(data, approved_sellers_ke, approved_sellers_ug, country_code):
-    approved = set(approved_sellers_ke) if country_code == 'KE' else set(approved_sellers_ug)
+def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
+    if country_code == 'KE':
+        approved_sellers = set(approved_sellers_ke)
+    elif country_code == 'UG':
+        approved_sellers = set(approved_sellers_ug)
+    else:
+        return pd.DataFrame(columns=data.columns)
+   
+    if not {'NAME', 'BRAND', 'SELLER_NAME', 'PRODUCT_SET_SID'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+   
+    data = data.copy()
     refurb_words = r'\b(refurb|refurbished|renewed)\b'
-    data_cp = data.copy()
-    data_cp['NAME_LOWER'] = data_cp['NAME'].astype(str).str.lower()
-    data_cp['BRAND_LOWER'] = data_cp['BRAND'].astype(str).str.lower()
-    data_cp['SELLER_LOWER'] = data_cp['SELLER_NAME'].astype(str).str.lower()
-    trigger = data_cp['NAME_LOWER'].str.contains(refurb_words, regex=True, na=False) | (data_cp['BRAND_LOWER'] == 'renewed')
-    flagged = data_cp[trigger & (~data_cp['SELLER_LOWER'].isin(approved))]
+    refurb_brand = 'renewed'
+   
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+    data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
+    data['SELLER_LOWER'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
+   
+    name_match = data['NAME_LOWER'].str.contains(refurb_words, regex=True, na=False)
+    brand_match = data['BRAND_LOWER'] == refurb_brand
+    trigger_mask = name_match | brand_match
+    triggered_data = data[trigger_mask].copy()
+   
+    if triggered_data.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    seller_not_approved_mask = ~triggered_data['SELLER_LOWER'].isin(approved_sellers)
+    flagged = triggered_data[seller_not_approved_mask]
+   
+    columns_to_drop = ['NAME_LOWER', 'BRAND_LOWER', 'SELLER_LOWER']
+    flagged = flagged.drop(columns=[col for col in columns_to_drop if col in flagged.columns])
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_unnecessary_words(data, pattern):
+def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
+    if not {'NAME'}.issubset(data.columns) or pattern is None:
+        return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_product_warranty(data, warranty_category_codes):
-    data_cp = data.copy()
+def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
     for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
-        if col not in data_cp.columns: data_cp[col] = ""
-        data_cp[col] = data_cp[col].astype(str).fillna('').str.strip()
-    data_cp['CAT_CLEAN'] = data_cp['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
-    target = data_cp[data_cp['CAT_CLEAN'].isin([str(c) for c in warranty_category_codes])]
-    if target.empty: return pd.DataFrame(columns=data.columns)
-    def is_missing(s):
-        s = s.astype(str).str.strip().str.lower()
-        return (s == 'nan') | (s == '') | (s == 'none') | (s == 'n/a')
-    mask = is_missing(target['PRODUCT_WARRANTY']) & is_missing(target['WARRANTY_DURATION'])
-    return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_missing_color(data, pattern, color_categories, country_code):
-    data_cp = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
-    if data_cp.empty: return data_cp
-    name_check = data_cp['NAME'].astype(str).str.lower().str.contains(pattern, na=False)
-    color_check = data_cp['COLOR'].astype(str).str.lower().str.contains(pattern, na=False)
-    if country_code == 'KE' and 'COLOR_FAMILY' in data_cp.columns:
-        family_check = data_cp['COLOR_FAMILY'].astype(str).str.lower().str.contains(pattern, na=False)
+        if col not in data.columns:
+            data[col] = ""
+        data[col] = data[col].astype(str).fillna('').str.strip()
+   
+    if not warranty_category_codes:
+        return pd.DataFrame(columns=data.columns)
+   
+    data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+    target_cats = [str(c).strip() for c in warranty_category_codes]
+    target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
+   
+    if target_data.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    def is_present(series):
+        s = series.astype(str).str.strip().str.lower()
+        return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat') & (s != 'n/a')
+   
+    has_product_warranty = is_present(target_data['PRODUCT_WARRANTY'])
+    has_duration = is_present(target_data['WARRANTY_DURATION'])
+    has_any_warranty = has_product_warranty | has_duration
+    mask = ~has_any_warranty
+    flagged = target_data[mask]
+   
+    if 'CAT_CLEAN' in flagged.columns:
+        flagged = flagged.drop(columns=['CAT_CLEAN'])
+   
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str = 'KE') -> pd.DataFrame:
+    req = ['NAME', 'COLOR', 'CATEGORY_CODE']
+    if not set(req).issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+   
+    data = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
+   
+    if data.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    name_check = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    color_check = data['COLOR'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    family_check = pd.Series([False] * len(data), index=data.index)
+   
+    if country_code == 'KE' and 'COLOR_FAMILY' in data.columns:
+        family_check = data['COLOR_FAMILY'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+   
+    if country_code == 'KE':
         mask = ~(name_check | color_check | family_check)
     else:
         mask = ~(name_check | color_check)
-    return data_cp[mask]
-
-def check_brand_in_name(data):
-    mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower() if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
+   
+    return data[mask]
+def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
+    if not {'NAME'}.issubset(data.columns) or pattern is None:
+        return pd.DataFrame(columns=data.columns)
+    mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_single_word_name(data, book_category_codes):
-    non_books = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
-    return non_books[non_books['NAME'].astype(str).str.split().str.len() == 1].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_generic_brand_issues(data, valid_category_codes_fas):
-    return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-# -------------------------------------------------
-# IMPROVED DUPLICATE CHECK (Match Keys & Image ID)
-# -------------------------------------------------
+def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
+    if not {'NAME'}.issubset(data.columns) or pattern is None:
+        return pd.DataFrame(columns=data.columns)
+    mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
+    if not {'BRAND','NAME'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+    mask = data.apply(lambda r: str(r['BRAND']).strip().lower() in str(r['NAME']).strip().lower()
+                     if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
+    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
-    if data.empty: return pd.DataFrame(columns=data.columns)
-    df = data.copy()
-
-    # Improvement 3: Normalization (Match Key)
-    def create_match_key(text):
-        if pd.isna(text): return ""
-        return re.sub(r'[^a-z0-9]', '', str(text).lower())
-
-    df['name_match_key'] = df['NAME'].apply(create_match_key)
+    req_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR']
+    if not all(c in data.columns for c in req_cols):
+        return pd.DataFrame(columns=data.columns)
     
-    # Improvement 2: Image ID Extraction
-    def extract_image_id(url):
-        if pd.isna(url) or str(url).strip() == "": return "none_" + str(hash(url))
-        # Get filename without dynamic parameters
-        return re.sub(r'[^a-z0-9]', '', str(url).split('?')[0].split('/')[-1].lower())
-
-    df['image_id'] = df['MAIN_IMAGE'].apply(extract_image_id)
-
-    # Check duplicates on Normalized Name + Brand + Image Filename
-    # Excluding Seller Name to catch cross-seller duplicates
-    cols_to_check = ['name_match_key', 'BRAND', 'image_id']
-    mask = df.duplicated(subset=cols_to_check, keep=False)
+    data = data.copy()
     
-    duplicates = df[mask].copy()
-    return duplicates.drop(columns=['name_match_key', 'image_id']).drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-# ... (Include other check functions from original here) ...
-
-def check_seller_approved_for_books(data, book_category_codes, approved_book_sellers):
+    # Normalize text columns
+    data['NAME_NORM'] = data['NAME'].apply(normalize_text)
+    data['BRAND_NORM'] = data['BRAND'].apply(normalize_text)
+    data['COLOR_NORM'] = data['COLOR'].apply(normalize_text)
+    data['SELLER_NAME'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
+    
+    norm_cols = ['NAME_NORM', 'BRAND_NORM', 'SELLER_NAME', 'COLOR_NORM']
+    text_dups = data.duplicated(subset=norm_cols, keep=False)
+    
+    # Image pHash
+    if 'MAIN_IMAGE' in data.columns:
+        data['PHASH'] = data['MAIN_IMAGE'].apply(phash_url)
+        hashes = data[['PRODUCT_SET_SID', 'PHASH']].dropna(subset=['PHASH'])
+        if not hashes.empty:
+            dup_sids = set()
+            for a, b in combinations(hashes.itertuples(index=False), 2):
+                dist = hamming_distance(a.PHASH, b.PHASH)
+                if dist < 5:  # Threshold for similarity
+                    dup_sids.add(a.PRODUCT_SET_SID)
+                    dup_sids.add(b.PRODUCT_SET_SID)
+            image_dups = data['PRODUCT_SET_SID'].isin(dup_sids)
+        else:
+            image_dups = pd.Series(False, index=data.index)
+    else:
+        image_dups = pd.Series(False, index=data.index)
+    
+    total_dups = text_dups | image_dups
+    flagged = data[total_dups].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    
+    # Drop temporary columns
+    temp_cols = ['NAME_NORM', 'BRAND_NORM', 'COLOR_NORM', 'PHASH']
+    flagged = flagged.drop(columns=[col for col in temp_cols if col in flagged.columns])
+    
+    return flagged
+def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
+    if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
     books = data[data['CATEGORY_CODE'].isin(book_category_codes)]
+    if books.empty:
+        return pd.DataFrame(columns=data.columns)
     return books[~books['SELLER_NAME'].isin(approved_book_sellers)].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_seller_approved_for_perfume(data, perfume_category_codes, approved_perfume_sellers, sensitive_perfume_brands):
+def check_seller_approved_for_perfume(data: pd.DataFrame, perfume_category_codes: List[str], approved_perfume_sellers: List[str], sensitive_perfume_brands: List[str]) -> pd.DataFrame:
+    if not {'CATEGORY_CODE','SELLER_NAME','BRAND','NAME'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+   
     perfume_data = data[data['CATEGORY_CODE'].isin(perfume_category_codes)].copy()
-    brand_lower = perfume_data['BRAND'].astype(str).str.lower()
-    name_lower = perfume_data['NAME'].astype(str).str.lower()
+    if perfume_data.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    brand_lower = perfume_data['BRAND'].astype(str).str.strip().str.lower()
+    name_lower = perfume_data['NAME'].astype(str).str.strip().str.lower()
+   
     sensitive_mask = brand_lower.isin(sensitive_perfume_brands)
-    fake_brand_mask = brand_lower.isin(['designers collection', 'smart collection', 'generic', 'original', 'fashion'])
+    fake_brands = ['designers collection', 'smart collection', 'generic', 'original', 'fashion']
+    fake_brand_mask = brand_lower.isin(fake_brands)
     name_contains_sensitive = name_lower.apply(lambda x: any(brand in x for brand in sensitive_perfume_brands))
+   
     final_mask = (sensitive_mask | (fake_brand_mask & name_contains_sensitive)) & (~perfume_data['SELLER_NAME'].isin(approved_perfume_sellers))
     return perfume_data[final_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_counterfeit_sneakers(data, sneaker_category_codes, sneaker_sensitive_brands):
+def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[str], sneaker_sensitive_brands: List[str]) -> pd.DataFrame:
+    if not {'CATEGORY_CODE', 'NAME', 'BRAND'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+   
     sneaker_data = data[data['CATEGORY_CODE'].isin(sneaker_category_codes)].copy()
-    brand_lower = sneaker_data['BRAND'].astype(str).str.lower()
-    name_lower = sneaker_data['NAME'].astype(str).str.lower()
+    if sneaker_data.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    brand_lower = sneaker_data['BRAND'].astype(str).str.strip().str.lower()
+    name_lower = sneaker_data['NAME'].astype(str).str.strip().str.lower()
+   
     fake_brand_mask = brand_lower.isin(['generic', 'fashion'])
     name_contains_brand = name_lower.apply(lambda x: any(brand in x for brand in sneaker_sensitive_brands))
+   
     return sneaker_data[fake_brand_mask & name_contains_brand].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_prohibited_products(data, pattern):
-    if not pattern: return pd.DataFrame(columns=data.columns)
-    mask = data['NAME'].astype(str).str.lower().str.contains(pattern, na=False)
-    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_suspected_fake_products(data, suspected_fake_df, fx_rate):
-    # Simplified structure from your original logic
-    return pd.DataFrame(columns=data.columns) 
-
-def check_counterfeit_jerseys(data, jerseys_df):
-    # Simplified structure from your original logic
-    return pd.DataFrame(columns=data.columns)
-
+def check_suspected_fake_products(data: pd.DataFrame, suspected_fake_df: pd.DataFrame, fx_rate: float = 132.0) -> pd.DataFrame:
+    required_cols = ['CATEGORY_CODE', 'BRAND', 'GLOBAL_SALE_PRICE', 'GLOBAL_PRICE']
+    if not all(c in data.columns for c in required_cols) or suspected_fake_df.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    try:
+        ref_data = suspected_fake_df.copy()
+        brand_cols = [col for col in ref_data.columns if col not in ['Unnamed: 0', 'Brand', 'Price'] and pd.notna(col)]
+        brand_category_price = {}
+       
+        for brand in brand_cols:
+            try:
+                price_threshold = pd.to_numeric(ref_data[brand].iloc[0], errors='coerce')
+                if pd.isna(price_threshold) or price_threshold <= 0:
+                    continue
+            except:
+                continue
+           
+            categories = ref_data[brand].iloc[1:].dropna()
+            categories = categories[categories.astype(str).str.strip() != '']
+            brand_lower = brand.strip().lower()
+           
+            for cat in categories:
+                cat_str = str(cat).strip()
+                cat_base = cat_str.split('.')[0]
+                if cat_base and cat_base.lower() != 'nan':
+                    key = (brand_lower, cat_base)
+                    brand_category_price[key] = price_threshold
+       
+        if not brand_category_price:
+            logger.warning("No valid brand-category-price combinations found.")
+            return pd.DataFrame(columns=data.columns)
+       
+        check_data = data.copy()
+        check_data['price_to_use'] = check_data['GLOBAL_SALE_PRICE'].where(
+            (check_data['GLOBAL_SALE_PRICE'].notna()) & (pd.to_numeric(check_data['GLOBAL_SALE_PRICE'], errors='coerce') > 0),
+            check_data['GLOBAL_PRICE']
+        )
+        check_data['price_to_use'] = pd.to_numeric(check_data['price_to_use'], errors='coerce').fillna(0)
+        check_data['price_usd'] = check_data['price_to_use']
+        check_data['BRAND_LOWER'] = check_data['BRAND'].astype(str).str.strip().str.lower()
+        check_data['CAT_BASE'] = check_data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+       
+        def is_suspected_fake(row):
+            key = (row['BRAND_LOWER'], row['CAT_BASE'])
+            if key in brand_category_price:
+                threshold = brand_category_price[key]
+                if row['price_usd'] < threshold:
+                    return True
+            return False
+       
+        check_data['is_fake'] = check_data.apply(is_suspected_fake, axis=1)
+        flagged = check_data[check_data['is_fake'] == True].copy()
+       
+        if not flagged.empty:
+            logger.info(f"Flagged {len(flagged)} suspected fake products")
+       
+        columns_to_drop = ['price_to_use', 'price_usd', 'BRAND_LOWER', 'CAT_BASE', 'is_fake']
+        flagged = flagged.drop(columns=[col for col in columns_to_drop if col in flagged.columns])
+        return flagged[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
+   
+    except Exception as e:
+        logger.error(f"Error in suspected fake product check: {e}")
+        logger.error(traceback.format_exc())
+        return pd.DataFrame(columns=data.columns)
+def check_single_word_name(data: pd.DataFrame, book_category_codes: List[str]) -> pd.DataFrame:
+    if not {'CATEGORY_CODE','NAME'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+    non_books = data[~data['CATEGORY_CODE'].isin(book_category_codes)]
+    return non_books[non_books['NAME'].astype(str).str.split().str.len() == 1].drop_duplicates(subset=['PRODUCT_SET_SID'])
+def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: List[str]) -> pd.DataFrame:
+    if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+    return data[data['CATEGORY_CODE'].isin(valid_category_codes_fas) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
+def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
+    req = ['CATEGORY_CODE', 'NAME', 'SELLER_NAME']
+    if not all(c in data.columns for c in req) or jerseys_df.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    jersey_cats = jerseys_df['Categories'].astype(str).str.replace(r'\.0,', '', regex=True).str.strip().unique().tolist()
+    jersey_cats = [c for c in jersey_cats if c.lower() != 'nan']
+    keywords = [w for w in jerseys_df['Checklist'].astype(str).str.strip().str.lower().unique().tolist() if w and w!='nan']
+    exempt = [s for s in jerseys_df['Exempted'].astype(str).str.strip().unique().tolist() if s and s.lower()!='nan']
+   
+    if not jersey_cats or not keywords:
+        return pd.DataFrame(columns=data.columns)
+   
+    regex = re.compile('|'.join(r'\b' + re.escape(w) + r'\b' for w in keywords), re.IGNORECASE)
+    data['CAT_STR'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+    jerseys = data[data['CAT_STR'].isin(jersey_cats)].copy()
+   
+    if jerseys.empty:
+        return pd.DataFrame(columns=data.columns)
+   
+    target = jerseys[~jerseys['SELLER_NAME'].isin(exempt)].copy()
+    mask = target['NAME'].astype(str).str.strip().str.lower().str.contains(regex, na=False)
+    flagged = target[mask]
+   
+    return flagged.drop(columns=['CAT_STR']).drop_duplicates(subset=['PRODUCT_SET_SID'])
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
 def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None):
     flags_mapping = support_files['flags_mapping']
-    
+   
     validations = [
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
@@ -395,167 +588,548 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {}),
     ]
-    
+   
     progress_bar = st.progress(0)
     status_text = st.empty()
     results = {}
-    
-    # Improved Duplicate Grouping logic for flag propagation
+   
     duplicate_groups = {}
-    data_temp = data.copy()
-    data_temp['key'] = (
-        data_temp['NAME'].str.lower().str.replace(r'[^a-z0-9]', '', regex=True) + 
-        data_temp['BRAND'].astype(str) + 
-        data_temp['MAIN_IMAGE'].astype(str).str.split('?').str[0].str.split('/').str[-1].str.replace(r'[^a-z0-9]', '', regex=True)
-    )
-    dup_map = data_temp.groupby('key')['PRODUCT_SET_SID'].apply(list).to_dict()
-    for sid_list in dup_map.values():
-        if len(sid_list) > 1:
-            for sid in sid_list: duplicate_groups[sid] = sid_list
-    
+    cols_for_dup = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
+    if len(cols_for_dup) == 4:
+        data_temp = data.copy()
+        data_temp['dup_key'] = data_temp[cols_for_dup].apply(
+            lambda r: tuple(str(v).strip().lower() for v in r), axis=1
+        )
+        dup_counts = data_temp.groupby('dup_key')['PRODUCT_SET_SID'].apply(list).to_dict()
+        for dup_key, sid_list in dup_counts.items():
+            if len(sid_list) > 1:
+                for sid in sid_list:
+                    duplicate_groups[sid] = sid_list
+   
     for i, (name, func, kwargs) in enumerate(validations):
-        if country_validator.should_skip_validation(name): continue
-        
-        check_data = data.copy()
-        # Intersection logic for Color and Warranty
-        if name in ["Missing COLOR", "Product Warranty"] and common_sids is not None:
-            check_data = check_data[check_data['PRODUCT_SET_SID'].isin(common_sids)]
-        
-        if check_data.empty:
-            results[name] = pd.DataFrame(columns=data.columns)
-            continue
-            
-        ckwargs = {'data': check_data, **kwargs}
+        if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
+            if name == "Sensitive words":
+                continue
+            if name == "Product Warranty" and country_validator.code == 'UG':
+                continue
+            if name == "Seller Approve to sell books" and country_validator.code == 'UG':
+                continue
+            if name == "Seller Approved to Sell Perfume" and country_validator.code == 'UG':
+                continue
+            if name == "Counterfeit Sneakers" and country_validator.code == 'UG':
+                continue
+            if country_validator.should_skip_validation(name):
+                continue
+       
+        ckwargs = {'data': data, **kwargs}
+       
+        # Custom Logic for 'Product Warranty'
+        if name == "Product Warranty":
+            if not data_has_warranty_cols:
+                continue
+            check_data = data.copy()
+            if common_sids is not None and len(common_sids) > 0:
+                check_data = check_data[check_data['PRODUCT_SET_SID'].isin(common_sids)]
+            if check_data.empty:
+                continue
+            ckwargs = {'data': check_data, **kwargs}
+       
+        # NEW: Custom Logic for 'Missing COLOR' - only check common SKUs
+        elif name == "Missing COLOR":
+            if common_sids is not None and len(common_sids) > 0:
+                check_data = data[data['PRODUCT_SET_SID'].isin(common_sids)].copy()
+                if check_data.empty:
+                    continue
+                ckwargs = {'data': check_data, **kwargs}
+            else:
+                # Single file upload - skip color check
+                continue
+       
         status_text.text(f"Running: {name}")
-        
+       
         if name == "Generic BRAND Issues":
             fas = support_files.get('category_fas', pd.DataFrame())
-            ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty else []
+            ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
-        
+       
         try:
             res = func(**ckwargs)
-            if name != "Duplicate product" and not res.empty:
-                flagged = set(res['PRODUCT_SET_SID'].unique())
-                expanded = set()
-                for sid in flagged: expanded.update(duplicate_groups.get(sid, [sid]))
-                res = data[data['PRODUCT_SET_SID'].isin(expanded)].copy()
-            results[name] = res
-        except: results[name] = pd.DataFrame(columns=data.columns)
-        
+            if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
+                flagged_sids = set(res['PRODUCT_SET_SID'].unique())
+                expanded_sids = set()
+                for sid in flagged_sids:
+                    if sid in duplicate_groups:
+                        expanded_sids.update(duplicate_groups[sid])
+                    else:
+                        expanded_sids.add(sid)
+                res = data[data['PRODUCT_SET_SID'].isin(expanded_sids)].copy()
+           
+            results[name] = res if not res.empty else pd.DataFrame(columns=data.columns)
+        except Exception as e:
+            logger.error(f"Error in {name}: {e}\n{traceback.format_exc()}")
+            results[name] = pd.DataFrame(columns=data.columns)
+       
         progress_bar.progress((i + 1) / len(validations))
-    
+   
+    status_text.text("Finalizing...")
     rows = []
     processed = set()
+   
     for name, _, _ in validations:
-        res = results.get(name, pd.DataFrame())
-        if res.empty: continue
-        reason_info = flags_mapping.get(name, ("1000007", f"Flagged by {name}"))
-        for _, r in res.iterrows():
+        if name not in results or results[name].empty:
+            continue
+        res = results[name]
+        if 'PRODUCT_SET_SID' not in res.columns:
+            continue
+       
+        map_name = name
+        if name == "Seller Not approved to sell Refurb":
+            reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
+        else:
+            reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+       
+        flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
+       
+        for _, r in flagged.iterrows():
             sid = r['PRODUCT_SET_SID']
-            if sid not in processed:
-                processed.add(sid)
-                rows.append({
-                    'ProductSetSid': sid, 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Rejected',
-                    'Reason': reason_info[0], 'Comment': reason_info[1], 'FLAG': name, 'SellerName': r.get('SELLER_NAME', '')
-                })
-    
+            if sid in processed:
+                continue
+            processed.add(sid)
+            rows.append({
+                'ProductSetSid': sid,
+                'ParentSKU': r.get('PARENTSKU', ''),
+                'Status': 'Rejected',
+                'Reason': reason_info[0],
+                'Comment': reason_info[1],
+                'FLAG': name,
+                'SellerName': r.get('SELLER_NAME', '')
+            })
+   
     approved = data[~data['PRODUCT_SET_SID'].isin(processed)]
     for _, r in approved.iterrows():
-        rows.append({
-            'ProductSetSid': r['PRODUCT_SET_SID'], 'ParentSKU': r.get('PARENTSKU', ''), 'Status': 'Approved',
-            'Reason': "", 'Comment': "", 'FLAG': "", 'SellerName': r.get('SELLER_NAME', '')
-        })
-    
+        if r['PRODUCT_SET_SID'] not in processed:
+            rows.append({
+                'ProductSetSid': r['PRODUCT_SET_SID'],
+                'ParentSKU': r.get('PARENTSKU', ''),
+                'Status': 'Approved',
+                'Reason': "",
+                'Comment': "",
+                'FLAG': "",
+                'SellerName': r.get('SELLER_NAME', '')
+            })
+            processed.add(r['PRODUCT_SET_SID'])
+   
     progress_bar.empty()
     status_text.empty()
     return country_validator.ensure_status_column(pd.DataFrame(rows)), results
-
 # -------------------------------------------------
-# Exports
+# Export Logic
 # -------------------------------------------------
 def to_excel_base(df, sheet, cols, writer):
     df_p = df.copy()
     for c in cols:
-        if c not in df_p.columns: df_p[c] = pd.NA
+        if c not in df_p.columns:
+            df_p[c] = pd.NA
     df_p[[c for c in cols if c in df_p.columns]].to_excel(writer, index=False, sheet_name=sheet)
-
 def to_excel_full_data(data_df, final_report_df):
-    output = BytesIO()
-    merged = pd.merge(data_df, final_report_df[["ProductSetSid", "Status", "Reason", "Comment", "FLAG"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        to_excel_base(merged, "ProductSets", FULL_DATA_COLS + ["Status", "Reason", "Comment", "FLAG"], writer)
-    return output.getvalue()
-
-def to_excel(report_df, reasons):
+    try:
+        output = BytesIO()
+        d_cp = data_df.copy()
+        r_cp = final_report_df.copy()
+        d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
+        r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
+       
+        merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
+                         left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
+       
+        if 'ProductSetSid_y' in merged.columns:
+            merged.drop(columns=['ProductSetSid_y'], inplace=True)
+        if 'ProductSetSid_x' in merged.columns:
+            merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
+       
+        export_cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
+       
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            to_excel_base(merged, "ProductSets", export_cols, writer)
+           
+            wb = writer.book
+            ws = wb.add_worksheet('Sellers Data')
+            fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
+           
+            if 'SELLER_RATING' in merged.columns:
+                merged['Rejected_Count'] = (merged['Status'] == 'Rejected').astype(int)
+                merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
+                summ = merged.groupby('SELLER_NAME').agg(
+                    Rejected=('Rejected_Count', 'sum'),
+                    Approved=('Approved_Count', 'sum'),
+                    AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()),
+                    TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
+                ).reset_index().sort_values('Rejected', ascending=False)
+                summ.insert(0, 'Rank', range(1, len(summ) + 1))
+                ws.write(0, 0, "Sellers Summary", fmt)
+                summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
+                row_cursor = len(summ) + 4
+            else:
+                row_cursor = 1
+           
+            if 'CATEGORY' in merged.columns:
+                cat_summ = merged[merged['Status']=='Rejected'].groupby('CATEGORY').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
+                cat_summ.insert(0, 'Rank', range(1, len(cat_summ) + 1))
+                ws.write(row_cursor, 0, "Categories Summary", fmt)
+                cat_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
+                row_cursor += len(cat_summ) + 4
+           
+            if 'Reason' in merged.columns:
+                rsn_summ = merged[merged['Status']=='Rejected'].groupby('Reason').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
+                rsn_summ.insert(0, 'Rank', range(1, len(rsn_summ) + 1))
+                ws.write(row_cursor, 0, "Rejection Reasons Summary", fmt)
+                rsn_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
+       
+        output.seek(0)
+        return output
+    except Exception:
+        return BytesIO()
+def to_excel(report_df, reasons_config_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         to_excel_base(report_df, "ProductSets", PRODUCTSETS_COLS, writer)
-    return output.getvalue()
-
-def to_excel_flag_data(df, name):
+        if not reasons_config_df.empty:
+            to_excel_base(reasons_config_df, "RejectionReasons", REJECTION_REASONS_COLS, writer)
+    output.seek(0)
+    return output
+def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
+    df_copy = flag_df.copy()
+    df_copy['FLAG'] = flag_name
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        to_excel_base(df, "ProductSets", FULL_DATA_COLS, writer)
-    return output.getvalue()
-
+        to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
+    output.seek(0)
+    return output
+def log_validation_run(country, file, total, app, rej):
+    try:
+        entry = {'timestamp': datetime.now().isoformat(), 'country': country, 'file': file, 'total': total, 'approved': app, 'rejected': rej}
+        with open('validation_audit.jsonl', 'a') as f:
+            f.write(json.dumps(entry)+'\n')
+    except:
+        pass
 # -------------------------------------------------
-# Main UI
+# UI
 # -------------------------------------------------
 st.title("Product Validation Tool")
 st.markdown("---")
-support_files = load_all_support_files()
+with st.spinner("Loading configuration files..."):
+    support_files = load_all_support_files()
+if not support_files['flags_mapping']:
+    st.error("Critical: flags.xlsx could not be loaded.")
+    st.stop()
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
-
+# -------------------------------------------------
+# TAB 1: DAILY VALIDATION
+# -------------------------------------------------
 with tab1:
     st.header("Daily Product Validation")
-    country = st.selectbox("Select Country", ["Kenya", "Uganda"])
-    cv = CountryValidator(country)
-    uploaded_files = st.file_uploader("Upload files", accept_multiple_files=True, type=['csv', 'xlsx'])
-    
+    country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
+    country_validator = CountryValidator(country)
+   
+    uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
+   
     if uploaded_files:
-        all_dfs = []
-        sid_sets = []
-        for f in uploaded_files:
-            try:
-                if f.name.endswith('.xlsx'):
-                    df = pd.read_excel(f, engine='openpyxl', dtype=str)
-                else:
-                    f.seek(0)
-                    try:
-                        df = pd.read_csv(f, sep=';', encoding='ISO-8859-1', dtype=str)
-                        if len(df.columns) <= 1: raise ValueError
-                    except:
-                        f.seek(0)
-                        df = pd.read_csv(f, sep=',', encoding='ISO-8859-1', dtype=str)
-                std = standardize_input_data(df)
-                all_dfs.append(std)
-                sid_sets.append(set(std['PRODUCT_SET_SID'].unique()))
-            except: st.error(f"Error reading {f.name}")
-        
-        if all_dfs:
-            merged = pd.concat(all_dfs).drop_duplicates('PRODUCT_SET_SID')
-            merged = filter_by_country(merged, cv, "Uploads")
-            merged = propagate_metadata(merged)
-            intersection = set.intersection(*sid_sets) if len(sid_sets) > 1 else None
-            
-            report, flag_dfs = validate_products(merged, support_files, cv, True, intersection)
-            
-            st.metric("Total", len(merged))
-            st.subheader("Results by Flag")
-            for flag, f_df in flag_dfs.items():
-                with st.expander(f"{flag} ({len(f_df)})"):
-                    st.dataframe(f_df)
-                    st.download_button(f"Export {flag}", to_excel_flag_data(f_df, flag), f"{flag}.xlsx", key=flag)
-            
-            st.markdown("---")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.download_button("Final Report", to_excel(report, None), "Report.xlsx")
-            c4.download_button("Full Data", to_excel_full_data(merged, report), "FullData.xlsx")
-
+        try:
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            file_prefix = country_validator.code
+            all_dfs = []
+            file_sids_sets = []
+           
+            for uploaded_file in uploaded_files:
+                try:
+                    if uploaded_file.name.endswith('.xlsx'):
+                        raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                    else:
+                        try:
+                            raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                            if len(raw_data.columns) <= 1:
+                                uploaded_file.seek(0)
+                                raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                        except:
+                            uploaded_file.seek(0)
+                            raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                   
+                    std_data = standardize_input_data(raw_data)
+                    if 'PRODUCT_SET_SID' in std_data.columns:
+                        file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
+                    all_dfs.append(std_data)
+                except Exception as e:
+                    st.error(f"Failed to read file {uploaded_file.name}: {e}")
+                    st.stop()
+           
+            if not all_dfs:
+                st.error("No valid data loaded.")
+                st.stop()
+           
+            merged_data = pd.concat(all_dfs, ignore_index=True)
+            st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
+           
+            intersection_count = 0
+            intersection_sids = set()
+            if len(file_sids_sets) > 1:
+                intersection_sids = set.intersection(*file_sids_sets)
+                intersection_count = len(intersection_sids)
+           
+            data_prop = propagate_metadata(merged_data)
+            is_valid, errors = validate_input_schema(data_prop)
+           
+            if is_valid:
+                data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
+                data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+               
+                data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
+               
+                for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
+                    if col in data.columns:
+                        data[col] = data[col].astype(str).fillna('')
+               
+                if 'COLOR_FAMILY' not in data.columns:
+                    data['COLOR_FAMILY'] = ""
+               
+                with st.spinner("Running validations..."):
+                    common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                    final_report, flag_dfs = validate_products(
+                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
+                    )
+               
+                approved_df = final_report[final_report['Status'] == 'Approved']
+                rejected_df = final_report[final_report['Status'] == 'Rejected']
+               
+                log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+               
+                st.sidebar.header("Seller Options")
+                seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
+                sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
+               
+                filt_data = data.copy()
+                filt_report = final_report.copy()
+                lbl = "All_Sellers"
+               
+                if 'All Sellers' not in sel_sellers and sel_sellers:
+                    filt_data = data[data['SELLER_NAME'].isin(sel_sellers)]
+                    filt_report = final_report[final_report['ProductSetSid'].isin(filt_data['PRODUCT_SET_SID'])]
+                    lbl = "Selected_Sellers"
+               
+                filt_rej = filt_report[filt_report['Status']=='Rejected']
+                filt_app = filt_report[filt_report['Status']=='Approved']
+               
+                st.markdown("---")
+                st.header("Overall Results")
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Total", len(data))
+                c2.metric("Approved", len(approved_df))
+                c3.metric("Rejected", len(rejected_df))
+                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+                c4.metric("Rate", f"{rt:.1f}%")
+                c5.metric("SKUs in Both Files", intersection_count)
+               
+                if intersection_count > 0:
+                    common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
+                    csv_buffer = BytesIO()
+                    common_skus_df.to_csv(csv_buffer, index=False)
+                    st.download_button(
+                        label=f"📥 Download Common SKUs ({intersection_count})",
+                        data=csv_buffer.getvalue(),
+                        file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv",
+                        mime="text/csv",
+                    )
+               
+                st.subheader("Validation Results by Flag")
+                display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
+                for title, df_flagged in flag_dfs.items():
+                    with st.expander(f"{title} ({len(df_flagged)})"):
+                        if not df_flagged.empty:
+                            df_display = df_flagged[display_cols].copy()
+                            st.dataframe(df_display)
+                            st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
+                        else:
+                            st.success("No issues found.")
+               
+                st.markdown("---")
+                st.header("Overall Exports")
+                c1, c2, c3, c4 = st.columns(4)
+                c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
+                c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
+                c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
+                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
+            else:
+                for e in errors:
+                    st.error(e)
+        except Exception as e:
+            st.error(f"Error: {e}")
+            st.code(traceback.format_exc())
+# -------------------------------------------------
+# TAB 2: WEEKLY ANALYSIS
+# -------------------------------------------------
 with tab2:
-    st.info("Analysis dashboard - logic as per original.")
-
+    st.header("Weekly Analysis Dashboard")
+    st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
+    weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files")
+   
+    if weekly_files:
+        combined_df = pd.DataFrame()
+        with st.spinner("Aggregating files..."):
+            for f in weekly_files:
+                try:
+                    if f.name.endswith('.xlsx'):
+                        try:
+                            df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
+                        except:
+                            f.seek(0)
+                            df = pd.read_excel(f, engine='openpyxl', dtype=str)
+                    else:
+                        df = pd.read_csv(f, dtype=str)
+                   
+                    df.columns = df.columns.str.strip()
+                    df = standardize_input_data(df)
+                   
+                    required_weekly_cols = ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']
+                    for col in required_weekly_cols:
+                        if col not in df.columns:
+                            df[col] = pd.NA
+                   
+                    combined_df = pd.concat([combined_df, df], ignore_index=True)
+                except Exception as e:
+                    st.error(f"Error reading {f.name}: {e}")
+       
+        if not combined_df.empty:
+            combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
+            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
+           
+            st.markdown("### Key Metrics")
+            m1, m2, m3, m4 = st.columns(4)
+            total = len(combined_df)
+            rej_count = len(rejected)
+            rej_rate = (rej_count/total * 100) if total else 0
+            m1.metric("Total Products Checked", f"{total:,}")
+            m2.metric("Total Rejected", f"{rej_count:,}")
+            m3.metric("Rejection Rate", f"{rej_rate:.1f}%")
+            m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
+           
+            st.markdown("---")
+            c1, c2 = st.columns(2)
+           
+            with c1:
+                st.subheader("Top Rejection Reasons (Flags)")
+                if not rejected.empty and 'FLAG' in rejected.columns:
+                    reason_counts = rejected['FLAG'].value_counts().reset_index()
+                    reason_counts.columns = ['Flag', 'Count']
+                    chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Count', title='Number of Products'),
+                        y=alt.Y('Flag', sort='-x', title=None),
+                        color=alt.value('#FF6B6B'),
+                        tooltip=['Flag', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+           
+            with c2:
+                st.subheader("Top Rejected Categories")
+                if not rejected.empty and 'CATEGORY' in rejected.columns:
+                    cat_counts = rejected['CATEGORY'].value_counts().reset_index()
+                    cat_counts.columns = ['Category', 'Count']
+                    chart = alt.Chart(cat_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Count', title='Number of Rejections'),
+                        y=alt.Y('Category', sort='-x', title=None),
+                        color=alt.value('#4ECDC4'),
+                        tooltip=['Category', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+           
+            c3, c4 = st.columns(2)
+           
+            with c3:
+                st.subheader("Top 10 Rejected Sellers")
+                if not rejected.empty and 'SELLER_NAME' in rejected.columns:
+                    seller_counts = rejected['SELLER_NAME'].value_counts().reset_index()
+                    seller_counts.columns = ['Seller', 'Count']
+                    chart = alt.Chart(seller_counts.head(10)).mark_bar().encode(
+                        x=alt.X('Seller', sort='-y', axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y('Count', title='Rejections'),
+                        color=alt.value('#FFE66D'),
+                        tooltip=['Seller', 'Count']
+                    ).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+           
+            with c4:
+                st.subheader("Seller vs. Reason Breakdown (Top 5)")
+                if not rejected.empty and 'SELLER_NAME' in rejected.columns and 'Reason' in rejected.columns:
+                    top_sellers = rejected['SELLER_NAME'].value_counts().head(5).index.tolist()
+                    filtered_rej = rejected[rejected['SELLER_NAME'].isin(top_sellers)]
+                    if not filtered_rej.empty:
+                        breakdown = filtered_rej.groupby(['SELLER_NAME', 'Reason']).size().reset_index(name='Count')
+                        chart = alt.Chart(breakdown).mark_bar().encode(
+                            x=alt.X('SELLER_NAME', title='Seller'),
+                            y=alt.Y('Count', title='Count'),
+                            color=alt.Color('Reason', legend=alt.Legend(title="Rejection Reason", orient="bottom")),
+                            tooltip=['SELLER_NAME', 'Reason', 'Count']
+                        ).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+           
+            st.markdown("---")
+            st.subheader("Top 5 Summaries")
+           
+            if not rejected.empty:
+                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index()
+                top_reasons.columns = ['Flag', 'Count']
+                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
+                top_sellers.columns = ['Seller', 'Rejection Count']
+                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
+                top_cats.columns = ['Category', 'Rejection Count']
+               
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    st.markdown("**Top 5 Reasons (Flags)**")
+                    st.dataframe(top_reasons, hide_index=True, use_container_width=True)
+                with c2:
+                    st.markdown("**Top 5 Sellers**")
+                    st.dataframe(top_sellers, hide_index=True, use_container_width=True)
+                with c3:
+                    st.markdown("**Top 5 Categories**")
+                    st.dataframe(top_cats, hide_index=True, use_container_width=True)
+               
+                summary_excel = BytesIO()
+                with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
+                    pd.DataFrame([
+                        {'Metric': 'Total Rejected SKUs', 'Value': len(rejected)},
+                        {'Metric': 'Total Products Checked', 'Value': len(combined_df)},
+                        {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}
+                    ]).to_excel(writer, sheet_name='Summary', index=False)
+                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
+                    top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
+                    top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
+                    workbook = writer.book
+                    for sheet in writer.sheets.values():
+                        sheet.set_column(0, 1, 25)
+                summary_excel.seek(0)
+                st.download_button(
+                    label="📥 Download Summary Excel",
+                    data=summary_excel,
+                    file_name=f"Weekly_Analysis_Summary_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+# -------------------------------------------------
+# TAB 3: DATA LAKE
+# -------------------------------------------------
 with tab3:
-    st.info("Data Lake Audit.")
+    st.header("Data Lake Audit")
+    file = st.file_uploader("Upload audit file", type=['jsonl','csv','xlsx'], key="audit_file")
+   
+    if file:
+        if file.name.endswith('.jsonl'):
+            df = pd.read_json(file, lines=True)
+        elif file.name.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+        st.dataframe(df.head(50))
+    else:
+        try:
+            st.dataframe(pd.read_json('validation_audit.jsonl', lines=True).tail(50))
+        except:
+            st.info("No audit log found.")
