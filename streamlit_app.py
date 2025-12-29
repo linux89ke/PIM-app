@@ -9,12 +9,6 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
-import requests
-import hashlib
-from PIL import Image
-import numpy as np
-from scipy import fftpack
-from itertools import combinations
 # -------------------------------------------------
 # Logging Configuration
 # -------------------------------------------------
@@ -248,32 +242,6 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     for col in cols_to_propagate:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
     return df
-def normalize_text(text):
-    return re.sub(r'[^a-z0-9]', '', str(text).lower().strip())
-def phash_url(url, hash_size=8, highfreq_factor=4):
-    try:
-        resp = requests.get(url, timeout=5)
-        if resp.status_code != 200:
-            return None
-        img = Image.open(BytesIO(resp.content))
-        img_size = hash_size * highfreq_factor
-        img = img.convert("L").resize((img_size, img_size), Image.LANCZOS)
-        pixels = np.asarray(img, dtype=np.float32)
-        dct = fftpack.dct(fftpack.dct(pixels, axis=0), axis=1)
-        dctlowfreq = dct[:hash_size, :hash_size]
-        med = np.median(dctlowfreq)
-        diff = dctlowfreq > med
-        bit_string = ''.join('1' if b else '0' for b in diff.flatten())
-        width = len(bit_string) // 4
-        hash_val = format(int(bit_string, 2), f'0{width}x')
-        return hash_val
-    except Exception as e:
-        logger.error(f"Error computing pHash for {url}: {e}")
-        return None
-def hamming_distance(h1, h2):
-    if h1 is None or h2 is None:
-        return 64  # Assume large distance
-    return bin(int(h1, 16) ^ int(h2, 16)).count('1')
 # --- Validation Logic Functions ---
 def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
     if country_code == 'KE':
@@ -383,46 +351,10 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                      if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
-    req_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR']
-    if not all(c in data.columns for c in req_cols):
+    cols = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
+    if len(cols) < 4:
         return pd.DataFrame(columns=data.columns)
-    
-    data = data.copy()
-    
-    # Normalize text columns
-    data['NAME_NORM'] = data['NAME'].apply(normalize_text)
-    data['BRAND_NORM'] = data['BRAND'].apply(normalize_text)
-    data['COLOR_NORM'] = data['COLOR'].apply(normalize_text)
-    data['SELLER_NAME'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
-    
-    norm_cols = ['NAME_NORM', 'BRAND_NORM', 'SELLER_NAME', 'COLOR_NORM']
-    text_dups = data.duplicated(subset=norm_cols, keep=False)
-    
-    # Image pHash
-    if 'MAIN_IMAGE' in data.columns:
-        data['PHASH'] = data['MAIN_IMAGE'].apply(phash_url)
-        hashes = data[['PRODUCT_SET_SID', 'PHASH']].dropna(subset=['PHASH'])
-        if not hashes.empty:
-            dup_sids = set()
-            for a, b in combinations(hashes.itertuples(index=False), 2):
-                dist = hamming_distance(a.PHASH, b.PHASH)
-                if dist < 5:  # Threshold for similarity
-                    dup_sids.add(a.PRODUCT_SET_SID)
-                    dup_sids.add(b.PRODUCT_SET_SID)
-            image_dups = data['PRODUCT_SET_SID'].isin(dup_sids)
-        else:
-            image_dups = pd.Series(False, index=data.index)
-    else:
-        image_dups = pd.Series(False, index=data.index)
-    
-    total_dups = text_dups | image_dups
-    flagged = data[total_dups].drop_duplicates(subset=['PRODUCT_SET_SID'])
-    
-    # Drop temporary columns
-    temp_cols = ['NAME_NORM', 'BRAND_NORM', 'COLOR_NORM', 'PHASH']
-    flagged = flagged.drop(columns=[col for col in temp_cols if col in flagged.columns])
-    
-    return flagged
+    return data[data.duplicated(subset=cols, keep=False)].drop_duplicates(subset=['PRODUCT_SET_SID'])
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
