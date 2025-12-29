@@ -503,7 +503,7 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     if not all(c in data.columns for c in req) or jerseys_df.empty:
         return pd.DataFrame(columns=data.columns)
     
-    jersey_cats = jerseys_df['Categories'].astype(str).str.replace(r'\.0, '', regex=True).str.strip().unique().tolist()
+    jersey_cats = jerseys_df['Categories'].astype(str).str.replace(r'\.0,', '', regex=True).str.strip().unique().tolist()
     jersey_cats = [c for c in jersey_cats if c.lower() != 'nan']
     keywords = [w for w in jerseys_df['Checklist'].astype(str).str.strip().str.lower().unique().tolist() if w and w!='nan']
     exempt = [s for s in jerseys_df['Exempted'].astype(str).str.strip().unique().tolist() if s and s.lower()!='nan']
