@@ -1,3 +1,6 @@
+Hazel
+Multicolored
+Woody
 clear
 plastic
 navy
@@ -357,4 +360,5 @@ peach
 nude
 cream 
 beige
+
 
