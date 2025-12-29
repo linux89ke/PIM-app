@@ -873,10 +873,12 @@ with tab1:
                     )
                
                 st.subheader("Validation Results by Flag")
+                display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
                 for title, df_flagged in flag_dfs.items():
                     with st.expander(f"{title} ({len(df_flagged)})"):
                         if not df_flagged.empty:
-                            st.dataframe(df_flagged)
+                            df_display = df_flagged[display_cols].copy()
+                            st.dataframe(df_display)
                             st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
                         else:
                             st.success("No issues found.")
