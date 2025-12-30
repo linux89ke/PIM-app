@@ -9,6 +9,15 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
+import requests
+from difflib import SequenceMatcher
+
+# We keep these imports to avoid breaking the script structure
+try:
+    import imagehash
+    from PIL import Image
+except ImportError:
+    pass 
 
 # -------------------------------------------------
 # Logging Configuration
@@ -57,6 +66,93 @@ NEW_FILE_MAPPING = {
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE'
 }
+
+# -------------------------------------------------
+# ENHANCED DUPLICATE DETECTION UTILITIES
+# -------------------------------------------------
+
+def normalize_text(text: str) -> str:
+    """Normalize text by removing special characters, extra spaces, and converting to lowercase."""
+    if pd.isna(text):
+        return ""
+    text = str(text).lower().strip()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', '', text)
+    return text
+
+def calculate_text_similarity(text1: str, text2: str) -> float:
+    return SequenceMatcher(None, text1, text2).ratio()
+
+def create_match_key(row: pd.Series) -> str:
+    name = normalize_text(row.get('NAME', ''))
+    brand = normalize_text(row.get('BRAND', ''))
+    color = normalize_text(row.get('COLOR', ''))
+    return f"{brand}|{name}|{color}"
+
+def check_duplicate_products_enhanced(
+    data: pd.DataFrame,
+    use_image_hash: bool = False, 
+    similarity_threshold: float = 0.85,
+    max_images_to_hash: int = 0
+) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    
+    required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
+    if not all(col in data.columns for col in required_cols):
+        return pd.DataFrame(columns=data.columns), {}
+    
+    data_copy = data.copy()
+    
+    # Strategy 1: Normalized Text Matching (Fast & Exact)
+    data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
+    normalized_duplicates = data_copy[
+        data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
+    ]['PRODUCT_SET_SID'].tolist()
+    
+    # Strategy 2: Image Hash Matching (DISABLED)
+    image_duplicates = []
+    
+    # Strategy 3: Fuzzy Text Matching (Complexity Limited)
+    fuzzy_duplicates = []
+    
+    # Safety: Only run fuzzy match on sellers with fewer than 200 items
+    SAFE_GROUP_SIZE = 200 
+    
+    grouped = data_copy.groupby('SELLER_NAME')
+    
+    for seller, group in grouped:
+        if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
+            continue
+            
+        products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
+        
+        for i, prod1 in enumerate(products):
+            for prod2 in products[i+1:]:
+                # Optimization: Must match brand exactly first
+                if normalize_text(prod1['BRAND']) != normalize_text(prod2['BRAND']):
+                    continue
+                
+                name_sim = calculate_text_similarity(
+                    normalize_text(prod1['NAME']),
+                    normalize_text(prod2['NAME'])
+                )
+                
+                if (name_sim >= similarity_threshold and
+                    normalize_text(prod1['COLOR']) == normalize_text(prod2['COLOR'])):
+                    fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
+    
+    all_duplicate_sids = set(normalized_duplicates + image_duplicates + fuzzy_duplicates)
+    result = data_copy[data_copy['PRODUCT_SET_SID'].isin(all_duplicate_sids)].copy()
+    
+    if 'match_key' in result.columns: result = result.drop(columns=['match_key'])
+    if 'image_hash' in result.columns: result = result.drop(columns=['image_hash'])
+    
+    stats = {
+        'normalized': len(normalized_duplicates),
+        'image_hash': len(image_duplicates),
+        'fuzzy': len(fuzzy_duplicates),
+        'total': len(all_duplicate_sids)
+    }
+    return result[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID']), stats
 
 # -------------------------------------------------
 # CACHED FILE LOADING
@@ -173,6 +269,8 @@ def load_all_support_files() -> Dict:
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
+        # Support for Exempt Duplicate Categories
+        'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
     }
     return files
 
@@ -330,7 +428,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str) -> pd.DataFrame:
-    # Use the logic that matches the row-by-row check to ensure it doesn't return 0 falsely
+    # Restored original Row-by-Row Logic
     required = ['CATEGORY_CODE', 'NAME']
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
@@ -374,11 +472,29 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                       if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
-    cols = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
-    if len(cols) < 4:
+def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85, exempt_categories: List[str] = None) -> pd.DataFrame:
+    
+    # Filter out Exempt Categories (Fashion, etc) BEFORE checking
+    data_to_check = data.copy()
+    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
+        # Normalize category codes to string for comparison
+        data_to_check = data_to_check[~data_to_check['CATEGORY_CODE'].astype(str).str.strip().isin(exempt_categories)]
+
+    if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
-    return data[data.duplicated(subset=cols, keep=False)].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
+    # FORCE USE_IMAGE_HASH TO FALSE for performance
+    result, stats = check_duplicate_products_enhanced(
+        data_to_check,
+        use_image_hash=False,
+        similarity_threshold=similarity_threshold,
+        max_images_to_hash=0
+    )
+    
+    if 'duplicate_stats' not in st.session_state:
+        st.session_state.duplicate_stats = {}
+    st.session_state.duplicate_stats = stats
+    return result
 
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
@@ -547,7 +663,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        ("Duplicate product", check_duplicate_products, {}),
+        ("Duplicate product", check_duplicate_products, {'exempt_categories': support_files.get('duplicate_exempt_codes', [])}),
     ]
     
     progress_bar = st.progress(0)
@@ -588,13 +704,14 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if check_data.empty: continue
             ckwargs = {'data': check_data, **kwargs}
         
-        # Custom Logic for 'Missing COLOR' - only check common SKUs if intersection exists
+        # Custom Logic for 'Missing COLOR'
         elif name == "Missing COLOR":
             if common_sids is not None and len(common_sids) > 0:
+                # Multiple files: Restrict to intersection
                 check_data = data[data['PRODUCT_SET_SID'].isin(common_sids)].copy()
                 if check_data.empty: continue
                 ckwargs = {'data': check_data, **kwargs}
-            # ELSE clause removed: If single file (common_sids is None), run on ALL data.
+            # Else (Single file): Run on full data (default)
         
         status_text.text(f"Running: {name}")
         
@@ -635,7 +752,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        reason_info = flags_mapping.get(name, ("1000007", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
