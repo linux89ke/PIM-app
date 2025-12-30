@@ -79,7 +79,21 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'\s+', '', text)      # Remove all whitespace
     
     return text
+def check_refurb_seller_approval(data, approved_sellers_ke, approved_sellers_ug, country_code):
+    # Add your logic here
+    return pd.DataFrame(columns=data.columns)
 
+def check_missing_color(data, pattern, color_categories, country_code):
+    # Add your logic here
+    return pd.DataFrame(columns=data.columns)
+
+def check_unnecessary_words(data, pattern):
+    # Add your logic here
+    return pd.DataFrame(columns=data.columns)
+
+def check_product_warranty(data, warranty_category_codes):
+    # Add your logic here
+    return pd.DataFrame(columns=data.columns)
 
 def get_image_hash(image_url: str, timeout: int = 5) -> str:
     """
