@@ -63,7 +63,7 @@ NEW_FILE_MAPPING = {
 }
 
 # -------------------------------------------------
-# ENHANCED DUPLICATE DETECTION UTILITIES
+# ENHANCED DUPLICATE DETECTION UTILITIES (OPTIMIZED)
 # -------------------------------------------------
 
 def normalize_text(text: str) -> str:
@@ -75,7 +75,7 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'\s+', '', text)
     return text
 
-def get_image_hash(image_url: str, timeout: int = 5) -> str:
+def get_image_hash(image_url: str, timeout: int = 3) -> str:
     """Download and compute perceptual hash of an image."""
     try:
         response = requests.get(image_url, timeout=timeout, stream=True)
@@ -100,7 +100,7 @@ def check_duplicate_products_enhanced(
     data: pd.DataFrame,
     use_image_hash: bool = True,
     similarity_threshold: float = 0.85,
-    max_images_to_hash: int = 1000
+    max_images_to_hash: int = 20  # Reduced to 20 to prevent freezing
 ) -> Tuple[pd.DataFrame, Dict[str, int]]:
     
     required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
@@ -109,20 +109,26 @@ def check_duplicate_products_enhanced(
     
     data_copy = data.copy()
     
-    # Strategy 1: Normalized Text Matching
+    # Strategy 1: Normalized Text Matching (Fast)
     data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
     normalized_duplicates = data_copy[
         data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
     ]['PRODUCT_SET_SID'].tolist()
     
-    # Strategy 2: Image Hash Matching
+    # Strategy 2: Image Hash Matching (Internet Limited)
     image_duplicates = []
     if use_image_hash and 'MAIN_IMAGE' in data_copy.columns:
+        # Only process a small subset to prevent timeout
         images_to_process = data_copy[data_copy['MAIN_IMAGE'].notna()].head(max_images_to_hash)
+        
         if len(images_to_process) > 0:
+            status_placeholder = st.empty()
+            status_placeholder.caption(f"Checking {len(images_to_process)} images for duplicates...")
+            
             images_to_process['image_hash'] = images_to_process['MAIN_IMAGE'].apply(
                 lambda url: get_image_hash(url) if pd.notna(url) else ""
             )
+            
             hash_groups = images_to_process[
                 images_to_process['image_hash'] != ""
             ].groupby(['image_hash', 'SELLER_NAME'])['PRODUCT_SET_SID'].apply(list)
@@ -130,20 +136,35 @@ def check_duplicate_products_enhanced(
             for sids in hash_groups:
                 if len(sids) > 1:
                     image_duplicates.extend(sids)
-    
-    # Strategy 3: Fuzzy Text Matching
+            status_placeholder.empty()
+
+    # Strategy 3: Fuzzy Text Matching (Complexity Limited)
     fuzzy_duplicates = []
-    for seller, group in data_copy.groupby('SELLER_NAME'):
-        if len(group) < 2: continue
+    
+    # Safety: Only run fuzzy match on sellers with fewer than 200 items
+    # to avoid N^2 complexity freezing the app
+    SAFE_GROUP_SIZE = 200 
+    
+    grouped = data_copy.groupby('SELLER_NAME')
+    
+    for seller, group in grouped:
+        if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
+            continue
+            
         products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
+        
         for i, prod1 in enumerate(products):
             for prod2 in products[i+1:]:
+                # Optimization: Must match brand exactly first
+                if normalize_text(prod1['BRAND']) != normalize_text(prod2['BRAND']):
+                    continue
+                
                 name_sim = calculate_text_similarity(
                     normalize_text(prod1['NAME']),
                     normalize_text(prod2['NAME'])
                 )
+                
                 if (name_sim >= similarity_threshold and
-                    normalize_text(prod1['BRAND']) == normalize_text(prod2['BRAND']) and
                     normalize_text(prod1['COLOR']) == normalize_text(prod2['COLOR'])):
                     fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
     
@@ -189,7 +210,6 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
-        # Simplified mapping for brevity, extend as needed
         flag_mapping = {
             'Seller Not approved to sell Refurb': ('1000028', "Contact Seller Support (Refurb Claim)"),
             'BRAND name repeated in NAME': ('1000002', "Do not repeat Brand in Name"),
@@ -318,21 +338,18 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
     return df
 
-# --- Implement Missing Validation Functions ---
+# --- Validation Functions ---
 
 def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
     if not {'SELLER_NAME', 'NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    # Identify refurb items by name/keywords
     refurb_mask = data['NAME'].astype(str).str.lower().str.contains('refurb', na=False)
     if not refurb_mask.any():
         return pd.DataFrame(columns=data.columns)
         
     approved_list = approved_sellers_ke if country_code == 'KE' else approved_sellers_ug
     approved_set = set(approved_list)
-    
-    # Check if seller is NOT in approved list
     unapproved_mask = ~data['SELLER_NAME'].astype(str).str.lower().isin(approved_set)
     
     return data[refurb_mask & unapproved_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
@@ -341,12 +358,10 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     if not {'CATEGORY_CODE'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    # Filter for warranty categories
     target_items = data[data['CATEGORY_CODE'].isin(warranty_category_codes)].copy()
     if target_items.empty:
         return pd.DataFrame(columns=data.columns)
         
-    # Check if warranty fields are missing
     warranty_cols = ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']
     missing_mask = pd.Series(False, index=target_items.index)
     
@@ -367,29 +382,23 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
         
-    # Filter for categories that require color
     target = data[data['CATEGORY_CODE'].isin(color_categories)].copy()
     if target.empty:
         return pd.DataFrame(columns=data.columns)
         
-    # Check if color is present in COLOR column (if exists) or Name
     has_color_col = 'COLOR' in data.columns
     
     def is_color_missing(row):
-        # Check Name
         name_has_color = bool(pattern.search(str(row['NAME'])))
         if name_has_color: return False
         
-        # Check Color Column
         if has_color_col and pd.notna(row['COLOR']) and str(row['COLOR']).strip() != '':
-             return False # Assumes the value in color column is valid if present
+             return False
              
         return True
 
     mask = target.apply(is_color_missing, axis=1)
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-# --- End Missing Functions ---
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None:
@@ -411,11 +420,12 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85) -> pd.DataFrame:
+    # Set safe defaults here
     result, stats = check_duplicate_products_enhanced(
         data,
         use_image_hash=use_image_hash,
         similarity_threshold=similarity_threshold,
-        max_images_to_hash=1000
+        max_images_to_hash=20 # Reduced default
     )
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
