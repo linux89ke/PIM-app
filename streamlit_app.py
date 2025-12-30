@@ -269,7 +269,6 @@ def load_all_support_files() -> Dict:
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
-        # Support for Exempt Duplicate Categories
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
     }
     return files
@@ -278,7 +277,6 @@ def load_all_support_files() -> Dict:
 def compile_regex_patterns(words: List[str]) -> re.Pattern:
     if not words:
         return None
-    # Sort by length to match longest patterns first
     words = sorted(words, key=len, reverse=True)
     pattern = '|'.join(r'\b' + re.escape(w) + r'\b' for w in words)
     return re.compile(pattern, re.IGNORECASE)
@@ -407,7 +405,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     if not warranty_category_codes:
         return pd.DataFrame(columns=data.columns)
     
-    # Normalize category codes to string
+    # STRIP CATEGORIES - Fixes "Number vs String" issues
     data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     target_cats = [str(c).strip() for c in warranty_category_codes]
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
@@ -435,8 +433,8 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
-    # FIX: Ensure category matching is done on strings
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    # STRIP CATEGORIES - Fixes "Number vs String" issues
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     config_cats = set(str(c).strip() for c in color_categories)
     
     target = data[data_cats.isin(config_cats)].copy()
@@ -446,11 +444,9 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     has_color_col = 'COLOR' in data.columns
     
     def is_color_missing(row):
-        # 1. Check Name for color keywords (using regex pattern from colors.txt)
         name_val = str(row['NAME'])
         if pattern.search(name_val): return False
         
-        # 2. Check Color Column (if present, assume valid if not empty)
         if has_color_col:
             color_val = str(row['COLOR'])
             if color_val.strip().lower() not in ['nan', '', 'none', 'null']:
@@ -481,19 +477,15 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85, exempt_categories: List[str] = None) -> pd.DataFrame:
-    
-    # Filter out Exempt Categories (Fashion, etc) BEFORE checking
     data_to_check = data.copy()
     if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
-        # Normalize category codes to string for comparison
-        cats_to_check = data_to_check['CATEGORY_CODE'].astype(str).str.strip()
+        cats_to_check = data_to_check['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
         exempt_set = set(str(c).strip() for c in exempt_categories)
         data_to_check = data_to_check[~cats_to_check.isin(exempt_set)]
 
     if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # FORCE USE_IMAGE_HASH TO FALSE for performance
     result, stats = check_duplicate_products_enhanced(
         data_to_check,
         use_image_hash=False,
@@ -509,8 +501,8 @@ def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, si
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
-    # Ensure string matching for categories
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     book_cats = set(str(c).strip() for c in book_category_codes)
     
     books = data[data_cats.isin(book_cats)]
@@ -522,7 +514,7 @@ def check_seller_approved_for_perfume(data: pd.DataFrame, perfume_category_codes
     if not {'CATEGORY_CODE','SELLER_NAME','BRAND','NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     perfume_cats = set(str(c).strip() for c in perfume_category_codes)
     
     perfume_data = data[data_cats.isin(perfume_cats)].copy()
@@ -544,7 +536,7 @@ def check_counterfeit_sneakers(data: pd.DataFrame, sneaker_category_codes: List[
     if not {'CATEGORY_CODE', 'NAME', 'BRAND'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     sneaker_cats = set(str(c).strip() for c in sneaker_category_codes)
     
     sneaker_data = data[data_cats.isin(sneaker_cats)].copy()
@@ -626,7 +618,7 @@ def check_single_word_name(data: pd.DataFrame, book_category_codes: List[str]) -
     if not {'CATEGORY_CODE','NAME'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     book_cats = set(str(c).strip() for c in book_category_codes)
     
     non_books = data[~data_cats.isin(book_cats)]
@@ -636,7 +628,7 @@ def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
     if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    data_cats = data['CATEGORY_CODE'].astype(str).str.strip()
+    data_cats = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
     fas_cats = set(str(c).strip() for c in valid_category_codes_fas)
     
     return data[data_cats.isin(fas_cats) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
@@ -711,8 +703,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 for sid in sid_list:
                     duplicate_groups[sid] = sid_list
     
+    book_issue_keys = set()
+
     for i, (name, func, kwargs) in enumerate(validations):
-        # Skip logic based on country
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
             if name == "Sensitive words": continue
             if name == "Product Warranty" and country_validator.code == 'UG': continue
@@ -723,7 +716,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         ckwargs = {'data': data, **kwargs}
         
-        # Custom Logic for 'Product Warranty'
         if name == "Product Warranty":
             if not data_has_warranty_cols: continue
             check_data = data.copy()
@@ -732,14 +724,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if check_data.empty: continue
             ckwargs = {'data': check_data, **kwargs}
         
-        # Custom Logic for 'Missing COLOR'
         elif name == "Missing COLOR":
             if common_sids is not None and len(common_sids) > 0:
-                # Multiple files: Restrict to intersection
                 check_data = data[data['PRODUCT_SET_SID'].isin(common_sids)].copy()
                 if check_data.empty: continue
                 ckwargs = {'data': check_data, **kwargs}
-            # Else (Single file): Run on full data (default)
         
         status_text.text(f"Running: {name}")
         
@@ -752,6 +741,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
+                if name == "Seller Approve to sell books":
+                    res['match_key'] = res.apply(create_match_key, axis=1)
+                    book_issue_keys.update(res['match_key'].unique())
+
                 flagged_sids = set(res['PRODUCT_SET_SID'].unique())
                 expanded_sids = set()
                 for sid in flagged_sids:
@@ -768,6 +761,17 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
+    if book_issue_keys:
+        data['match_key'] = data.apply(create_match_key, axis=1)
+        extra_book_rows = data[data['match_key'].isin(book_issue_keys)].copy()
+        
+        if "Seller Approve to sell books" in results:
+            existing = results["Seller Approve to sell books"]
+            combined = pd.concat([existing, extra_book_rows]).drop_duplicates(subset=['PRODUCT_SET_SID'])
+            results["Seller Approve to sell books"] = combined
+        else:
+            results["Seller Approve to sell books"] = extra_book_rows
+
     status_text.text("Finalizing...")
     rows = []
     processed = set()
@@ -780,7 +784,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        reason_info = flags_mapping.get(name, ("1000007", f"Flagged by {name}"))
+        if name == "Seller Not approved to sell Refurb":
+            reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
+        else:
+            reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
