@@ -9,15 +9,6 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
-import requests
-from difflib import SequenceMatcher
-
-# We keep these imports to avoid breaking the script structure
-try:
-    import imagehash
-    from PIL import Image
-except ImportError:
-    pass 
 
 # -------------------------------------------------
 # Logging Configuration
@@ -68,93 +59,6 @@ NEW_FILE_MAPPING = {
 }
 
 # -------------------------------------------------
-# ENHANCED DUPLICATE DETECTION UTILITIES
-# -------------------------------------------------
-
-def normalize_text(text: str) -> str:
-    """Normalize text by removing special characters, extra spaces, and converting to lowercase."""
-    if pd.isna(text):
-        return ""
-    text = str(text).lower().strip()
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\s+', '', text)
-    return text
-
-def calculate_text_similarity(text1: str, text2: str) -> float:
-    return SequenceMatcher(None, text1, text2).ratio()
-
-def create_match_key(row: pd.Series) -> str:
-    name = normalize_text(row.get('NAME', ''))
-    brand = normalize_text(row.get('BRAND', ''))
-    color = normalize_text(row.get('COLOR', ''))
-    return f"{brand}|{name}|{color}"
-
-def check_duplicate_products_enhanced(
-    data: pd.DataFrame,
-    use_image_hash: bool = False, 
-    similarity_threshold: float = 0.85,
-    max_images_to_hash: int = 0
-) -> Tuple[pd.DataFrame, Dict[str, int]]:
-    
-    required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
-    if not all(col in data.columns for col in required_cols):
-        return pd.DataFrame(columns=data.columns), {}
-    
-    data_copy = data.copy()
-    
-    # Strategy 1: Normalized Text Matching (Fast & Exact)
-    data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
-    normalized_duplicates = data_copy[
-        data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
-    ]['PRODUCT_SET_SID'].tolist()
-    
-    # Strategy 2: Image Hash Matching (DISABLED)
-    image_duplicates = []
-    
-    # Strategy 3: Fuzzy Text Matching (Complexity Limited)
-    fuzzy_duplicates = []
-    
-    # Safety: Only run fuzzy match on sellers with fewer than 200 items
-    SAFE_GROUP_SIZE = 200 
-    
-    grouped = data_copy.groupby('SELLER_NAME')
-    
-    for seller, group in grouped:
-        if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
-            continue
-            
-        products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
-        
-        for i, prod1 in enumerate(products):
-            for prod2 in products[i+1:]:
-                # Optimization: Must match brand exactly first
-                if normalize_text(prod1['BRAND']) != normalize_text(prod2['BRAND']):
-                    continue
-                
-                name_sim = calculate_text_similarity(
-                    normalize_text(prod1['NAME']),
-                    normalize_text(prod2['NAME'])
-                )
-                
-                if (name_sim >= similarity_threshold and
-                    normalize_text(prod1['COLOR']) == normalize_text(prod2['COLOR'])):
-                    fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
-    
-    all_duplicate_sids = set(normalized_duplicates + image_duplicates + fuzzy_duplicates)
-    result = data_copy[data_copy['PRODUCT_SET_SID'].isin(all_duplicate_sids)].copy()
-    
-    if 'match_key' in result.columns: result = result.drop(columns=['match_key'])
-    if 'image_hash' in result.columns: result = result.drop(columns=['image_hash'])
-    
-    stats = {
-        'normalized': len(normalized_duplicates),
-        'image_hash': len(image_duplicates),
-        'fuzzy': len(fuzzy_duplicates),
-        'total': len(all_duplicate_sids)
-    }
-    return result[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID']), stats
-
-# -------------------------------------------------
 # CACHED FILE LOADING
 # -------------------------------------------------
 @st.cache_data(ttl=3600)
@@ -183,21 +87,63 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            'Seller Not approved to sell Refurb': ('1000028', "Contact Seller Support (Refurb Claim)"),
-            'BRAND name repeated in NAME': ('1000002', "Do not repeat Brand in Name"),
-            'Missing COLOR': ('1000005', "Confirm actual product color"),
-            'Duplicate product': ('1000007', "Avoid duplicate SKUs"),
-            'Prohibited products': ('1000024', "Product not authorized (License)"),
-            'Single-word NAME': ('1000008', "Improve Product Name"),
-            'Unnecessary words in NAME': ('1000008', "Remove unnecessary words"),
-            'Generic BRAND Issues': ('1000014', "Request brand creation"),
-            'Counterfeit Sneakers': ('1000030', "Suspected Counterfeit"),
-            'Seller Approve to sell books': ('1000028', "Contact Support (Books)"),
-            'Seller Approved to Sell Perfume': ('1000028', "Contact Support (Perfume)"),
-            'Suspected counterfeit Jerseys': ('1000030', "Suspected Counterfeit Jersey"),
-            'Suspected Fake product': ('1000030', "Suspected Counterfeit (Price Check)"),
-            'Product Warranty': ('1000013', "Provide Warranty Details"),
-            'Sensitive words': ('1000001', "Brand NOT Allowed"),
+            'Seller Not approved to sell Refurb': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'BRAND name repeated in NAME': (
+                '1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name',
+                "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"
+            ),
+            'Missing COLOR': (
+                '1000005 - Kindly confirm the actual product colour',
+                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
+            ),
+            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs"),
+            'Prohibited products': (
+                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
+                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
+            ),
+            'Single-word NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
+            ),
+            'Unnecessary words in NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers.Kindly avoid unnecesary words "
+            ),
+            'Generic BRAND Issues': (
+                '1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8',
+                "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it's approved or rejected, along with the reason..Avoid using Generic for fashion items"
+            ),
+            'Counterfeit Sneakers': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Seller Approve to sell books': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Seller Approved to Sell Perfume': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Suspected counterfeit Jerseys': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Suspected Fake product': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Product Warranty': (
+                '1000013 - Kindly Provide Product Warranty Details',
+                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."
+            ),
+            'Sensitive words': (
+                '1000001 - Brand NOT Allowed',
+                "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
+            ),
         }
         return flag_mapping
     except Exception:
@@ -227,8 +173,6 @@ def load_all_support_files() -> Dict:
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
-        # NEW: Load exempt categories for duplicates
-        'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
     }
     return files
 
@@ -312,38 +256,41 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = df.groupby('PRODUCT_SET_SID')[col].transform(lambda x: x.ffill().bfill())
     return df
 
-# --- Validation Functions ---
+# --- Validation Logic Functions ---
 
 def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
-    if not {'SELLER_NAME', 'NAME'}.issubset(data.columns):
+    if country_code == 'KE':
+        approved_sellers = set(approved_sellers_ke)
+    elif country_code == 'UG':
+        approved_sellers = set(approved_sellers_ug)
+    else:
         return pd.DataFrame(columns=data.columns)
     
-    refurb_mask = data['NAME'].astype(str).str.lower().str.contains('refurb', na=False)
-    if not refurb_mask.any():
-        return pd.DataFrame(columns=data.columns)
-        
-    approved_list = approved_sellers_ke if country_code == 'KE' else approved_sellers_ug
-    approved_set = set(approved_list)
-    unapproved_mask = ~data['SELLER_NAME'].astype(str).str.lower().isin(approved_set)
-    
-    return data[refurb_mask & unapproved_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
-    if not {'CATEGORY_CODE'}.issubset(data.columns):
+    if not {'NAME', 'BRAND', 'SELLER_NAME', 'PRODUCT_SET_SID'}.issubset(data.columns):
         return pd.DataFrame(columns=data.columns)
     
-    target_items = data[data['CATEGORY_CODE'].isin(warranty_category_codes)].copy()
-    if target_items.empty:
+    data = data.copy()
+    refurb_words = r'\b(refurb|refurbished|renewed)\b'
+    refurb_brand = 'renewed'
+    
+    data['NAME_LOWER'] = data['NAME'].astype(str).str.strip().str.lower()
+    data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
+    data['SELLER_LOWER'] = data['SELLER_NAME'].astype(str).str.strip().str.lower()
+    
+    name_match = data['NAME_LOWER'].str.contains(refurb_words, regex=True, na=False)
+    brand_match = data['BRAND_LOWER'] == refurb_brand
+    trigger_mask = name_match | brand_match
+    triggered_data = data[trigger_mask].copy()
+    
+    if triggered_data.empty:
         return pd.DataFrame(columns=data.columns)
-        
-    warranty_cols = ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']
-    missing_mask = pd.Series(False, index=target_items.index)
     
-    for col in warranty_cols:
-        if col in target_items.columns:
-            missing_mask |= target_items[col].isna() | (target_items[col].astype(str).str.strip() == '')
+    seller_not_approved_mask = ~triggered_data['SELLER_LOWER'].isin(approved_sellers)
+    flagged = triggered_data[seller_not_approved_mask]
     
-    return target_items[missing_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    columns_to_drop = ['NAME_LOWER', 'BRAND_LOWER', 'SELLER_LOWER']
+    flagged = flagged.drop(columns=[col for col in columns_to_drop if col in flagged.columns])
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None:
@@ -351,7 +298,39 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
+def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
+    for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION']:
+        if col not in data.columns:
+            data[col] = ""
+        data[col] = data[col].astype(str).fillna('').str.strip()
+    
+    if not warranty_category_codes:
+        return pd.DataFrame(columns=data.columns)
+    
+    data['CAT_CLEAN'] = data['CATEGORY_CODE'].astype(str).str.split('.').str[0].str.strip()
+    target_cats = [str(c).strip() for c in warranty_category_codes]
+    target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
+    
+    if target_data.empty:
+        return pd.DataFrame(columns=data.columns)
+    
+    def is_present(series):
+        s = series.astype(str).str.strip().str.lower()
+        return (s != 'nan') & (s != '') & (s != 'none') & (s != 'nat') & (s != 'n/a')
+    
+    has_product_warranty = is_present(target_data['PRODUCT_WARRANTY'])
+    has_duration = is_present(target_data['WARRANTY_DURATION'])
+    has_any_warranty = has_product_warranty | has_duration
+    mask = ~has_any_warranty
+    flagged = target_data[mask]
+    
+    if 'CAT_CLEAN' in flagged.columns:
+        flagged = flagged.drop(columns=['CAT_CLEAN'])
+    
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categories: List[str], country_code: str) -> pd.DataFrame:
+    # Use the logic that matches the row-by-row check to ensure it doesn't return 0 falsely
     required = ['CATEGORY_CODE', 'NAME']
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
@@ -363,9 +342,11 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     has_color_col = 'COLOR' in data.columns
     
     def is_color_missing(row):
+        # 1. Check Name for color keywords
         name_has_color = bool(pattern.search(str(row['NAME'])))
         if name_has_color: return False
         
+        # 2. Check Color Column (if present, assume valid if not empty)
         if has_color_col and pd.notna(row['COLOR']) and str(row['COLOR']).strip() != '':
              return False
              
@@ -393,29 +374,11 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                       if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85, exempt_categories: List[str] = None) -> pd.DataFrame:
-    
-    # Filter out Exempt Categories (Fashion, etc) BEFORE checking
-    data_to_check = data.copy()
-    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
-        # Normalize category codes to string for comparison
-        data_to_check = data_to_check[~data_to_check['CATEGORY_CODE'].astype(str).str.strip().isin(exempt_categories)]
-
-    if data_to_check.empty:
+def check_duplicate_products(data: pd.DataFrame) -> pd.DataFrame:
+    cols = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
+    if len(cols) < 4:
         return pd.DataFrame(columns=data.columns)
-
-    # FORCE USE_IMAGE_HASH TO FALSE for performance
-    result, stats = check_duplicate_products_enhanced(
-        data_to_check,
-        use_image_hash=False,
-        similarity_threshold=similarity_threshold,
-        max_images_to_hash=0
-    )
-    
-    if 'duplicate_stats' not in st.session_state:
-        st.session_state.duplicate_stats = {}
-    st.session_state.duplicate_stats = stats
-    return result
+    return data[data.duplicated(subset=cols, keep=False)].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns):
@@ -584,7 +547,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        ("Duplicate product", check_duplicate_products, {'exempt_categories': support_files.get('duplicate_exempt_codes', [])}),
+        ("Duplicate product", check_duplicate_products, {}),
     ]
     
     progress_bar = st.progress(0)
@@ -625,14 +588,13 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if check_data.empty: continue
             ckwargs = {'data': check_data, **kwargs}
         
-        # Custom Logic for 'Missing COLOR'
+        # Custom Logic for 'Missing COLOR' - only check common SKUs if intersection exists
         elif name == "Missing COLOR":
-            # If we have an intersection (two files), check ONLY the common SKUs
             if common_sids is not None and len(common_sids) > 0:
                 check_data = data[data['PRODUCT_SET_SID'].isin(common_sids)].copy()
                 if check_data.empty: continue
                 ckwargs = {'data': check_data, **kwargs}
-            # If no intersection (single file), we just run it on the whole 'data' (default ckwargs)
+            # ELSE clause removed: If single file (common_sids is None), run on ALL data.
         
         status_text.text(f"Running: {name}")
         
@@ -673,7 +635,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        reason_info = flags_mapping.get(name, ("1000007", f"Flagged by {name}"))
+        reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
