@@ -9,10 +9,15 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
-import imagehash
-from PIL import Image
 import requests
 from difflib import SequenceMatcher
+
+# We keep these imports to avoid breaking the script structure
+try:
+    import imagehash
+    from PIL import Image
+except ImportError:
+    pass 
 
 # -------------------------------------------------
 # Logging Configuration
@@ -63,7 +68,7 @@ NEW_FILE_MAPPING = {
 }
 
 # -------------------------------------------------
-# ENHANCED DUPLICATE DETECTION UTILITIES (OPTIMIZED)
+# ENHANCED DUPLICATE DETECTION UTILITIES
 # -------------------------------------------------
 
 def normalize_text(text: str) -> str:
@@ -74,18 +79,6 @@ def normalize_text(text: str) -> str:
     text = re.sub(r'[^\w\s]', '', text)
     text = re.sub(r'\s+', '', text)
     return text
-
-def get_image_hash(image_url: str, timeout: int = 3) -> str:
-    """Download and compute perceptual hash of an image."""
-    try:
-        response = requests.get(image_url, timeout=timeout, stream=True)
-        response.raise_for_status()
-        img = Image.open(BytesIO(response.content))
-        img_hash = imagehash.phash(img)
-        return str(img_hash)
-    except Exception as e:
-        logger.warning(f"Failed to hash image {image_url}: {e}")
-        return ""
 
 def calculate_text_similarity(text1: str, text2: str) -> float:
     return SequenceMatcher(None, text1, text2).ratio()
@@ -98,9 +91,9 @@ def create_match_key(row: pd.Series) -> str:
 
 def check_duplicate_products_enhanced(
     data: pd.DataFrame,
-    use_image_hash: bool = True,
+    use_image_hash: bool = False, 
     similarity_threshold: float = 0.85,
-    max_images_to_hash: int = 20  # Reduced to 20 to prevent freezing
+    max_images_to_hash: int = 0
 ) -> Tuple[pd.DataFrame, Dict[str, int]]:
     
     required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
@@ -109,40 +102,19 @@ def check_duplicate_products_enhanced(
     
     data_copy = data.copy()
     
-    # Strategy 1: Normalized Text Matching (Fast)
+    # Strategy 1: Normalized Text Matching (Fast & Exact)
     data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
     normalized_duplicates = data_copy[
         data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
     ]['PRODUCT_SET_SID'].tolist()
     
-    # Strategy 2: Image Hash Matching (Internet Limited)
+    # Strategy 2: Image Hash Matching (DISABLED)
     image_duplicates = []
-    if use_image_hash and 'MAIN_IMAGE' in data_copy.columns:
-        # Only process a small subset to prevent timeout
-        images_to_process = data_copy[data_copy['MAIN_IMAGE'].notna()].head(max_images_to_hash)
-        
-        if len(images_to_process) > 0:
-            status_placeholder = st.empty()
-            status_placeholder.caption(f"Checking {len(images_to_process)} images for duplicates...")
-            
-            images_to_process['image_hash'] = images_to_process['MAIN_IMAGE'].apply(
-                lambda url: get_image_hash(url) if pd.notna(url) else ""
-            )
-            
-            hash_groups = images_to_process[
-                images_to_process['image_hash'] != ""
-            ].groupby(['image_hash', 'SELLER_NAME'])['PRODUCT_SET_SID'].apply(list)
-            
-            for sids in hash_groups:
-                if len(sids) > 1:
-                    image_duplicates.extend(sids)
-            status_placeholder.empty()
-
+    
     # Strategy 3: Fuzzy Text Matching (Complexity Limited)
     fuzzy_duplicates = []
     
     # Safety: Only run fuzzy match on sellers with fewer than 200 items
-    # to avoid N^2 complexity freezing the app
     SAFE_GROUP_SIZE = 200 
     
     grouped = data_copy.groupby('SELLER_NAME')
@@ -255,6 +227,8 @@ def load_all_support_files() -> Dict:
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
+        # NEW: Load exempt categories for duplicates
+        'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
     }
     return files
 
@@ -419,14 +393,25 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                       if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85) -> pd.DataFrame:
-    # Set safe defaults here
+def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85, exempt_categories: List[str] = None) -> pd.DataFrame:
+    
+    # Filter out Exempt Categories (Fashion, etc) BEFORE checking
+    data_to_check = data.copy()
+    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
+        # Normalize category codes to string for comparison
+        data_to_check = data_to_check[~data_to_check['CATEGORY_CODE'].astype(str).str.strip().isin(exempt_categories)]
+
+    if data_to_check.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # FORCE USE_IMAGE_HASH TO FALSE for performance
     result, stats = check_duplicate_products_enhanced(
-        data,
-        use_image_hash=use_image_hash,
+        data_to_check,
+        use_image_hash=False,
         similarity_threshold=similarity_threshold,
-        max_images_to_hash=20 # Reduced default
+        max_images_to_hash=0
     )
+    
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
     st.session_state.duplicate_stats = stats
@@ -599,7 +584,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        ("Duplicate product", check_duplicate_products, {}),
+        ("Duplicate product", check_duplicate_products, {'exempt_categories': support_files.get('duplicate_exempt_codes', [])}),
     ]
     
     progress_bar = st.progress(0)
@@ -640,14 +625,14 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if check_data.empty: continue
             ckwargs = {'data': check_data, **kwargs}
         
-        # Custom Logic for 'Missing COLOR' - only check common SKUs
+        # Custom Logic for 'Missing COLOR'
         elif name == "Missing COLOR":
+            # If we have an intersection (two files), check ONLY the common SKUs
             if common_sids is not None and len(common_sids) > 0:
                 check_data = data[data['PRODUCT_SET_SID'].isin(common_sids)].copy()
                 if check_data.empty: continue
                 ckwargs = {'data': check_data, **kwargs}
-            else:
-                continue
+            # If no intersection (single file), we just run it on the whole 'data' (default ckwargs)
         
         status_text.text(f"Running: {name}")
         
