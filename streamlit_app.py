@@ -92,6 +92,7 @@ def normalize_text(text: str) -> str:
     """Normalize text by removing noise words, special characters, and extra spaces."""
     if pd.isna(text): return ""
     text = str(text).lower().strip()
+    # Remove noise words (English & Common) to improve duplicate detection
     noise = r'\b(new|sale|original|genuine|authentic|official|premium|quality|best|hot|2024|2025)\b'
     text = re.sub(noise, '', text)
     text = re.sub(r'[^\w\s]', '', text)
@@ -126,7 +127,6 @@ def check_duplicate_products_enhanced(
         data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
     ]['PRODUCT_SET_SID'].tolist()
     
-    # Strategy 2: Image Hash Matching (DISABLED)
     image_duplicates = []
     
     # Strategy 3: Fuzzy Text Matching
@@ -338,7 +338,7 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
             df['ACTIVE_STATUS_COUNTRY'].astype(str).str.lower()
             .str.replace('jumia-', '', regex=False).str.strip().str.upper()
         )
-    # Memory Optimization
+    # Improvement: Memory Optimization
     for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS']:
         if col in df.columns:
             df[col] = df[col].astype('category')
@@ -669,6 +669,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 for sid in sid_list:
                     duplicate_groups[sid] = sid_list
     
+    # IMPROVEMENT: Generalized Restricted Keys Container
     restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
@@ -729,7 +730,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
-    # Generalized Flag Propagation Application
+    # IMPROVEMENT: Apply Propagation for ALL restricted categories
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
         for flag_name, keys in restricted_issue_keys.items():
@@ -753,9 +754,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        # --- FIXED REASON LOGIC ---
-        # Look up the standard reason & comment based on the FLAG NAME
-        standard_reason = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        # Look up reason info using the FLAG NAME
+        reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
@@ -764,18 +764,13 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if sid in processed:
                 continue
             processed.add(sid)
-            
-            # Use 'Comment_Detail' if it exists (for specific trigger words), otherwise use standard comment
-            final_comment = r.get('Comment_Detail')
-            if pd.isna(final_comment):
-                 final_comment = standard_reason[1]
-            
             rows.append({
                 'ProductSetSid': sid,
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
-                'Reason': standard_reason[0],
-                'Comment': final_comment,
+                'Reason': reason_info[0],
+                # Use detailed comment if available, else default from flags_mapping
+                'Comment': r.get('Comment_Detail', reason_info[1]),
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
             })
@@ -981,153 +976,212 @@ with tab1:
         label_visibility="collapsed"
     )
     
-    if uploaded_files:
-        # FILE DETAILS GRID
-        with st.expander(f"📋 Uploaded {len(uploaded_files)} File(s)", expanded=False):
-            for idx, file in enumerate(uploaded_files, 1):
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1: st.write(f"**{idx}. {file.name}**")
-                with col2: st.write(f"{file.size / 1024 / 1024:.2f} MB")
-                with col3: st.write("Excel" if file.name.endswith('.xlsx') else "CSV")
+    # INITIALIZE SESSION STATE FOR DATA
+    if 'final_report' not in st.session_state:
+        st.session_state.final_report = pd.DataFrame()
+    if 'all_data_map' not in st.session_state:
+        st.session_state.all_data_map = pd.DataFrame()
 
-        try:
-            current_date = datetime.now().strftime('%Y-%m-%d')
-            file_prefix = country_validator.code
-            all_dfs = []
-            file_sids_sets = []
-            
-            for uploaded_file in uploaded_files:
-                try:
-                    if uploaded_file.name.endswith('.xlsx'):
-                        raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
-                    else:
-                        try:
-                            raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                            if len(raw_data.columns) <= 1:
+    if uploaded_files:
+        # Check if new files uploaded by comparing file names/sizes
+        current_file_signature = sorted([f.name + str(f.size) for f in uploaded_files])
+        if 'last_processed_files' not in st.session_state or st.session_state.last_processed_files != current_file_signature:
+            # NEW PROCESSING
+            with st.expander(f"📋 Uploaded {len(uploaded_files)} File(s)", expanded=False):
+                for idx, file in enumerate(uploaded_files, 1):
+                    col1, col2, col3 = st.columns([3, 1, 1])
+                    with col1: st.write(f"**{idx}. {file.name}**")
+                    with col2: st.write(f"{file.size / 1024 / 1024:.2f} MB")
+                    with col3: st.write("Excel" if file.name.endswith('.xlsx') else "CSV")
+
+            try:
+                current_date = datetime.now().strftime('%Y-%m-%d')
+                file_prefix = country_validator.code
+                all_dfs = []
+                file_sids_sets = []
+                
+                for uploaded_file in uploaded_files:
+                    uploaded_file.seek(0) # Reset pointer
+                    try:
+                        if uploaded_file.name.endswith('.xlsx'):
+                            raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                        else:
+                            try:
+                                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                                if len(raw_data.columns) <= 1:
+                                    uploaded_file.seek(0)
+                                    raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
+                            except:
                                 uploaded_file.seek(0)
                                 raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-                        except:
-                            uploaded_file.seek(0)
-                            raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-                    
-                    std_data = standardize_input_data(raw_data)
-                    if 'PRODUCT_SET_SID' in std_data.columns:
-                        file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
-                    all_dfs.append(std_data)
-                except Exception as e:
-                    st.error(f"Failed to read file {uploaded_file.name}: {e}")
+                        
+                        std_data = standardize_input_data(raw_data)
+                        if 'PRODUCT_SET_SID' in std_data.columns:
+                            file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
+                        all_dfs.append(std_data)
+                    except Exception as e:
+                        st.error(f"Failed to read file {uploaded_file.name}: {e}")
+                        st.stop()
+                
+                if not all_dfs:
+                    st.error("No valid data loaded.")
                     st.stop()
-            
-            if not all_dfs:
-                st.error("No valid data loaded.")
-                st.stop()
-            
-            merged_data = pd.concat(all_dfs, ignore_index=True)
-            
-            intersection_count = 0
-            intersection_sids = set()
-            if len(file_sids_sets) > 1:
-                intersection_sids = set.intersection(*file_sids_sets)
-                intersection_count = len(intersection_sids)
-            
-            data_prop = propagate_metadata(merged_data)
-            is_valid, errors = validate_input_schema(data_prop)
-            
-            if is_valid:
-                data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
-                data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
                 
-                data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
+                merged_data = pd.concat(all_dfs, ignore_index=True)
                 
-                for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
-                    if col in data.columns:
-                        data[col] = data[col].astype(str).fillna('')
+                intersection_count = 0
+                intersection_sids = set()
+                if len(file_sids_sets) > 1:
+                    intersection_sids = set.intersection(*file_sids_sets)
+                    intersection_count = len(intersection_sids)
                 
-                if 'COLOR_FAMILY' not in data.columns:
-                    data['COLOR_FAMILY'] = ""
+                data_prop = propagate_metadata(merged_data)
+                is_valid, errors = validate_input_schema(data_prop)
                 
-                with st.spinner("Running validations..."):
-                    common_sids_to_pass = intersection_sids if intersection_count > 0 else None
-                    final_report, flag_dfs = validate_products(
-                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
-                    )
-                
-                approved_df = final_report[final_report['Status'] == 'Approved']
-                rejected_df = final_report[final_report['Status'] == 'Rejected']
-                
-                log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
-                
-                st.sidebar.header("Seller Options")
-                seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
-                sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
-                
-                st.markdown("---")
-                # RESPONSIVE METRICS CONTAINER
-                with st.container():
-                    st.header("Overall Results")
-                    c1, c2, c3, c4, c5 = st.columns(5)
-                    c1.metric("Total", len(data))
-                    c2.metric("Approved", len(approved_df))
-                    c3.metric("Rejected", len(rejected_df))
-                    rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
-                    c4.metric("Rate", f"{rt:.1f}%")
-                    c5.metric("SKUs in Both Files", intersection_count)
-                
-                if intersection_count > 0:
-                    common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
-                    csv_buffer = BytesIO()
-                    common_skus_df.to_csv(csv_buffer, index=False)
-                    st.download_button(
-                        label=f"📥 Download Common SKUs ({intersection_count})",
-                        data=csv_buffer.getvalue(),
-                        file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv",
-                        mime="text/csv",
-                    )
-                
-                st.subheader("Validation Results by Flag")
-                display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
-                for title, df_flagged in flag_dfs.items():
-                    # BEST DESIGNER UPGRADE: INTERACTIVE EXPANDERS
-                    with st.expander(f"{title} ({len(df_flagged)})"):
-                        if not df_flagged.empty:
-                            df_display = df_flagged[[c for c in display_cols if c in df_flagged.columns]].copy()
-                            
-                            # Filters
-                            col1, col2 = st.columns([1, 1])
-                            with col1:
-                                search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
-                            with col2:
-                                all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
-                                seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
-                            
-                            # Apply Filters
-                            if search_term:
-                                mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
-                                df_display = df_display[mask]
-                            if seller_filter:
-                                df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
-                            
-                            if len(df_display) != len(df_flagged):
-                                st.caption(f"Showing {len(df_display)} of {len(df_flagged)} rows")
+                if is_valid:
+                    data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
+                    data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+                    
+                    data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
+                    
+                    for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
+                        if col in data.columns:
+                            data[col] = data[col].astype(str).fillna('')
+                    
+                    if 'COLOR_FAMILY' not in data.columns:
+                        data['COLOR_FAMILY'] = ""
+                    
+                    with st.spinner("Running validations..."):
+                        common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                        final_report, flag_dfs = validate_products(
+                            data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
+                        )
+                        
+                        # Store in Session State
+                        st.session_state.final_report = final_report
+                        st.session_state.all_data_map = data # Store for lookups
+                        st.session_state.intersection_count = intersection_count
+                        st.session_state.last_processed_files = current_file_signature
+                        
+                        approved_df = final_report[final_report['Status'] == 'Approved']
+                        rejected_df = final_report[final_report['Status'] == 'Rejected']
+                        log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+                else:
+                    for e in errors: st.error(e)
+            except Exception as e:
+                st.error(f"Error: {e}")
+                st.code(traceback.format_exc())
 
-                            st.dataframe(df_display, use_container_width=True, hide_index=True)
-                            st.download_button(f"📥 Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
-                        else:
-                            st.success("✅ No issues found.")
+        # DISPLAY LOGIC (Uses Session State)
+        if not st.session_state.final_report.empty:
+            final_report = st.session_state.final_report
+            data = st.session_state.all_data_map
+            intersection_count = st.session_state.intersection_count
+
+            approved_df = final_report[final_report['Status'] == 'Approved']
+            rejected_df = final_report[final_report['Status'] == 'Rejected']
+            
+            st.sidebar.header("Seller Options")
+            seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
+            sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
+            
+            st.markdown("---")
+            # RESPONSIVE METRICS CONTAINER
+            with st.container():
+                st.header("Overall Results")
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("Total", len(data))
+                c2.metric("Approved", len(approved_df))
+                c3.metric("Rejected", len(rejected_df))
+                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+                c4.metric("Rate", f"{rt:.1f}%")
+                c5.metric("SKUs in Both Files", intersection_count)
+            
+            if intersection_count > 0:
+                common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
+                csv_buffer = BytesIO()
+                common_skus_df.to_csv(csv_buffer, index=False)
+                st.download_button(
+                    label=f"📥 Download Common SKUs ({intersection_count})",
+                    data=csv_buffer.getvalue(),
+                    file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv",
+                    mime="text/csv",
+                )
+            
+            st.subheader("Validation Results by Flag")
+            
+            # Get unique flags present in rejected list
+            active_flags = rejected_df['FLAG'].unique()
+            display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
+            
+            # Iterate through active flags (Dynamic generation based on results)
+            for title in active_flags:
+                # Filter consolidated report for this flag
+                df_flagged_report = rejected_df[rejected_df['FLAG'] == title]
                 
-                st.markdown("---")
-                st.header("Overall Exports")
-                c1, c2, c3, c4 = st.columns(4)
-                c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
-                c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
-                c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
-                c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
-            else:
-                for e in errors:
-                    st.error(e)
-        except Exception as e:
-            st.error(f"Error: {e}")
-            st.code(traceback.format_exc())
+                # Merge with Data to get display columns (Name, Brand etc not in report)
+                df_display = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
+                df_display = df_display[[c for c in display_cols if c in df_display.columns]]
+
+                # INTERACTIVE EXPANDERS WITH EDITING
+                with st.expander(f"{title} ({len(df_display)})"):
+                    # Filters
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
+                    with col2:
+                        all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
+                        seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
+                    
+                    # Apply Filters
+                    if search_term:
+                        mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
+                        df_display = df_display[mask]
+                    if seller_filter:
+                        df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
+                    
+                    if len(df_display) != len(df_flagged_report):
+                        st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
+
+                    # ADD SELECTION COLUMN
+                    df_display.insert(0, "Select", False)
+                    
+                    # DATA EDITOR
+                    edited_df = st.data_editor(
+                        df_display, 
+                        hide_index=True, 
+                        use_container_width=True,
+                        column_config={"Select": st.column_config.CheckboxColumn(required=True)},
+                        disabled=[c for c in df_display.columns if c != "Select"],
+                        key=f"editor_{title}"
+                    )
+                    
+                    # APPROVE BUTTON LOGIC
+                    to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
+                    if to_approve:
+                        if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
+                            # Update Session State
+                            # 1. Update Status
+                            st.session_state.final_report.loc[
+                                st.session_state.final_report['ProductSetSid'].isin(to_approve), 
+                                ['Status', 'Reason', 'Comment', 'FLAG']
+                            ] = ['Approved', 'Manually Approved', 'Approved by User', '']
+                            
+                            st.success("Updated! Rerunning to refresh...")
+                            st.rerun()
+
+                    # EXPORT BUTTON for this specific flag
+                    # Re-merge to get full details for export
+                    flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
+                    st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
+
+            st.markdown("---")
+            st.header("Overall Exports")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
+            c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
+            c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
+            c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
 
 # -------------------------------------------------
 # TAB 2: WEEKLY ANALYSIS
