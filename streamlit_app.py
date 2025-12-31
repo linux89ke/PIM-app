@@ -20,6 +20,18 @@ except ImportError:
     pass 
 
 # -------------------------------------------------
+# 1. LAYOUT CONFIGURATION (Dynamic Toggle)
+# -------------------------------------------------
+# Initialize session state for layout BEFORE page_config
+if 'layout_mode' not in st.session_state:
+    st.session_state.layout_mode = "centered"  # Default to centered for mobile-friendliness
+
+st.set_page_config(
+    page_title="Product Validation Tool", 
+    layout=st.session_state.layout_mode
+)
+
+# -------------------------------------------------
 # Logging Configuration
 # -------------------------------------------------
 logging.basicConfig(
@@ -28,11 +40,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# -------------------------------------------------
-# Page config
-# -------------------------------------------------
-st.set_page_config(page_title="Product Validation Tool", layout="wide")
 
 # -------------------------------------------------
 # Constants & Mapping
@@ -86,7 +93,6 @@ def normalize_text(text: str) -> str:
     """Normalize text by removing noise words, special characters, and extra spaces."""
     if pd.isna(text): return ""
     text = str(text).lower().strip()
-    # Remove noise words (English & Common) to improve duplicate detection
     noise = r'\b(new|sale|original|genuine|authentic|official|premium|quality|best|hot|2024|2025)\b'
     text = re.sub(noise, '', text)
     text = re.sub(r'[^\w\s]', '', text)
@@ -115,7 +121,7 @@ def check_duplicate_products_enhanced(
     
     data_copy = data.copy()
     
-    # Strategy 1: Normalized Text Matching (Fast & Exact)
+    # Strategy 1: Normalized Text Matching
     data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
     normalized_duplicates = data_copy[
         data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
@@ -124,7 +130,7 @@ def check_duplicate_products_enhanced(
     # Strategy 2: Image Hash Matching (DISABLED)
     image_duplicates = []
     
-    # Strategy 3: Fuzzy Text Matching (Complexity Limited)
+    # Strategy 3: Fuzzy Text Matching
     fuzzy_duplicates = []
     SAFE_GROUP_SIZE = 200 
     
@@ -183,7 +189,6 @@ def load_excel_file(filename: str, column: Optional[str] = None):
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
-            # Improvement: Clean category codes on load
             return df[column].apply(clean_category_code).tolist()
         return df
     except Exception as e:
@@ -194,63 +199,21 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            'Seller Not approved to sell Refurb': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'BRAND name repeated in NAME': (
-                '1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name',
-                "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"
-            ),
-            'Missing COLOR': (
-                '1000005 - Kindly confirm the actual product colour',
-                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
-            ),
-            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs"),
-            'Prohibited products': (
-                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
-                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
-            ),
-            'Single-word NAME': (
-                '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
-            ),
-            'Unnecessary words in NAME': (
-                '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers.Kindly avoid unnecesary words "
-            ),
-            'Generic BRAND Issues': (
-                '1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8',
-                "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it's approved or rejected, along with the reason..Avoid using Generic for fashion items"
-            ),
-            'Counterfeit Sneakers': (
-                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
-                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
-            ),
-            'Seller Approve to sell books': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'Seller Approved to Sell Perfume': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'Suspected counterfeit Jerseys': (
-                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
-                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
-            ),
-            'Suspected Fake product': (
-                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
-                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
-            ),
-            'Product Warranty': (
-                '1000013 - Kindly Provide Product Warranty Details',
-                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."
-            ),
-            'Sensitive words': (
-                '1000001 - Brand NOT Allowed',
-                "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
-            ),
+            'Seller Not approved to sell Refurb': ('1000028', "Contact Seller Support (Refurb Claim)"),
+            'BRAND name repeated in NAME': ('1000002', "Do not repeat Brand in Name"),
+            'Missing COLOR': ('1000005', "Confirm actual product color"),
+            'Duplicate product': ('1000007', "Kindly avoid creating duplicate SKUs"),
+            'Prohibited products': ('1000024', "Product not authorized (License)"),
+            'Single-word NAME': ('1000008', "Improve Product Name"),
+            'Unnecessary words in NAME': ('1000008', "Remove unnecessary words"),
+            'Generic BRAND Issues': ('1000014', "Request brand creation"),
+            'Counterfeit Sneakers': ('1000030', "Suspected Counterfeit"),
+            'Seller Approve to sell books': ('1000028', "Contact Support (Books)"),
+            'Seller Approved to Sell Perfume': ('1000028', "Contact Support (Perfume)"),
+            'Suspected counterfeit Jerseys': ('1000030', "Suspected Counterfeit Jersey"),
+            'Suspected Fake product': ('1000030', "Suspected Counterfeit (Price Check)"),
+            'Product Warranty': ('1000013', "Provide Warranty Details"),
+            'Sensitive words': ('1000001', "Brand NOT Allowed"),
         }
         return flag_mapping
     except Exception:
@@ -333,7 +296,7 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
             df['ACTIVE_STATUS_COUNTRY'].astype(str).str.lower()
             .str.replace('jumia-', '', regex=False).str.strip().str.upper()
         )
-    # Improvement: Memory Optimization
+    # Memory Optimization
     for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS']:
         if col in df.columns:
             df[col] = df[col].astype('category')
@@ -396,7 +359,6 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Improvement: Detailed Comment
     data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -428,7 +390,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
-    # Fuzzy Match Category Code
+    # Clean codes
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -447,7 +409,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
-    # Add trigger comment
     target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -482,7 +443,6 @@ def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, si
         similarity_threshold=similarity_threshold,
         max_images_to_hash=0
     )
-    
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
     st.session_state.duplicate_stats = stats
@@ -661,7 +621,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 for sid in sid_list:
                     duplicate_groups[sid] = sid_list
     
-    # IMPROVEMENT: Generalized Restricted Keys Container
     restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
@@ -700,7 +659,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Capture keys for Restricted Categories to propagate later
+                # Generalized Flag Propagation Capture
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -722,7 +681,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
-    # IMPROVEMENT: Apply Propagation for ALL restricted categories
+    # Generalized Flag Propagation Application
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
         for flag_name, keys in restricted_issue_keys.items():
@@ -763,7 +722,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
-                # Use detailed comment if available, else default
+                # Use detailed comment if present, else fallback
                 'Comment': r.get('Comment_Detail', reason_info[1]),
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
@@ -799,7 +758,7 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
     df_to_write = df_p[[c for c in cols if c in df_p.columns]]
     df_to_write.to_excel(writer, index=False, sheet_name=sheet)
     
-    # IMPROVEMENT: Conditional Formatting
+    # Conditional Formatting
     if format_rules:
         workbook = writer.book
         worksheet = writer.sheets[sheet]
@@ -809,7 +768,6 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         
         if 'Status' in df_to_write.columns:
             status_idx = df_to_write.columns.get_loc('Status')
-            # Check range length (header is row 0)
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
                                          {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
@@ -905,6 +863,37 @@ def log_validation_run(country, file, total, app, rej):
 # -------------------------------------------------
 st.title("Product Validation Tool")
 st.markdown("---")
+
+# LAYOUT TOGGLE
+if 'layout_mode' not in st.session_state:
+    st.session_state.layout_mode = "centered" 
+
+with st.sidebar:
+    st.header("Display Settings")
+    layout_choice = st.radio("Layout Mode", ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"])
+    new_mode = "wide" if "Wide" in layout_choice else "centered"
+    if new_mode != st.session_state.layout_mode:
+        st.session_state.layout_mode = new_mode
+        st.rerun()
+
+# CSS FOR UPLOAD AREA
+st.markdown("""
+    <style>
+    .upload-area {
+        border: 2px dashed #4CAF50;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        background: #f9f9f9;
+        margin: 1rem 0;
+    }
+    .upload-icon {
+        font-size: 3rem;
+        color: #4CAF50;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 with st.spinner("Loading configuration files..."):
     support_files = load_all_support_files()
 if not support_files['flags_mapping']:
@@ -921,9 +910,33 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
+    # ENHANCED UPLOAD UI
+    st.markdown("""
+        <div class="upload-area">
+            <div class="upload-icon">📁</div>
+            <h3>Upload Product Files</h3>
+            <p>Drag and drop or click to browse</p>
+            <small>Supports CSV, XLSX • Max 200MB per file</small>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    uploaded_files = st.file_uploader(
+        "Choose files",
+        type=['csv', 'xlsx'],
+        accept_multiple_files=True,
+        key="daily_files",
+        label_visibility="collapsed"
+    )
     
     if uploaded_files:
+        # FILE DETAILS GRID
+        with st.expander(f"📋 Uploaded {len(uploaded_files)} File(s)", expanded=False):
+            for idx, file in enumerate(uploaded_files, 1):
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1: st.write(f"**{idx}. {file.name}**")
+                with col2: st.write(f"{file.size / 1024 / 1024:.2f} MB")
+                with col3: st.write("Excel" if file.name.endswith('.xlsx') else "CSV")
+
         try:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
@@ -957,7 +970,6 @@ with tab1:
                 st.stop()
             
             merged_data = pd.concat(all_dfs, ignore_index=True)
-            st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
             
             intersection_count = 0
             intersection_sids = set()
@@ -997,14 +1009,16 @@ with tab1:
                 sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
                 
                 st.markdown("---")
-                st.header("Overall Results")
-                c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("Total", len(data))
-                c2.metric("Approved", len(approved_df))
-                c3.metric("Rejected", len(rejected_df))
-                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
-                c4.metric("Rate", f"{rt:.1f}%")
-                c5.metric("SKUs in Both Files", intersection_count)
+                # RESPONSIVE METRICS CONTAINER
+                with st.container():
+                    st.header("Overall Results")
+                    c1, c2, c3, c4, c5 = st.columns(5)
+                    c1.metric("Total", len(data))
+                    c2.metric("Approved", len(approved_df))
+                    c3.metric("Rejected", len(rejected_df))
+                    rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+                    c4.metric("Rate", f"{rt:.1f}%")
+                    c5.metric("SKUs in Both Files", intersection_count)
                 
                 if intersection_count > 0:
                     common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
@@ -1020,12 +1034,12 @@ with tab1:
                 st.subheader("Validation Results by Flag")
                 display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
                 for title, df_flagged in flag_dfs.items():
+                    # BEST DESIGNER UPGRADE: INTERACTIVE EXPANDERS
                     with st.expander(f"{title} ({len(df_flagged)})"):
                         if not df_flagged.empty:
-                            # 1. Prepare Display Data
                             df_display = df_flagged[[c for c in display_cols if c in df_flagged.columns]].copy()
                             
-                            # 2. Add Best Designer Filters (Side-by-Side)
+                            # Filters
                             col1, col2 = st.columns([1, 1])
                             with col1:
                                 search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
@@ -1033,21 +1047,17 @@ with tab1:
                                 all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
                                 seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
                             
-                            # 3. Apply Filters
+                            # Apply Filters
                             if search_term:
                                 mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
                                 df_display = df_display[mask]
                             if seller_filter:
                                 df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
                             
-                            # 4. Interactive Counter
                             if len(df_display) != len(df_flagged):
                                 st.caption(f"Showing {len(df_display)} of {len(df_flagged)} rows")
 
-                            # 5. Interactive Table
                             st.dataframe(df_display, use_container_width=True, hide_index=True)
-                            
-                            # 6. Export Button
                             st.download_button(f"📥 Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
                         else:
                             st.success("✅ No issues found.")
@@ -1072,7 +1082,17 @@ with tab1:
 with tab2:
     st.header("Weekly Analysis Dashboard")
     st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
-    weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files")
+    
+    # Enhanced Upload Area for Weekly
+    st.markdown("""
+        <div class="upload-area">
+            <div class="upload-icon">📊</div>
+            <h3>Upload Historical Files</h3>
+            <p>Drag multiple 'Full Data' files here</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files", label_visibility="collapsed")
     
     if weekly_files:
         combined_df = pd.DataFrame()
@@ -1105,14 +1125,15 @@ with tab2:
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
             
             st.markdown("### Key Metrics")
-            m1, m2, m3, m4 = st.columns(4)
-            total = len(combined_df)
-            rej_count = len(rejected)
-            rej_rate = (rej_count/total * 100) if total else 0
-            m1.metric("Total Products Checked", f"{total:,}")
-            m2.metric("Total Rejected", f"{rej_count:,}")
-            m3.metric("Rejection Rate", f"{rej_rate:.1f}%")
-            m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
+            with st.container():
+                m1, m2, m3, m4 = st.columns(4)
+                total = len(combined_df)
+                rej_count = len(rejected)
+                rej_rate = (rej_count/total * 100) if total else 0
+                m1.metric("Total Products Checked", f"{total:,}")
+                m2.metric("Total Rejected", f"{rej_count:,}")
+                m3.metric("Rejection Rate", f"{rej_rate:.1f}%")
+                m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
             
             st.markdown("---")
             c1, c2 = st.columns(2)
@@ -1235,9 +1256,9 @@ with tab3:
             df = pd.read_csv(file)
         else:
             df = pd.read_excel(file)
-        st.dataframe(df.head(50))
+        st.dataframe(df.head(50), use_container_width=True)
     else:
         try:
-            st.dataframe(pd.read_json('validation_audit.jsonl', lines=True).tail(50))
+            st.dataframe(pd.read_json('validation_audit.jsonl', lines=True).tail(50), use_container_width=True)
         except:
             st.info("No audit log found.")
