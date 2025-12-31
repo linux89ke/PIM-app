@@ -92,7 +92,6 @@ def normalize_text(text: str) -> str:
     """Normalize text by removing noise words, special characters, and extra spaces."""
     if pd.isna(text): return ""
     text = str(text).lower().strip()
-    # Remove noise words (English & Common) to improve duplicate detection
     noise = r'\b(new|sale|original|genuine|authentic|official|premium|quality|best|hot|2024|2025)\b'
     text = re.sub(noise, '', text)
     text = re.sub(r'[^\w\s]', '', text)
@@ -128,8 +127,6 @@ def check_duplicate_products_enhanced(
     ]['PRODUCT_SET_SID'].tolist()
     
     image_duplicates = []
-    
-    # Strategy 3: Fuzzy Text Matching
     fuzzy_duplicates = []
     SAFE_GROUP_SIZE = 200 
     
@@ -188,7 +185,6 @@ def load_excel_file(filename: str, column: Optional[str] = None):
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
-            # Improvement: Clean category codes on load
             return df[column].apply(clean_category_code).tolist()
         return df
     except Exception as e:
@@ -401,7 +397,6 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Improvement: Detailed Comment
     data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -412,7 +407,6 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
-    # Clean codes
     data['CAT_CLEAN'] = data['CATEGORY_CODE'].apply(clean_category_code)
     target_cats = [clean_category_code(c) for c in warranty_category_codes]
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
@@ -433,7 +427,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
-    # Fuzzy Match Category Code
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -452,21 +445,18 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
-    # Add trigger comment
     target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Contains Sensitive Brand/Word"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Matched Prohibited Keyword"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -669,7 +659,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 for sid in sid_list:
                     duplicate_groups[sid] = sid_list
     
-    # IMPROVEMENT: Generalized Restricted Keys Container
     restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
@@ -708,7 +697,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Capture keys for Restricted Categories to propagate later
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -730,7 +718,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
-    # IMPROVEMENT: Apply Propagation for ALL restricted categories
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
         for flag_name, keys in restricted_issue_keys.items():
@@ -754,7 +741,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        # Look up reason info using the FLAG NAME
         reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
@@ -769,7 +755,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
-                # Use detailed comment if available, else default from flags_mapping
                 'Comment': r.get('Comment_Detail', reason_info[1]),
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
@@ -815,7 +800,6 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         
         if 'Status' in df_to_write.columns:
             status_idx = df_to_write.columns.get_loc('Status')
-            # Check range length (header is row 0)
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
                                          {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
@@ -981,6 +965,8 @@ with tab1:
         st.session_state.final_report = pd.DataFrame()
     if 'all_data_map' not in st.session_state:
         st.session_state.all_data_map = pd.DataFrame()
+    if 'intersection_sids' not in st.session_state:
+        st.session_state.intersection_sids = set()
 
     if uploaded_files:
         # Check if new files uploaded by comparing file names/sizes
@@ -1035,6 +1021,9 @@ with tab1:
                     intersection_sids = set.intersection(*file_sids_sets)
                     intersection_count = len(intersection_sids)
                 
+                # STORE INTERSECTION SIDS
+                st.session_state.intersection_sids = intersection_sids
+                
                 data_prop = propagate_metadata(merged_data)
                 is_valid, errors = validate_input_schema(data_prop)
                 
@@ -1077,6 +1066,8 @@ with tab1:
             final_report = st.session_state.final_report
             data = st.session_state.all_data_map
             intersection_count = st.session_state.intersection_count
+            # RETRIEVE INTERSECTION SIDS
+            intersection_sids = st.session_state.intersection_sids
 
             approved_df = final_report[final_report['Status'] == 'Approved']
             rejected_df = final_report[final_report['Status'] == 'Rejected']
@@ -1110,16 +1101,12 @@ with tab1:
             
             st.subheader("Validation Results by Flag")
             
-            # Get unique flags present in rejected list
             active_flags = rejected_df['FLAG'].unique()
             display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
             
-            # Iterate through active flags (Dynamic generation based on results)
             for title in active_flags:
-                # Filter consolidated report for this flag
                 df_flagged_report = rejected_df[rejected_df['FLAG'] == title]
                 
-                # Merge with Data to get display columns (Name, Brand etc not in report)
                 df_display = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
                 df_display = df_display[[c for c in display_cols if c in df_display.columns]]
 
@@ -1160,18 +1147,17 @@ with tab1:
                     to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
                     if to_approve:
                         if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
-                            # Update Session State
-                            # 1. Update Status
+                            # Update Session State with User Rules
+                            # Status -> Approved, Reason -> Empty, Comment -> Empty, FLAG -> Approved by User
                             st.session_state.final_report.loc[
                                 st.session_state.final_report['ProductSetSid'].isin(to_approve), 
                                 ['Status', 'Reason', 'Comment', 'FLAG']
-                            ] = ['Approved', 'Manually Approved', 'Approved by User', '']
+                            ] = ['Approved', '', '', 'Approved by User']
                             
                             st.success("Updated! Rerunning to refresh...")
                             st.rerun()
 
                     # EXPORT BUTTON for this specific flag
-                    # Re-merge to get full details for export
                     flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
                     st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
 
