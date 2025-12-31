@@ -703,7 +703,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Capture keys for Restricted Categories to propagate later
+                # Generalized Flag Propagation Capture
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -749,8 +749,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        # --- RESTORED ORIGINAL REASON LOGIC ---
-        reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        # Look up reason info using the FLAG NAME
+        if name == "Seller Not approved to sell Refurb":
+            reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
+        else:
+            reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
@@ -1133,12 +1136,13 @@ with tab1:
                         if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
                             # Update Session State with User Rules
                             # Status -> Approved
+                            # Reason -> Cleared
+                            # Comment -> Cleared
                             # FLAG -> 'Approved by User'
-                            # Reason & Comment -> PRESERVED (Do not clear)
                             st.session_state.final_report.loc[
                                 st.session_state.final_report['ProductSetSid'].isin(to_approve), 
-                                ['Status', 'FLAG']
-                            ] = ['Approved', 'Approved by User']
+                                ['Status', 'Reason', 'Comment', 'FLAG']
+                            ] = ['Approved', '', '', 'Approved by User']
                             
                             st.success("Updated! Rerunning to refresh...")
                             st.rerun()
