@@ -703,7 +703,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Generalized Flag Propagation Capture
+                # Capture keys for Restricted Categories to propagate later
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -1045,7 +1045,7 @@ with tab1:
             # RETRIEVE INTERSECTION SIDS
             intersection_sids = st.session_state.intersection_sids
             
-            # --- FIX: DEFINE VARIABLES FOR DISPLAY LOGIC ---
+            # DEFINE VARIABLES FOR DISPLAY LOGIC
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
 
@@ -1110,8 +1110,26 @@ with tab1:
                     if len(df_display) != len(df_flagged_report):
                         st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
 
+                    # SESSION STATE KEYS FOR SELECT ALL
+                    if f"select_all_key_{title}" not in st.session_state:
+                        st.session_state[f"select_all_key_{title}"] = 0
+                    if f"default_select_{title}" not in st.session_state:
+                        st.session_state[f"default_select_{title}"] = False
+                    
+                    # SELECT ALL BUTTONS
+                    c_sel, c_desel, c_space = st.columns([1, 1, 4])
+                    if c_sel.button("Select All", key=f"btn_sa_{title}"):
+                        st.session_state[f"default_select_{title}"] = True
+                        st.session_state[f"select_all_key_{title}"] += 1
+                        st.rerun()
+                    
+                    if c_desel.button("Deselect All", key=f"btn_da_{title}"):
+                        st.session_state[f"default_select_{title}"] = False
+                        st.session_state[f"select_all_key_{title}"] += 1
+                        st.rerun()
+
                     # ADD SELECTION COLUMN
-                    df_display.insert(0, "Select", False)
+                    df_display.insert(0, "Select", st.session_state[f"default_select_{title}"])
                     
                     # DATA EDITOR
                     edited_df = st.data_editor(
@@ -1120,7 +1138,7 @@ with tab1:
                         use_container_width=True,
                         column_config={"Select": st.column_config.CheckboxColumn(required=True)},
                         disabled=[c for c in df_display.columns if c != "Select"],
-                        key=f"editor_{title}"
+                        key=f"editor_{title}_{st.session_state[f'select_all_key_{title}']}" # Dynamic Key Forces Reset
                     )
                     
                     # APPROVE BUTTON LOGIC
