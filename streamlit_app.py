@@ -749,7 +749,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        # Look up reason info using the FLAG NAME
+        
+        # --- FIXED LOGIC TO MATCH USER SNIPPET EXACTLY ---
         if name == "Seller Not approved to sell Refurb":
             reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
         else:
@@ -767,8 +768,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
-                # Use detailed comment if available, else default from flags_mapping
-                'Comment': r.get('Comment_Detail', reason_info[1]),
+                'Comment': reason_info[1],  # Directly use mapping value, no dynamic comment
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
             })
