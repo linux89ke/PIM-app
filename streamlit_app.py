@@ -75,7 +75,6 @@ def clean_category_code(code) -> str:
     """Robust cleaner for category codes to handle .0 suffixes and whitespace."""
     try:
         if pd.isna(code): return ""
-        # Convert float-like strings "123.0" to "123"
         s = str(code).strip()
         if s.replace('.', '', 1).isdigit() and '.' in s:
             return str(int(float(s)))
@@ -398,7 +397,7 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
     # Improvement: Detailed Comment
-    data.loc[mask, 'Comment_Detail'] = "Contains unnecessary keyword"
+    data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
@@ -453,6 +452,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Improvement: Extract word matched? (Skipped for speed, logic is complex)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
@@ -481,7 +481,6 @@ def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, si
         similarity_threshold=similarity_threshold,
         max_images_to_hash=0
     )
-    
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
     st.session_state.duplicate_stats = stats
@@ -1122,7 +1121,6 @@ with tab2:
             with c3:
                 st.subheader("Seller Trust Score (Top 10)")
                 if not combined_df.empty and 'SELLER_NAME' in combined_df.columns:
-                    # Calculate Rejection Rate per Seller
                     seller_stats = combined_df.groupby('SELLER_NAME').agg(
                         Total=('PRODUCT_SET_SID', 'count'),
                         Rejected=('Status', lambda x: (x == 'Rejected').sum())
