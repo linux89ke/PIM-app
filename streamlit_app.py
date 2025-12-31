@@ -22,9 +22,8 @@ except ImportError:
 # -------------------------------------------------
 # 1. LAYOUT CONFIGURATION (Dynamic Toggle)
 # -------------------------------------------------
-# Initialize session state for layout BEFORE page_config
 if 'layout_mode' not in st.session_state:
-    st.session_state.layout_mode = "centered"  # Default to centered for mobile-friendliness
+    st.session_state.layout_mode = "centered" 
 
 st.set_page_config(
     page_title="Product Validation Tool", 
@@ -189,6 +188,7 @@ def load_excel_file(filename: str, column: Optional[str] = None):
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
+            # Improvement: Clean category codes on load
             return df[column].apply(clean_category_code).tolist()
         return df
     except Exception as e:
@@ -199,21 +199,63 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            'Seller Not approved to sell Refurb': ('1000028', "Contact Seller Support (Refurb Claim)"),
-            'BRAND name repeated in NAME': ('1000002', "Do not repeat Brand in Name"),
-            'Missing COLOR': ('1000005', "Confirm actual product color"),
-            'Duplicate product': ('1000007', "Kindly avoid creating duplicate SKUs"),
-            'Prohibited products': ('1000024', "Product not authorized (License)"),
-            'Single-word NAME': ('1000008', "Improve Product Name"),
-            'Unnecessary words in NAME': ('1000008', "Remove unnecessary words"),
-            'Generic BRAND Issues': ('1000014', "Request brand creation"),
-            'Counterfeit Sneakers': ('1000030', "Suspected Counterfeit"),
-            'Seller Approve to sell books': ('1000028', "Contact Support (Books)"),
-            'Seller Approved to Sell Perfume': ('1000028', "Contact Support (Perfume)"),
-            'Suspected counterfeit Jerseys': ('1000030', "Suspected Counterfeit Jersey"),
-            'Suspected Fake product': ('1000030', "Suspected Counterfeit (Price Check)"),
-            'Product Warranty': ('1000013', "Provide Warranty Details"),
-            'Sensitive words': ('1000001', "Brand NOT Allowed"),
+            'Seller Not approved to sell Refurb': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'BRAND name repeated in NAME': (
+                '1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name',
+                "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"
+            ),
+            'Missing COLOR': (
+                '1000005 - Kindly confirm the actual product colour',
+                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
+            ),
+            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs"),
+            'Prohibited products': (
+                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
+                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
+            ),
+            'Single-word NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
+            ),
+            'Unnecessary words in NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers.Kindly avoid unnecesary words "
+            ),
+            'Generic BRAND Issues': (
+                '1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8',
+                "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it's approved or rejected, along with the reason..Avoid using Generic for fashion items"
+            ),
+            'Counterfeit Sneakers': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Seller Approve to sell books': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Seller Approved to Sell Perfume': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Suspected counterfeit Jerseys': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Suspected Fake product': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Product Warranty': (
+                '1000013 - Kindly Provide Product Warranty Details',
+                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."
+            ),
+            'Sensitive words': (
+                '1000001 - Brand NOT Allowed',
+                "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
+            ),
         }
         return flag_mapping
     except Exception:
@@ -359,6 +401,7 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Improvement: Detailed Comment
     data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -390,7 +433,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
-    # Clean codes
+    # Fuzzy Match Category Code
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -409,17 +452,22 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
+    # Add trigger comment
     target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Detailed reporting
+    data.loc[mask, 'Comment_Detail'] = "Contains Sensitive Brand/Word"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Detailed reporting
+    data.loc[mask, 'Comment_Detail'] = "Matched Prohibited Keyword"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
@@ -659,7 +707,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Generalized Flag Propagation Capture
+                # Capture keys for Restricted Categories to propagate later
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -705,10 +753,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
-        if name == "Seller Not approved to sell Refurb":
-            reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
-        else:
-            reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+        # --- FIXED REASON LOGIC ---
+        # Look up the standard reason & comment based on the FLAG NAME
+        standard_reason = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
         
@@ -717,13 +764,18 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             if sid in processed:
                 continue
             processed.add(sid)
+            
+            # Use 'Comment_Detail' if it exists (for specific trigger words), otherwise use standard comment
+            final_comment = r.get('Comment_Detail')
+            if pd.isna(final_comment):
+                 final_comment = standard_reason[1]
+            
             rows.append({
                 'ProductSetSid': sid,
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
-                'Reason': reason_info[0],
-                # Use detailed comment if present, else fallback
-                'Comment': r.get('Comment_Detail', reason_info[1]),
+                'Reason': standard_reason[0],
+                'Comment': final_comment,
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
             })
@@ -758,7 +810,7 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
     df_to_write = df_p[[c for c in cols if c in df_p.columns]]
     df_to_write.to_excel(writer, index=False, sheet_name=sheet)
     
-    # Conditional Formatting
+    # IMPROVEMENT: Conditional Formatting
     if format_rules:
         workbook = writer.book
         worksheet = writer.sheets[sheet]
@@ -768,6 +820,7 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         
         if 'Status' in df_to_write.columns:
             status_idx = df_to_write.columns.get_loc('Status')
+            # Check range length (header is row 0)
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
                                          {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
