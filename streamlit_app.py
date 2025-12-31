@@ -87,7 +87,7 @@ def normalize_text(text: str) -> str:
     """Normalize text by removing noise words, special characters, and extra spaces."""
     if pd.isna(text): return ""
     text = str(text).lower().strip()
-    # Remove noise words (English & Common)
+    # Remove noise words (English & Common) to improve duplicate detection
     noise = r'\b(new|sale|original|genuine|authentic|official|premium|quality|best|hot|2024|2025)\b'
     text = re.sub(noise, '', text)
     text = re.sub(r'[^\w\s]', '', text)
@@ -169,123 +169,120 @@ def check_duplicate_products_enhanced(
 # CACHED FILE LOADING
 # -------------------------------------------------
 @st.cache_data(ttl=3600)
-def load_txt_file(file_obj) -> List[str]:
+def load_txt_file(filename: str) -> List[str]:
     try:
-        # Check if it's a file object or a filename
-        if isinstance(file_obj, str):
-            with open(file_obj, 'r', encoding='utf-8') as f:
-                return [line.strip() for line in f if line.strip()]
-        else:
-            string_data = file_obj.getvalue().decode("utf-8")
-            return [line.strip() for line in string_data.split('\n') if line.strip()]
+        with open(filename, 'r', encoding='utf-8') as f:
+            data = [line.strip() for line in f if line.strip()]
+        return data
     except Exception as e:
-        logger.error(f"Error reading file: {e}")
+        logger.error(f"Error reading {filename}: {e}")
         return []
 
 @st.cache_data(ttl=3600)
-def load_excel_file(file_obj, column: Optional[str] = None):
+def load_excel_file(filename: str, column: Optional[str] = None):
     try:
-        df = pd.read_excel(file_obj, engine='openpyxl', dtype=str)
+        df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
+            # Improvement: Clean category codes on load
             return df[column].apply(clean_category_code).tolist()
         return df
     except Exception as e:
-        logger.error(f"Error reading excel: {e}")
+        logger.error(f"Error reading {filename}: {e}")
         return [] if column else pd.DataFrame()
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
-            'Seller Not approved to sell Refurb': ('1000028', "Contact Seller Support (Refurb Claim)"),
-            'BRAND name repeated in NAME': ('1000002', "Do not repeat Brand in Name"),
-            'Missing COLOR': ('1000005', "Confirm actual product color"),
-            'Duplicate product': ('1000007', "Kindly avoid creating duplicate SKUs"),
-            'Prohibited products': ('1000024', "Product not authorized (License)"),
-            'Single-word NAME': ('1000008', "Improve Product Name"),
-            'Unnecessary words in NAME': ('1000008', "Remove unnecessary words"),
-            'Generic BRAND Issues': ('1000014', "Request brand creation"),
-            'Counterfeit Sneakers': ('1000030', "Suspected Counterfeit"),
-            'Seller Approve to sell books': ('1000028', "Contact Support (Books)"),
-            'Seller Approved to Sell Perfume': ('1000028', "Contact Support (Perfume)"),
-            'Suspected counterfeit Jerseys': ('1000030', "Suspected Counterfeit Jersey"),
-            'Suspected Fake product': ('1000030', "Suspected Counterfeit (Price Check)"),
-            'Product Warranty': ('1000013', "Provide Warranty Details"),
-            'Sensitive words': ('1000001', "Brand NOT Allowed"),
+            'Seller Not approved to sell Refurb': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'BRAND name repeated in NAME': (
+                '1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name',
+                "Please do not write the brand name in the Product Name field. The brand name should only be written in the Brand field.\nIf you include it in both fields, it will show up twice in the product title on the website"
+            ),
+            'Missing COLOR': (
+                '1000005 - Kindly confirm the actual product colour',
+                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
+            ),
+            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs"),
+            'Prohibited products': (
+                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
+                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
+            ),
+            'Single-word NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
+            ),
+            'Unnecessary words in NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers.Kindly avoid unnecesary words "
+            ),
+            'Generic BRAND Issues': (
+                '1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8',
+                "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it's approved or rejected, along with the reason..Avoid using Generic for fashion items"
+            ),
+            'Counterfeit Sneakers': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Seller Approve to sell books': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Seller Approved to Sell Perfume': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Suspected counterfeit Jerseys': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Suspected Fake product': (
+                '1000030 - Suspected Counterfeit/Fake Product.Please Contact Seller Support By Raising A Claim , For Questions & Inquiries (Not Authorized)',
+                "This product is suspected to be counterfeit or fake and is not authorized for sale on our platform.\n\nPlease contact Seller Support to raise a claim and initiate the necessary verification process.\nIf you have any questions or need further assistance, don't hesitate to reach out to Seller Support."
+            ),
+            'Product Warranty': (
+                '1000013 - Kindly Provide Product Warranty Details',
+                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia's requirements."
+            ),
+            'Sensitive words': (
+                '1000001 - Brand NOT Allowed',
+                "Your listing was rejected because it includes brands that are not allowed on Jumia, such as Chanel, Rolex, and My Salat Mat. These brands are banned from being sold on our platform."
+            ),
         }
         return flag_mapping
     except Exception:
         return {}
 
-def load_local_support_files():
-    # Fallback to local files if not uploaded
-    files = {}
-    try: files['blacklisted_words'] = load_txt_file('blacklisted.txt') 
-    except: files['blacklisted_words'] = []
-    
-    try: files['book_category_codes'] = load_excel_file('Books_cat.xlsx', 'CategoryCode')
-    except: files['book_category_codes'] = []
-    
-    try: files['approved_book_sellers'] = load_excel_file('Books_Approved_Sellers.xlsx', 'SellerName')
-    except: files['approved_book_sellers'] = []
-    
-    try: files['perfume_category_codes'] = load_txt_file('Perfume_cat.txt')
-    except: files['perfume_category_codes'] = []
-    
-    try: files['sensitive_perfume_brands'] = [b.lower() for b in load_txt_file('sensitive_perfumes.txt')]
-    except: files['sensitive_perfume_brands'] = []
-    
-    try: files['approved_perfume_sellers'] = load_excel_file('perfumeSellers.xlsx', 'SellerName')
-    except: files['approved_perfume_sellers'] = []
-    
-    try: files['sneaker_category_codes'] = load_txt_file('Sneakers_Cat.txt')
-    except: files['sneaker_category_codes'] = []
-    
-    try: files['sneaker_sensitive_brands'] = [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')]
-    except: files['sneaker_sensitive_brands'] = []
-    
-    try: files['sensitive_words'] = [w.lower() for w in load_txt_file('sensitive_words.txt')]
-    except: files['sensitive_words'] = []
-    
-    try: files['unnecessary_words'] = [w.lower() for w in load_txt_file('unnecessary.txt')]
-    except: files['unnecessary_words'] = []
-    
-    try: files['colors'] = [c.lower() for c in load_txt_file('colors.txt')]
-    except: files['colors'] = []
-    
-    try: files['color_categories'] = load_txt_file('color_cats.txt')
-    except: files['color_categories'] = []
-    
-    try: files['check_variation'] = load_excel_file('check_variation.xlsx')
-    except: files['check_variation'] = pd.DataFrame()
-    
-    try: files['category_fas'] = load_excel_file('category_FAS.xlsx')
-    except: files['category_fas'] = pd.DataFrame()
-    
-    try: files['reasons'] = load_excel_file('reasons.xlsx')
-    except: files['reasons'] = pd.DataFrame()
-    
-    files['flags_mapping'] = load_flags_mapping()
-    
-    try: files['jerseys_config'] = load_excel_file('Jerseys.xlsx')
-    except: files['jerseys_config'] = pd.DataFrame()
-    
-    try: files['warranty_category_codes'] = load_txt_file('warranty.txt')
-    except: files['warranty_category_codes'] = []
-    
-    try: files['suspected_fake'] = load_excel_file('suspected_fake.xlsx')
-    except: files['suspected_fake'] = pd.DataFrame()
-    
-    try: files['approved_refurb_sellers_ke'] = [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')]
-    except: files['approved_refurb_sellers_ke'] = []
-    
-    try: files['approved_refurb_sellers_ug'] = [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')]
-    except: files['approved_refurb_sellers_ug'] = []
-    
-    try: files['duplicate_exempt_codes'] = load_txt_file('duplicate_exempt.txt')
-    except: files['duplicate_exempt_codes'] = []
-    
+@st.cache_data(ttl=3600)
+def load_all_support_files() -> Dict:
+    files = {
+        'blacklisted_words': load_txt_file('blacklisted.txt'),
+        'book_category_codes': load_excel_file('Books_cat.xlsx', 'CategoryCode'),
+        'approved_book_sellers': load_excel_file('Books_Approved_Sellers.xlsx', 'SellerName'),
+        'perfume_category_codes': load_txt_file('Perfume_cat.txt'),
+        'sensitive_perfume_brands': [b.lower() for b in load_txt_file('sensitive_perfumes.txt')],
+        'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
+        'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
+        'sneaker_sensitive_brands': [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')],
+        'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')],
+        'unnecessary_words': [w.lower() for w in load_txt_file('unnecessary.txt')],
+        'colors': [c.lower() for c in load_txt_file('colors.txt')],
+        'color_categories': load_txt_file('color_cats.txt'),
+        'check_variation': load_excel_file('check_variation.xlsx'),
+        'category_fas': load_excel_file('category_FAS.xlsx'),
+        'reasons': load_excel_file('reasons.xlsx'),
+        'flags_mapping': load_flags_mapping(),
+        'jerseys_config': load_excel_file('Jerseys.xlsx'),
+        'warranty_category_codes': load_txt_file('warranty.txt'),
+        'suspected_fake': load_excel_file('suspected_fake.xlsx'),
+        'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
+        'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
+        'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
+    }
     return files
 
 @st.cache_data(ttl=3600)
@@ -337,7 +334,7 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
             df['ACTIVE_STATUS_COUNTRY'].astype(str).str.lower()
             .str.replace('jumia-', '', regex=False).str.strip().str.upper()
         )
-    # Memory Optimization: Convert low cardinality cols
+    # Improvement: Memory Optimization
     for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS']:
         if col in df.columns:
             df[col] = df[col].astype('category')
@@ -354,7 +351,6 @@ def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
 def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, source: str) -> pd.DataFrame:
     if 'ACTIVE_STATUS_COUNTRY' not in df.columns:
         return df
-    # Ensure it's string before comparison if it was categorized
     df['ACTIVE_STATUS_COUNTRY'] = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
     mask = df['ACTIVE_STATUS_COUNTRY'] == country_validator.code
     filtered = df[mask].copy()
@@ -401,8 +397,8 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Detailed reporting
-    data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name" 
+    # Improvement: Detailed Comment
+    data.loc[mask, 'Comment_Detail'] = "Contains unnecessary keyword"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str]) -> pd.DataFrame:
@@ -433,6 +429,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
+    # Fuzzy Match Category Code
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -444,6 +441,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     def is_color_missing(row):
         name_val = str(row['NAME'])
         if pattern.search(name_val): return False
+        
         if has_color_col:
             color_val = str(row['COLOR'])
             if color_val.strip().lower() not in ['nan', '', 'none', 'null']: return False
@@ -455,7 +453,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Improvement: Extract which word matched? (Computationally expensive, skipping for now)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
@@ -484,6 +481,7 @@ def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, si
         similarity_threshold=similarity_threshold,
         max_images_to_hash=0
     )
+    
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
     st.session_state.duplicate_stats = stats
@@ -662,8 +660,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 for sid in sid_list:
                     duplicate_groups[sid] = sid_list
     
-    # IMPROVEMENT: Generalized Restricted Keys
-    restricted_issue_keys = {} # Map 'Flag' -> set(keys)
+    # IMPROVEMENT: Generalized Restricted Keys Container
+    restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
@@ -701,7 +699,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Generalized Propagation Logic
+                # Capture keys for Restricted Categories to propagate later
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -905,28 +903,8 @@ def log_validation_run(country, file, total, app, rej):
 # -------------------------------------------------
 st.title("Product Validation Tool")
 st.markdown("---")
-
-# IMPROVEMENT: Dynamic Config Upload Sidebar
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    st.info("Upload updated support files here. If empty, local files will be used.")
-    up_books_cat = st.file_uploader("Books Categories (XLSX)", type=['xlsx'])
-    up_approved_books = st.file_uploader("Approved Book Sellers (XLSX)", type=['xlsx'])
-    up_colors = st.file_uploader("Colors List (TXT)", type=['txt'])
-    up_color_cats = st.file_uploader("Color Categories (TXT)", type=['txt'])
-    up_exempt_dups = st.file_uploader("Duplicate Exempt Categories (TXT)", type=['txt'])
-
-# Load Configs with Fallback
 with st.spinner("Loading configuration files..."):
-    support_files = load_local_support_files()
-    
-    # Override with Sidebar Uploads
-    if up_books_cat: support_files['book_category_codes'] = load_excel_file(up_books_cat, 'CategoryCode')
-    if up_approved_books: support_files['approved_book_sellers'] = load_excel_file(up_approved_books, 'SellerName')
-    if up_colors: support_files['colors'] = [c.lower() for c in load_txt_file(up_colors)]
-    if up_color_cats: support_files['color_categories'] = load_txt_file(up_color_cats)
-    if up_exempt_dups: support_files['duplicate_exempt_codes'] = load_txt_file(up_exempt_dups)
-
+    support_files = load_all_support_files()
 if not support_files['flags_mapping']:
     st.error("Critical: flags.xlsx could not be loaded.")
     st.stop()
