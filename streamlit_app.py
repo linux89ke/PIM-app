@@ -447,12 +447,13 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
+    # Add trigger comment
+    target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Improvement: Extract word matched? (Skipped for speed, logic is complex)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
@@ -481,6 +482,7 @@ def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, si
         similarity_threshold=similarity_threshold,
         max_images_to_hash=0
     )
+    
     if 'duplicate_stats' not in st.session_state:
         st.session_state.duplicate_stats = {}
     st.session_state.duplicate_stats = stats
@@ -761,7 +763,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
-                'Comment': reason_info[1],
+                # Use detailed comment if available, else default
+                'Comment': r.get('Comment_Detail', reason_info[1]),
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
             })
@@ -1019,11 +1022,35 @@ with tab1:
                 for title, df_flagged in flag_dfs.items():
                     with st.expander(f"{title} ({len(df_flagged)})"):
                         if not df_flagged.empty:
+                            # 1. Prepare Display Data
                             df_display = df_flagged[[c for c in display_cols if c in df_flagged.columns]].copy()
-                            st.dataframe(df_display)
-                            st.download_button(f"Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
+                            
+                            # 2. Add Best Designer Filters (Side-by-Side)
+                            col1, col2 = st.columns([1, 1])
+                            with col1:
+                                search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
+                            with col2:
+                                all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
+                                seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
+                            
+                            # 3. Apply Filters
+                            if search_term:
+                                mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
+                                df_display = df_display[mask]
+                            if seller_filter:
+                                df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
+                            
+                            # 4. Interactive Counter
+                            if len(df_display) != len(df_flagged):
+                                st.caption(f"Showing {len(df_display)} of {len(df_flagged)} rows")
+
+                            # 5. Interactive Table
+                            st.dataframe(df_display, use_container_width=True, hide_index=True)
+                            
+                            # 6. Export Button
+                            st.download_button(f"📥 Export {title}", to_excel_flag_data(df_flagged, title), f"{file_prefix}_{title}.xlsx")
                         else:
-                            st.success("No issues found.")
+                            st.success("✅ No issues found.")
                 
                 st.markdown("---")
                 st.header("Overall Exports")
