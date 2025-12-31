@@ -703,7 +703,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Capture keys for Restricted Categories to propagate later
+                # Generalized Flag Propagation Capture
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -989,7 +989,6 @@ with tab1:
                     st.stop()
                 
                 merged_data = pd.concat(all_dfs, ignore_index=True)
-                st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
                 
                 intersection_count = 0
                 intersection_sids = set()
@@ -1110,26 +1109,11 @@ with tab1:
                     if len(df_display) != len(df_flagged_report):
                         st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
 
-                    # SESSION STATE KEYS FOR SELECT ALL
-                    if f"select_all_key_{title}" not in st.session_state:
-                        st.session_state[f"select_all_key_{title}"] = 0
-                    if f"default_select_{title}" not in st.session_state:
-                        st.session_state[f"default_select_{title}"] = False
+                    # Select All Checkbox
+                    select_all_mode = st.checkbox("Select All", key=f"sa_{title}")
                     
-                    # SELECT ALL BUTTONS
-                    c_sel, c_desel, c_space = st.columns([1, 1, 4])
-                    if c_sel.button("Select All", key=f"btn_sa_{title}"):
-                        st.session_state[f"default_select_{title}"] = True
-                        st.session_state[f"select_all_key_{title}"] += 1
-                        st.rerun()
-                    
-                    if c_desel.button("Deselect All", key=f"btn_da_{title}"):
-                        st.session_state[f"default_select_{title}"] = False
-                        st.session_state[f"select_all_key_{title}"] += 1
-                        st.rerun()
-
-                    # ADD SELECTION COLUMN
-                    df_display.insert(0, "Select", st.session_state[f"default_select_{title}"])
+                    # Add Selection Column
+                    df_display.insert(0, "Select", select_all_mode)
                     
                     # DATA EDITOR
                     edited_df = st.data_editor(
@@ -1138,7 +1122,8 @@ with tab1:
                         use_container_width=True,
                         column_config={"Select": st.column_config.CheckboxColumn(required=True)},
                         disabled=[c for c in df_display.columns if c != "Select"],
-                        key=f"editor_{title}_{st.session_state[f'select_all_key_{title}']}" # Dynamic Key Forces Reset
+                        # Dynamic Key ensures editor refreshes when Select All toggles
+                        key=f"editor_{title}_{select_all_mode}" 
                     )
                     
                     # APPROVE BUTTON LOGIC
@@ -1146,26 +1131,14 @@ with tab1:
                     if to_approve:
                         if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
                             # Update Session State with User Rules
-                            # Status -> Approved, Reason -> Original, Comment -> Approved by User, FLAG -> Cleared
-                            
-                            # We need to find the original rows to keep their Reason (or default empty for Approved)
-                            # Actually, when Approved, Reason is usually empty or specific. 
-                            # User requested: "Reason Column and Comment Column should be cleared but flag column should change to Approved by User" -> wait, correction in last prompt:
-                            # "Reason Column and Comment Column should be cleared but flag column should change to Approved by User" -> Previous request was different.
-                            # Let's follow the LATEST instruction: 
-                            # "Reason Column and Comment Column should be cleared but flag column should change to Approved by User"
-                            # WAIT, actually the prompt said: "Reason Column and Comment Column should be cleared but flag column should change to Approved by User"
-                            # AND THEN "no return reasons and comments as they were here... but still implement the trigger word"
-                            # Okay, standard approval behavior:
-                            # Status = Approved
-                            # Reason = ""
-                            # Comment = "Approved by User"
-                            # FLAG = "" (So it disappears from Rejected list)
-                            
+                            # Status -> Approved
+                            # Reason -> Cleared
+                            # Comment -> Approved by User
+                            # FLAG -> Approved by User (so it doesn't show in Rejected counts)
                             st.session_state.final_report.loc[
                                 st.session_state.final_report['ProductSetSid'].isin(to_approve), 
                                 ['Status', 'Reason', 'Comment', 'FLAG']
-                            ] = ['Approved', '', 'Approved by User', '']
+                            ] = ['Approved', '', 'Approved by User', 'Approved by User']
                             
                             st.success("Updated! Rerunning to refresh...")
                             st.rerun()
