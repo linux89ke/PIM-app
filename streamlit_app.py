@@ -397,6 +397,7 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Improvement: Detailed Comment
     data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -407,6 +408,7 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
+    # Clean codes
     data['CAT_CLEAN'] = data['CATEGORY_CODE'].apply(clean_category_code)
     target_cats = [clean_category_code(c) for c in warranty_category_codes]
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
@@ -427,6 +429,7 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
+    # Fuzzy Match Category Code
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -445,18 +448,21 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
+    # Add trigger comment
     target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Contains Sensitive Brand/Word"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
+    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Matched Prohibited Keyword"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -697,6 +703,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
+                # Generalized Flag Propagation Capture
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -718,6 +725,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
+    # Generalized Flag Propagation Application
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
         for flag_name, keys in restricted_issue_keys.items():
@@ -741,6 +749,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         map_name = name
+        # Look up reason info using the FLAG NAME
         reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
         
         flagged = pd.merge(res[['PRODUCT_SET_SID']].drop_duplicates(), data, on='PRODUCT_SET_SID', how='left')
@@ -755,6 +764,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
+                # Use detailed comment if available, else default from flags_mapping
                 'Comment': r.get('Comment_Detail', reason_info[1]),
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
@@ -800,6 +810,7 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         
         if 'Status' in df_to_write.columns:
             status_idx = df_to_write.columns.get_loc('Status')
+            # Check range length (header is row 0)
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
                                          {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
@@ -908,24 +919,6 @@ with st.sidebar:
         st.session_state.layout_mode = new_mode
         st.rerun()
 
-# CSS FOR UPLOAD AREA
-st.markdown("""
-    <style>
-    .upload-area {
-        border: 2px dashed #4CAF50;
-        border-radius: 10px;
-        padding: 2rem;
-        text-align: center;
-        background: #f9f9f9;
-        margin: 1rem 0;
-    }
-    .upload-icon {
-        font-size: 3rem;
-        color: #4CAF50;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 with st.spinner("Loading configuration files..."):
     support_files = load_all_support_files()
 if not support_files['flags_mapping']:
@@ -942,22 +935,11 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    # ENHANCED UPLOAD UI
-    st.markdown("""
-        <div class="upload-area">
-            <div class="upload-icon">📁</div>
-            <h3>Upload Product Files</h3>
-            <p>Drag and drop or click to browse</p>
-            <small>Supports CSV, XLSX • Max 200MB per file</small>
-        </div>
-    """, unsafe_allow_html=True)
-    
     uploaded_files = st.file_uploader(
-        "Choose files",
+        "Upload files (CSV/XLSX)",
         type=['csv', 'xlsx'],
         accept_multiple_files=True,
-        key="daily_files",
-        label_visibility="collapsed"
+        key="daily_files"
     )
     
     # INITIALIZE SESSION STATE FOR DATA
@@ -972,14 +954,7 @@ with tab1:
         # Check if new files uploaded by comparing file names/sizes
         current_file_signature = sorted([f.name + str(f.size) for f in uploaded_files])
         if 'last_processed_files' not in st.session_state or st.session_state.last_processed_files != current_file_signature:
-            # NEW PROCESSING
-            with st.expander(f"📋 Uploaded {len(uploaded_files)} File(s)", expanded=False):
-                for idx, file in enumerate(uploaded_files, 1):
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    with col1: st.write(f"**{idx}. {file.name}**")
-                    with col2: st.write(f"{file.size / 1024 / 1024:.2f} MB")
-                    with col3: st.write("Excel" if file.name.endswith('.xlsx') else "CSV")
-
+            
             try:
                 current_date = datetime.now().strftime('%Y-%m-%d')
                 file_prefix = country_validator.code
@@ -1014,6 +989,7 @@ with tab1:
                     st.stop()
                 
                 merged_data = pd.concat(all_dfs, ignore_index=True)
+                st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
                 
                 intersection_count = 0
                 intersection_sids = set()
@@ -1068,6 +1044,10 @@ with tab1:
             intersection_count = st.session_state.intersection_count
             # RETRIEVE INTERSECTION SIDS
             intersection_sids = st.session_state.intersection_sids
+            
+            # --- FIX: DEFINE VARIABLES FOR DISPLAY LOGIC ---
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            file_prefix = country_validator.code
 
             approved_df = final_report[final_report['Status'] == 'Approved']
             rejected_df = final_report[final_report['Status'] == 'Rejected']
@@ -1176,15 +1156,6 @@ with tab2:
     st.header("Weekly Analysis Dashboard")
     st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
     
-    # Enhanced Upload Area for Weekly
-    st.markdown("""
-        <div class="upload-area">
-            <div class="upload-icon">📊</div>
-            <h3>Upload Historical Files</h3>
-            <p>Drag multiple 'Full Data' files here</p>
-        </div>
-    """, unsafe_allow_html=True)
-
     weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files", label_visibility="collapsed")
     
     if weekly_files:
