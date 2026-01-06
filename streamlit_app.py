@@ -829,6 +829,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
+        # Explicit check: Run "Restricted brands" ONLY if country is Kenya
+        if name == "Restricted brands" and country_validator.code != 'KE':
+            continue
+
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
             if name == "Sensitive words": continue
             if name == "Product Warranty" and country_validator.code == 'UG': continue
