@@ -82,6 +82,7 @@ def clean_category_code(code) -> str:
     try:
         if pd.isna(code): return ""
         s = str(code).strip()
+        # Handle cases like "12345.0" -> "12345"
         if s.replace('.', '', 1).isdigit() and '.' in s:
             return str(int(float(s)))
         return s
@@ -192,9 +193,90 @@ def load_excel_file(filename: str, column: Optional[str] = None):
         return [] if column else pd.DataFrame()
 
 @st.cache_data(ttl=3600)
+def load_restricted_brands_config(filename: str) -> Dict:
+    """
+    Loads restric_brands.xlsx and returns a config dict:
+    {
+        'BRAND_NAME_LOWER': {
+            'sellers': {'seller1', 'seller2'},  # Set of allowed sellers (lowercase)
+            'categories': {'123', '456'} OR None  # Set of restricted cat codes, or None if ALL cats
+        }
+    }
+    """
+    config = {}
+    try:
+        # Load Sheet 1: Brands and Sellers
+        df1 = pd.read_excel(filename, sheet_name=0, engine='openpyxl', dtype=str)
+        df1.columns = df1.columns.str.strip()
+        
+        # Determine seller columns (flexible approach)
+        # Assuming format: Brand, check name, Sellers, Unnamed: 3, Unnamed: 4...
+        # We'll take 'Sellers' and any column starting with 'Unnamed' after it?
+        # Or just look for known columns. The user prompt implies multiple columns could hold sellers.
+        
+        # Load Sheet 2: Category Restrictions
+        # If Sheet 2 doesn't exist, we assume no category restrictions (apply to all).
+        try:
+            df2 = pd.read_excel(filename, sheet_name=1, engine='openpyxl', dtype=str)
+            df2.columns = df2.columns.str.strip()
+        except:
+            df2 = pd.DataFrame()
+
+        # Parse Sheet 1
+        for _, row in df1.iterrows():
+            brand_raw = str(row.get('Brand', '')).strip()
+            if not brand_raw or brand_raw.lower() == 'nan':
+                continue
+            
+            brand_key = brand_raw.lower()
+            
+            # Gather sellers
+            sellers = set()
+            # Check specific 'Sellers' column
+            if 'Sellers' in row and pd.notna(row['Sellers']):
+                s = str(row['Sellers']).strip()
+                if s.lower() != 'nan': sellers.add(s.lower())
+                
+            # Check unnamed columns (often where extra sellers spill over)
+            for col in df1.columns:
+                if 'Unnamed' in col or col == 'Sellers':
+                    val = str(row[col]).strip()
+                    if val and val.lower() != 'nan' and col != 'Brand' and col != 'check name':
+                         sellers.add(val.lower())
+            
+            config[brand_key] = {
+                'sellers': sellers,
+                'categories': None # Default to None (All categories restricted)
+            }
+
+        # Parse Sheet 2 (Exceptions/Scope)
+        # Sheet 2 columns are Brand Names. The values are Category Codes.
+        if not df2.empty:
+            for col in df2.columns:
+                brand_header_key = str(col).strip().lower()
+                
+                # We only care if this brand is in our main config (from Sheet 1)
+                # If a brand is in Sheet 2 but not Sheet 1, we don't have seller rules for it?
+                # Assuming Sheet 1 is the master list of restricted brands.
+                if brand_header_key in config:
+                    cats = df2[col].dropna().astype(str).apply(clean_category_code).tolist()
+                    if cats:
+                        config[brand_header_key]['categories'] = set(cats)
+
+        return config
+
+    except Exception as e:
+        logger.error(f"Error loading restricted brands config: {e}")
+        return {}
+
+@st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         flag_mapping = {
+            'Restricted brands': (
+                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
+                "This brand is restricted and can only be sold by authorized sellers.\nIf you are an authorized distributor, please contact Seller Support to whitelist your shop."
+            ),
             'Seller Not approved to sell Refurb': (
                 '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
                 "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
@@ -282,6 +364,7 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
+        'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
     }
     return files
 
@@ -371,6 +454,83 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # --- Validation Logic Functions ---
+
+def check_restricted_brands(data: pd.DataFrame, restricted_config: Dict) -> pd.DataFrame:
+    """
+    Checks if a product belongs to a restricted brand (Sheet 1) and if the seller is authorized.
+    Respects category restrictions from Sheet 2.
+    """
+    required = ['NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE']
+    if not all(c in data.columns for c in required) or not restricted_config:
+        return pd.DataFrame(columns=data.columns)
+
+    # Pre-process columns
+    data_to_check = data.copy()
+    data_to_check['NAME_LOWER'] = data_to_check['NAME'].astype(str).str.lower().str.strip()
+    data_to_check['BRAND_LOWER'] = data_to_check['BRAND'].astype(str).str.lower().str.strip()
+    # Check "Category" text field if available, per user request "Brand category or product name"
+    if 'CATEGORY' in data_to_check.columns:
+        data_to_check['CATEGORY_NAME_LOWER'] = data_to_check['CATEGORY'].astype(str).str.lower().str.strip()
+    else:
+        data_to_check['CATEGORY_NAME_LOWER'] = ""
+    
+    data_to_check['SELLER_LOWER'] = data_to_check['SELLER_NAME'].astype(str).str.lower().str.strip()
+    data_to_check['CAT_CODE_CLEAN'] = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
+
+    flagged_indices = set()
+
+    # Iterate through restricted brands config
+    for brand_key, rules in restricted_config.items():
+        # Create regex for brand name (using word boundaries to match "hidden inside")
+        # e.g. "Vaseline" matches "Blue Vaseline", "Vaseline 100ml"
+        pattern = re.compile(r'\b' + re.escape(brand_key) + r'\b', re.IGNORECASE)
+
+        # 1. Identify potential rows matching this brand
+        # "check if the brand name exists in Brand category or product name even if its a longer name"
+        mask_match = (
+            data_to_check['BRAND_LOWER'].str.contains(pattern, regex=True) |
+            data_to_check['NAME_LOWER'].str.contains(pattern, regex=True) |
+            data_to_check['CATEGORY_NAME_LOWER'].str.contains(pattern, regex=True)
+        )
+        
+        potential_rows = data_to_check[mask_match]
+        
+        if potential_rows.empty:
+            continue
+
+        # 2. Check Category Restrictions (Sheet 2)
+        # "check which categories to check only those categories if brand is not in sheet two it doesnt matter check any category code"
+        restricted_cats = rules.get('categories')
+        
+        if restricted_cats:
+            # If categories are defined, ONLY check products within those category codes
+            mask_category_scope = potential_rows['CAT_CODE_CLEAN'].isin(restricted_cats)
+            target_rows = potential_rows[mask_category_scope]
+        else:
+            # If no categories defined (None), check ALL categories for this brand
+            target_rows = potential_rows
+
+        if target_rows.empty:
+            continue
+
+        # 3. Check Seller Authorization
+        # "check which seller is supposed to sell if blank no seller is allowed"
+        allowed_sellers = rules.get('sellers', set())
+        
+        # If allowed_sellers is empty, ALL matches are invalid (no one allowed)
+        # If not empty, check if seller is in list
+        if not allowed_sellers:
+            # Reject all
+            flagged_indices.update(target_rows.index)
+        else:
+            # Reject if seller NOT in allowed list
+            mask_unauthorized = ~target_rows['SELLER_LOWER'].isin(allowed_sellers)
+            flagged_indices.update(target_rows[mask_unauthorized].index)
+
+    if not flagged_indices:
+        return pd.DataFrame(columns=data.columns)
+
+    return data.loc[list(flagged_indices)].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_refurb_seller_approval(data: pd.DataFrame, approved_sellers_ke: List[str], approved_sellers_ug: List[str], country_code: str) -> pd.DataFrame:
     if country_code == 'KE': approved_sellers = set(approved_sellers_ke)
@@ -628,6 +788,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     flags_mapping = support_files['flags_mapping']
     
     validations = [
+        ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
             'approved_sellers_ke': support_files['approved_refurb_sellers_ke'],
@@ -704,7 +865,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
                 # Generalized Flag Propagation Capture
-                if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb"]:
+                if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb", "Restricted brands"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
                     restricted_issue_keys[name].update(res['match_key'].unique())
