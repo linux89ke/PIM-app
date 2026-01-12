@@ -11,6 +11,7 @@ import xlsxwriter
 import altair as alt
 import requests
 from difflib import SequenceMatcher
+import zipfile  # Added for splitting large files
 
 # We keep these imports to avoid breaking the script structure
 try:
@@ -52,6 +53,8 @@ FULL_DATA_COLS = [
     "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
 FX_RATE = 132.0
+SPLIT_LIMIT = 9998  # Row limit for Excel files
+
 NEW_FILE_MAPPING = {
     'cod_productset_sid': 'PRODUCT_SET_SID',
     'dsc_name': 'NAME',
@@ -306,13 +309,7 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 @st.cache_data(ttl=3600)
 def load_restricted_brands_config(filename: str) -> Dict:
     """
-    Loads restric_brands.xlsx and returns a config dict:
-    {
-        'BRAND_NAME_LOWER': {
-            'sellers': {'seller1', 'seller2'},  # Set of allowed sellers (lowercase)
-            'categories': {'123', '456'} OR None  # Set of restricted cat codes, or None if ALL cats
-        }
-    }
+    Loads restric_brands.xlsx and returns a config dict.
     """
     config = {}
     try:
@@ -1030,34 +1027,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     return country_validator.ensure_status_column(pd.DataFrame(rows)), results
 
 # -------------------------------------------------
-# Export Logic
+# Export Logic (Updated with ZIP capabilities)
 # -------------------------------------------------
-def to_excel_base(df, sheet, cols, writer, format_rules=False):
-    df_p = df.copy()
-    for c in cols:
-        if c not in df_p.columns:
-            df_p[c] = pd.NA
-    
-    df_to_write = df_p[[c for c in cols if c in df_p.columns]]
-    df_to_write.to_excel(writer, index=False, sheet_name=sheet)
-    
-    if format_rules:
-        workbook = writer.book
-        worksheet = writer.sheets[sheet]
-        
-        red_fmt = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
-        green_fmt = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
-        
-        if 'Status' in df_to_write.columns:
-            status_idx = df_to_write.columns.get_loc('Status')
-            worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
-                                         {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
-            worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
-                                         {'type': 'cell', 'criteria': 'equal', 'value': '"Approved"', 'format': green_fmt})
-
-def to_excel_full_data(data_df, final_report_df):
+def prepare_full_data_merged(data_df, final_report_df):
+    """Helper to merge data before writing, so we can check length."""
     try:
-        output = BytesIO()
         d_cp = data_df.copy()
         r_cp = final_report_df.copy()
         d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
@@ -1070,58 +1044,96 @@ def to_excel_full_data(data_df, final_report_df):
             merged.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged.columns:
             merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
-        
-        export_cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
-        
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            to_excel_base(merged, "ProductSets", export_cols, writer, format_rules=True)
             
+        return merged
+    except Exception:
+        return pd.DataFrame()
+
+def to_excel_base(df, sheet, cols, writer, format_rules=False):
+    df_p = df.copy()
+    for c in cols:
+        if c not in df_p.columns:
+            df_p[c] = pd.NA
+    df_to_write = df_p[[c for c in cols if c in df_p.columns]]
+    df_to_write.to_excel(writer, index=False, sheet_name=sheet)
+    
+    if format_rules and 'Status' in df_to_write.columns:
+        workbook = writer.book
+        worksheet = writer.sheets[sheet]
+        red_fmt = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        green_fmt = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+        status_idx = df_to_write.columns.get_loc('Status')
+        worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx, {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
+        worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx, {'type': 'cell', 'criteria': 'equal', 'value': '"Approved"', 'format': green_fmt})
+
+def write_excel_single(df, sheet_name, cols, auxiliary_df=None, aux_sheet_name=None, aux_cols=None, format_status=False, full_data_stats=False):
+    """Writes a single Excel file to BytesIO."""
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        to_excel_base(df, sheet_name, cols, writer, format_rules=format_status)
+        
+        if auxiliary_df is not None and not auxiliary_df.empty:
+            to_excel_base(auxiliary_df, aux_sheet_name, aux_cols, writer)
+            
+        if full_data_stats:
             wb = writer.book
             ws = wb.add_worksheet('Sellers Data')
             fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
             
-            if 'SELLER_RATING' in merged.columns:
-                merged['Rejected_Count'] = (merged['Status'] == 'Rejected').astype(int)
-                merged['Approved_Count'] = (merged['Status'] == 'Approved').astype(int)
-                summ = merged.groupby('SELLER_NAME').agg(
+            if 'SELLER_RATING' in df.columns and 'Status' in df.columns:
+                df['Rejected_Count'] = (df['Status'] == 'Rejected').astype(int)
+                df['Approved_Count'] = (df['Status'] == 'Approved').astype(int)
+                summ = df.groupby('SELLER_NAME').agg(
                     Rejected=('Rejected_Count', 'sum'),
                     Approved=('Approved_Count', 'sum'),
                     AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()),
                     TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
                 ).reset_index().sort_values('Rejected', ascending=False)
                 summ.insert(0, 'Rank', range(1, len(summ) + 1))
-                ws.write(0, 0, "Sellers Summary", fmt)
+                ws.write(0, 0, "Sellers Summary (This File)", fmt)
                 summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
-                row_cursor = len(summ) + 4
-            else:
-                row_cursor = 1
-            
-            if 'CATEGORY' in merged.columns:
-                cat_summ = merged[merged['Status']=='Rejected'].groupby('CATEGORY').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
-                cat_summ.insert(0, 'Rank', range(1, len(cat_summ) + 1))
-                ws.write(row_cursor, 0, "Categories Summary", fmt)
-                cat_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
-                row_cursor += len(cat_summ) + 4
-            
-            if 'Reason' in merged.columns:
-                rsn_summ = merged[merged['Status']=='Rejected'].groupby('Reason').size().reset_index(name='Rejected Products').sort_values('Rejected Products', ascending=False)
-                rsn_summ.insert(0, 'Rank', range(1, len(rsn_summ) + 1))
-                ws.write(row_cursor, 0, "Rejection Reasons Summary", fmt)
-                rsn_summ.to_excel(writer, sheet_name='Sellers Data', startrow=row_cursor+1, index=False)
-        
-        output.seek(0)
-        return output
-    except Exception:
-        return BytesIO()
-
-def to_excel(report_df, reasons_config_df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        to_excel_base(report_df, "ProductSets", PRODUCTSETS_COLS, writer, format_rules=True)
-        if not reasons_config_df.empty:
-            to_excel_base(reasons_config_df, "RejectionReasons", REJECTION_REASONS_COLS, writer)
+    
     output.seek(0)
     return output
+
+def generate_smart_export(df, filename_prefix, export_type='simple', auxiliary_df=None):
+    """
+    Determines whether to return a single XLSX or a ZIP of multiple XLSX files.
+    export_type: 'simple' (Report) or 'full' (Full Data)
+    """
+    if export_type == 'full':
+        cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
+        sheet_name = "ProductSets"
+    else:
+        cols = PRODUCTSETS_COLS
+        sheet_name = "ProductSets"
+
+    if len(df) <= SPLIT_LIMIT:
+        if export_type == 'full':
+            data = write_excel_single(df, sheet_name, cols, format_status=True, full_data_stats=True)
+        else:
+            data = write_excel_single(df, sheet_name, cols, auxiliary_df=auxiliary_df, aux_sheet_name="RejectionReasons", aux_cols=REJECTION_REASONS_COLS, format_status=True)
+            
+        return data, f"{filename_prefix}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    else:
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            chunk_count = 0
+            for i in range(0, len(df), SPLIT_LIMIT):
+                chunk = df.iloc[i : i + SPLIT_LIMIT]
+                chunk_count += 1
+                part_name = f"{filename_prefix}_Part_{chunk_count}.xlsx"
+                
+                if export_type == 'full':
+                    excel_data = write_excel_single(chunk, sheet_name, cols, format_status=True, full_data_stats=True)
+                else:
+                    excel_data = write_excel_single(chunk, sheet_name, cols, auxiliary_df=auxiliary_df, aux_sheet_name="RejectionReasons", aux_cols=REJECTION_REASONS_COLS, format_status=True)
+                
+                zf.writestr(part_name, excel_data.getvalue())
+        
+        zip_buffer.seek(0)
+        return zip_buffer, f"{filename_prefix}.zip", "application/zip"
 
 def to_excel_flag_data(flag_df, flag_name):
     output = BytesIO()
@@ -1368,11 +1380,32 @@ with tab1:
 
             st.markdown("---")
             st.header("Overall Exports")
+            
+            # Prepare data
+            full_data_merged = prepare_full_data_merged(data, final_report)
+            
+            # Generate Smart Exports (Auto-Zip if > SPLIT_LIMIT)
+            final_rep_data, final_rep_name, final_rep_mime = generate_smart_export(
+                final_report, f"{file_prefix}_Final_Report_{current_date}", 'simple', support_files['reasons']
+            )
+            
+            rej_data, rej_name, rej_mime = generate_smart_export(
+                rejected_df, f"{file_prefix}_Rejected_{current_date}", 'simple', support_files['reasons']
+            )
+            
+            app_data, app_name, app_mime = generate_smart_export(
+                approved_df, f"{file_prefix}_Approved_{current_date}", 'simple', support_files['reasons']
+            )
+            
+            full_data, full_name, full_mime = generate_smart_export(
+                full_data_merged, f"{file_prefix}_Full_Data_{current_date}", 'full'
+            )
+
             c1, c2, c3, c4 = st.columns(4)
-            c1.download_button("Final Report", to_excel(final_report, support_files['reasons']), f"{file_prefix}_Final_Report_{current_date}.xlsx")
-            c2.download_button("Rejected", to_excel(rejected_df, support_files['reasons']), f"{file_prefix}_Rejected_{current_date}.xlsx")
-            c3.download_button("Approved", to_excel(approved_df, support_files['reasons']), f"{file_prefix}_Approved_{current_date}.xlsx")
-            c4.download_button("Full Data", to_excel_full_data(data, final_report), f"{file_prefix}_Full_Data_{current_date}.xlsx")
+            c1.download_button("Final Report", final_rep_data, final_rep_name, mime=final_rep_mime)
+            c2.download_button("Rejected", rej_data, rej_name, mime=rej_mime)
+            c3.download_button("Approved", app_data, app_name, mime=app_mime)
+            c4.download_button("Full Data", full_data, full_name, mime=full_mime)
 
 # -------------------------------------------------
 # TAB 2: WEEKLY ANALYSIS
