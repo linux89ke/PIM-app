@@ -632,26 +632,176 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                       if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products(data: pd.DataFrame, use_image_hash: bool = True, similarity_threshold: float = 0.85, exempt_categories: List[str] = None) -> pd.DataFrame:
-    data_to_check = data.copy()
-    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
-        cats_to_check = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
-        exempt_set = set(clean_category_code(c) for c in exempt_categories)
-        data_to_check = data_to_check[~cats_to_check.isin(exempt_set)]
+def check_duplicate_products_enhanced(
+    data: pd.DataFrame,
+    use_image_hash: bool = False, 
+    similarity_threshold: float = 0.85,
+    max_images_to_hash: int = 0,
+    known_colors: List[str] = None
+) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    
+    required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
+    if not all(col in data.columns for col in required_cols):
+        return pd.DataFrame(columns=data.columns), {}
+    
+    # --- 1. SETUP PATTERNS ---
+    
+    # A. Color Pattern
+    color_pattern = None
+    if known_colors:
+        sorted_colors = sorted([c for c in known_colors if c], key=len, reverse=True)
+        color_pattern = re.compile(r'\b(' + '|'.join(re.escape(c) for c in sorted_colors) + r')\b', re.IGNORECASE)
 
-    if data_to_check.empty: return pd.DataFrame(columns=data.columns)
+    # B. Bundle Splitter (//, +, " with ")
+    bundle_pattern = re.compile(r'(\s*//\s*|\s*\+\s*|\s+with\s+|\s+plus\s+|\s+&\s+)', re.IGNORECASE)
+    
+    # C. Quantity Pattern (Matches "2X", "3x", "2pcs")
+    qty_pattern = re.compile(r'\b(\d+)\s*(?:x|pcs|pieces|pack)\b', re.IGNORECASE)
 
-    result, stats = check_duplicate_products_enhanced(
-        data_to_check,
-        use_image_hash=False,
-        similarity_threshold=similarity_threshold,
-        max_images_to_hash=0
-    )
-    if 'duplicate_stats' not in st.session_state:
-        st.session_state.duplicate_stats = {}
-    st.session_state.duplicate_stats = stats
-    return result
+    # D. Scent Pattern
+    common_scents = [
+        'lavender', 'rose', 'ocean', 'lemon', 'unscented', 'jasmine', 'vanilla', 
+        'strawberry', 'cherry', 'apple', 'citrus', 'aloe', 'mint', 'peach', 'coconut'
+    ]
+    scent_pattern = re.compile(r'\b(' + '|'.join(common_scents) + r')\b', re.IGNORECASE)
 
+    # E. Model Suffix Pattern (Pro, Max, Ultra, etc.)
+    suffix_pattern = re.compile(r'\b(pro|max|plus|ultra|mini|lite|promax|standard|air|play)\b', re.IGNORECASE)
+
+    # F. Number Pattern (Standalone digits like 11, 13, 20, 5, 6)
+    number_pattern = re.compile(r'\b(\d+)\b')
+
+    # --- HELPER FUNCTIONS ---
+    def get_colors_from_name(name_str):
+        if not color_pattern or pd.isna(name_str): return set()
+        return set(m.group(0).lower() for m in color_pattern.finditer(str(name_str)))
+
+    def get_addon_part(name_str):
+        if pd.isna(name_str): return ""
+        parts = bundle_pattern.split(str(name_str))
+        if len(parts) > 1: return normalize_text(parts[-1])
+        return ""
+        
+    def get_quantity(name_str):
+        if pd.isna(name_str): return None
+        m = qty_pattern.search(str(name_str))
+        return m.group(1) if m else None
+
+    def get_scent(name_str):
+        if pd.isna(name_str): return None
+        m = scent_pattern.search(str(name_str))
+        return m.group(1).lower() if m else None
+
+    def get_model_identifiers(name_str):
+        """Extracts numbers (11, 13) and suffixes (Pro, Ultra) to distinguish models."""
+        if pd.isna(name_str): return set(), set()
+        name_str = str(name_str).lower()
+        # Extract numbers (e.g., '11' from iPhone 11)
+        nums = set(number_pattern.findall(name_str))
+        # Extract suffixes (e.g., 'pro' from iPhone 11 Pro)
+        suffixes = set(suffix_pattern.findall(name_str))
+        return nums, suffixes
+
+    data_copy = data.copy()
+    
+    # Strategy 1: Exact Match
+    data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
+    normalized_duplicates = data_copy[
+        data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
+    ]['PRODUCT_SET_SID'].tolist()
+    
+    image_duplicates = []
+    fuzzy_duplicates = []
+    SAFE_GROUP_SIZE = 200 
+    
+    grouped = data_copy.groupby('SELLER_NAME')
+    
+    for seller, group in grouped:
+        if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
+            continue
+            
+        products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
+        
+        for i, prod1 in enumerate(products):
+            brand1 = normalize_text(prod1['BRAND'])
+            color_col1 = normalize_text(prod1['COLOR'])
+            addon1 = get_addon_part(prod1['NAME'])
+            qty1 = get_quantity(prod1['NAME'])
+            scent1 = get_scent(prod1['NAME'])
+            nums1, suffixes1 = get_model_identifiers(prod1['NAME'])
+            
+            for prod2 in products[i+1:]:
+                # A. Brand Check
+                if brand1 != normalize_text(prod2['BRAND']):
+                    continue
+                
+                # B. Column Color Check
+                color_col2 = normalize_text(prod2['COLOR'])
+                if color_col1 and color_col2 and color_col1 != color_col2:
+                    continue
+
+                # C. Bundle/Add-on Check
+                addon2 = get_addon_part(prod2['NAME'])
+                if (addon1 and addon2 and addon1 != addon2) or ((addon1 and not addon2) or (not addon1 and addon2)):
+                    continue
+                
+                # D. Quantity Check
+                qty2 = get_quantity(prod2['NAME'])
+                if qty1 and qty2 and qty1 != qty2:
+                    continue
+
+                # E. Scent Check
+                scent2 = get_scent(prod2['NAME'])
+                if scent1 and scent2 and scent1 != scent2:
+                    continue
+                if (scent1 == 'unscented' and scent2 and scent2 != 'unscented') or \
+                   (scent2 == 'unscented' and scent1 and scent1 != 'unscented'):
+                    continue
+
+                # --- F. MODEL / SERIES CHECK (New) ---
+                nums2, suffixes2 = get_model_identifiers(prod2['NAME'])
+                
+                # Check 1: Mismatched Numbers (e.g. "11" vs "13")
+                # Logic: If both names have numbers, and those sets of numbers are COMPLETELY different -> SKIP
+                if nums1 and nums2 and nums1.isdisjoint(nums2):
+                    continue
+                
+                # Check 2: Mismatched Suffixes (e.g. "Pro" vs "Ultra", or "Pro" vs "Standard")
+                # Logic: If suffixes exist and they don't match -> SKIP
+                # We check symmetric difference. If one has 'pro' and other doesn't, it's a difference.
+                if suffixes1 != suffixes2:
+                    # Allow fuzzy match only if NO suffixes are present in either.
+                    # If one has 'pro' and other is empty, they are likely different variants.
+                    continue
+
+                # G. Name Similarity Check
+                name_sim = calculate_text_similarity(
+                    normalize_text(prod1['NAME']),
+                    normalize_text(prod2['NAME'])
+                )
+                
+                if name_sim >= similarity_threshold:
+                    # H. Name-Derived Color Conflict Check
+                    if known_colors:
+                        name_colors1 = get_colors_from_name(prod1['NAME'])
+                        name_colors2 = get_colors_from_name(prod2['NAME'])
+                        if name_colors1 and name_colors2 and name_colors1.isdisjoint(name_colors2):
+                            continue 
+                    
+                    fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
+    
+    all_duplicate_sids = set(normalized_duplicates + image_duplicates + fuzzy_duplicates)
+    result = data_copy[data_copy['PRODUCT_SET_SID'].isin(all_duplicate_sids)].copy()
+    
+    if 'match_key' in result.columns: result = result.drop(columns=['match_key'])
+    
+    stats = {
+        'normalized': len(normalized_duplicates),
+        'image_hash': 0,
+        'fuzzy': len(fuzzy_duplicates),
+        'total': len(all_duplicate_sids)
+    }
+    return result[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID']), stats
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     
