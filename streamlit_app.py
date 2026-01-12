@@ -108,20 +108,80 @@ def create_match_key(row: pd.Series) -> str:
     color = normalize_text(row.get('COLOR', ''))
     return f"{brand}|{name}|{color}"
 
+# -------------------------------------------------
+# CORE DUPLICATE LOGIC (UPDATED)
+# -------------------------------------------------
 def check_duplicate_products_enhanced(
     data: pd.DataFrame,
     use_image_hash: bool = False, 
     similarity_threshold: float = 0.85,
-    max_images_to_hash: int = 0
+    max_images_to_hash: int = 0,
+    known_colors: List[str] = None
 ) -> Tuple[pd.DataFrame, Dict[str, int]]:
     
     required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
     if not all(col in data.columns for col in required_cols):
         return pd.DataFrame(columns=data.columns), {}
     
+    # --- 1. SETUP PATTERNS ---
+    
+    # A. Color Pattern (for detecting colors inside names)
+    color_pattern = None
+    if known_colors:
+        sorted_colors = sorted([c for c in known_colors if c], key=len, reverse=True)
+        color_pattern = re.compile(r'\b(' + '|'.join(re.escape(c) for c in sorted_colors) + r')\b', re.IGNORECASE)
+
+    # B. Bundle Splitter (//, +, " with ", " & ")
+    bundle_pattern = re.compile(r'(\s*//\s*|\s*\+\s*|\s+with\s+|\s+plus\s+|\s+&\s+)', re.IGNORECASE)
+    
+    # C. Quantity Pattern (Matches "2X", "3x", "2pcs", "Pack of 2")
+    qty_pattern = re.compile(r'\b(\d+)\s*(?:x|pcs|pieces|pack)\b', re.IGNORECASE)
+
+    # D. Scent Pattern
+    common_scents = [
+        'lavender', 'rose', 'ocean', 'lemon', 'unscented', 'jasmine', 'vanilla', 
+        'strawberry', 'cherry', 'apple', 'citrus', 'aloe', 'mint', 'peach', 'coconut'
+    ]
+    scent_pattern = re.compile(r'\b(' + '|'.join(common_scents) + r')\b', re.IGNORECASE)
+
+    # E. Model Suffix Pattern (Pro, Max, Ultra, etc.)
+    suffix_pattern = re.compile(r'\b(pro|max|plus|ultra|mini|lite|promax|standard|air|play)\b', re.IGNORECASE)
+
+    # F. Number Pattern (Standalone digits like 11, 13, 20, 5, 6)
+    number_pattern = re.compile(r'\b(\d+)\b')
+
+    # --- HELPER FUNCTIONS ---
+    def get_colors_from_name(name_str):
+        if not color_pattern or pd.isna(name_str): return set()
+        return set(m.group(0).lower() for m in color_pattern.finditer(str(name_str)))
+
+    def get_addon_part(name_str):
+        if pd.isna(name_str): return ""
+        parts = bundle_pattern.split(str(name_str))
+        if len(parts) > 1: return normalize_text(parts[-1])
+        return ""
+        
+    def get_quantity(name_str):
+        if pd.isna(name_str): return None
+        m = qty_pattern.search(str(name_str))
+        return m.group(1) if m else None
+
+    def get_scent(name_str):
+        if pd.isna(name_str): return None
+        m = scent_pattern.search(str(name_str))
+        return m.group(1).lower() if m else None
+
+    def get_model_identifiers(name_str):
+        """Extracts numbers (11, 13) and suffixes (Pro, Ultra) to distinguish models."""
+        if pd.isna(name_str): return set(), set()
+        name_str = str(name_str).lower()
+        nums = set(number_pattern.findall(name_str))
+        suffixes = set(suffix_pattern.findall(name_str))
+        return nums, suffixes
+
     data_copy = data.copy()
     
-    # Strategy 1: Normalized Text Matching
+    # Strategy 1: Exact Match
     data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
     normalized_duplicates = data_copy[
         data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
@@ -134,23 +194,74 @@ def check_duplicate_products_enhanced(
     grouped = data_copy.groupby('SELLER_NAME')
     
     for seller, group in grouped:
+        # Performance Guard: Skip fuzzy logic for massive sellers
         if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
             continue
             
         products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
         
         for i, prod1 in enumerate(products):
+            # Optimization: Pre-extract attributes for prod1
+            brand1 = normalize_text(prod1['BRAND'])
+            color_col1 = normalize_text(prod1['COLOR'])
+            addon1 = get_addon_part(prod1['NAME'])
+            qty1 = get_quantity(prod1['NAME'])
+            scent1 = get_scent(prod1['NAME'])
+            nums1, suffixes1 = get_model_identifiers(prod1['NAME'])
+            
             for prod2 in products[i+1:]:
-                if normalize_text(prod1['BRAND']) != normalize_text(prod2['BRAND']):
+                # A. Brand Check
+                if brand1 != normalize_text(prod2['BRAND']):
                     continue
                 
+                # B. Column Color Check
+                color_col2 = normalize_text(prod2['COLOR'])
+                if color_col1 and color_col2 and color_col1 != color_col2:
+                    continue
+
+                # C. Bundle/Add-on Check
+                addon2 = get_addon_part(prod2['NAME'])
+                if (addon1 and addon2 and addon1 != addon2) or ((addon1 and not addon2) or (not addon1 and addon2)):
+                    continue
+                
+                # D. Quantity Check (2X vs 3X)
+                qty2 = get_quantity(prod2['NAME'])
+                if qty1 and qty2 and qty1 != qty2:
+                    continue
+
+                # E. Scent Check (Rose vs Ocean)
+                scent2 = get_scent(prod2['NAME'])
+                if scent1 and scent2 and scent1 != scent2:
+                    continue
+                if (scent1 == 'unscented' and scent2 and scent2 != 'unscented') or \
+                   (scent2 == 'unscented' and scent1 and scent1 != 'unscented'):
+                    continue
+
+                # --- F. MODEL / SERIES CHECK (e.g. iPhone 11 vs 13) ---
+                nums2, suffixes2 = get_model_identifiers(prod2['NAME'])
+                
+                # Check 1: Mismatched Numbers (e.g. "11" vs "13")
+                if nums1 and nums2 and nums1.isdisjoint(nums2):
+                    continue
+                
+                # Check 2: Mismatched Suffixes (e.g. "Pro" vs "Ultra")
+                if suffixes1 != suffixes2:
+                    continue
+
+                # G. Name Similarity Check
                 name_sim = calculate_text_similarity(
                     normalize_text(prod1['NAME']),
                     normalize_text(prod2['NAME'])
                 )
                 
-                if (name_sim >= similarity_threshold and
-                    normalize_text(prod1['COLOR']) == normalize_text(prod2['COLOR'])):
+                if name_sim >= similarity_threshold:
+                    # H. Name-Derived Color Conflict Check (Red vs Blue in Name)
+                    if known_colors:
+                        name_colors1 = get_colors_from_name(prod1['NAME'])
+                        name_colors2 = get_colors_from_name(prod2['NAME'])
+                        if name_colors1 and name_colors2 and name_colors1.isdisjoint(name_colors2):
+                            continue 
+                    
                     fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
     
     all_duplicate_sids = set(normalized_duplicates + image_duplicates + fuzzy_duplicates)
@@ -209,13 +320,7 @@ def load_restricted_brands_config(filename: str) -> Dict:
         df1 = pd.read_excel(filename, sheet_name=0, engine='openpyxl', dtype=str)
         df1.columns = df1.columns.str.strip()
         
-        # Determine seller columns (flexible approach)
-        # Assuming format: Brand, check name, Sellers, Unnamed: 3, Unnamed: 4...
-        # We'll take 'Sellers' and any column starting with 'Unnamed' after it?
-        # Or just look for known columns. The user prompt implies multiple columns could hold sellers.
-        
         # Load Sheet 2: Category Restrictions
-        # If Sheet 2 doesn't exist, we assume no category restrictions (apply to all).
         try:
             df2 = pd.read_excel(filename, sheet_name=1, engine='openpyxl', dtype=str)
             df2.columns = df2.columns.str.strip()
@@ -232,17 +337,15 @@ def load_restricted_brands_config(filename: str) -> Dict:
             
             # Gather sellers
             sellers = set()
-            # Check specific 'Sellers' column
             if 'Sellers' in row and pd.notna(row['Sellers']):
                 s = str(row['Sellers']).strip()
                 if s.lower() != 'nan': sellers.add(s.lower())
                 
-            # Check unnamed columns (often where extra sellers spill over)
             for col in df1.columns:
                 if 'Unnamed' in col or col == 'Sellers':
                     val = str(row[col]).strip()
                     if val and val.lower() != 'nan' and col != 'Brand' and col != 'check name':
-                         sellers.add(val.lower())
+                          sellers.add(val.lower())
             
             config[brand_key] = {
                 'sellers': sellers,
@@ -250,14 +353,9 @@ def load_restricted_brands_config(filename: str) -> Dict:
             }
 
         # Parse Sheet 2 (Exceptions/Scope)
-        # Sheet 2 columns are Brand Names. The values are Category Codes.
         if not df2.empty:
             for col in df2.columns:
                 brand_header_key = str(col).strip().lower()
-                
-                # We only care if this brand is in our main config (from Sheet 1)
-                # If a brand is in Sheet 2 but not Sheet 1, we don't have seller rules for it?
-                # Assuming Sheet 1 is the master list of restricted brands.
                 if brand_header_key in config:
                     cats = df2[col].dropna().astype(str).apply(clean_category_code).tolist()
                     if cats:
@@ -456,19 +554,13 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_restricted_brands(data: pd.DataFrame, restricted_config: Dict) -> pd.DataFrame:
-    """
-    Checks if a product belongs to a restricted brand (Sheet 1) and if the seller is authorized.
-    Respects category restrictions from Sheet 2.
-    """
     required = ['NAME', 'BRAND', 'SELLER_NAME', 'CATEGORY_CODE']
     if not all(c in data.columns for c in required) or not restricted_config:
         return pd.DataFrame(columns=data.columns)
 
-    # Pre-process columns
     data_to_check = data.copy()
     data_to_check['NAME_LOWER'] = data_to_check['NAME'].astype(str).str.lower().str.strip()
     data_to_check['BRAND_LOWER'] = data_to_check['BRAND'].astype(str).str.lower().str.strip()
-    # Check "Category" text field if available, per user request "Brand category or product name"
     if 'CATEGORY' in data_to_check.columns:
         data_to_check['CATEGORY_NAME_LOWER'] = data_to_check['CATEGORY'].astype(str).str.lower().str.strip()
     else:
@@ -479,51 +571,34 @@ def check_restricted_brands(data: pd.DataFrame, restricted_config: Dict) -> pd.D
 
     flagged_indices = set()
 
-    # Iterate through restricted brands config
     for brand_key, rules in restricted_config.items():
-        # Create regex for brand name (using word boundaries to match "hidden inside")
-        # e.g. "Vaseline" matches "Blue Vaseline", "Vaseline 100ml"
         pattern = re.compile(r'\b' + re.escape(brand_key) + r'\b', re.IGNORECASE)
-
-        # 1. Identify potential rows matching this brand
-        # "check if the brand name exists in Brand category or product name even if its a longer name"
         mask_match = (
             data_to_check['BRAND_LOWER'].str.contains(pattern, regex=True) |
             data_to_check['NAME_LOWER'].str.contains(pattern, regex=True) |
             data_to_check['CATEGORY_NAME_LOWER'].str.contains(pattern, regex=True)
         )
-        
         potential_rows = data_to_check[mask_match]
         
         if potential_rows.empty:
             continue
 
-        # 2. Check Category Restrictions (Sheet 2)
-        # "check which categories to check only those categories if brand is not in sheet two it doesnt matter check any category code"
         restricted_cats = rules.get('categories')
         
         if restricted_cats:
-            # If categories are defined, ONLY check products within those category codes
             mask_category_scope = potential_rows['CAT_CODE_CLEAN'].isin(restricted_cats)
             target_rows = potential_rows[mask_category_scope]
         else:
-            # If no categories defined (None), check ALL categories for this brand
             target_rows = potential_rows
 
         if target_rows.empty:
             continue
 
-        # 3. Check Seller Authorization
-        # "check which seller is supposed to sell if blank no seller is allowed"
         allowed_sellers = rules.get('sellers', set())
         
-        # If allowed_sellers is empty, ALL matches are invalid (no one allowed)
-        # If not empty, check if seller is in list
         if not allowed_sellers:
-            # Reject all
             flagged_indices.update(target_rows.index)
         else:
-            # Reject if seller NOT in allowed list
             mask_unauthorized = ~target_rows['SELLER_LOWER'].isin(allowed_sellers)
             flagged_indices.update(target_rows[mask_unauthorized].index)
 
@@ -557,7 +632,6 @@ def check_unnecessary_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataF
     if not {'NAME'}.issubset(data.columns) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Improvement: Detailed Comment
     data.loc[mask, 'Comment_Detail'] = "Matched keyword in Name"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -568,7 +642,6 @@ def check_product_warranty(data: pd.DataFrame, warranty_category_codes: List[str
     
     if not warranty_category_codes: return pd.DataFrame(columns=data.columns)
     
-    # Clean codes
     data['CAT_CLEAN'] = data['CATEGORY_CODE'].apply(clean_category_code)
     target_cats = [clean_category_code(c) for c in warranty_category_codes]
     target_data = data[data['CAT_CLEAN'].isin(target_cats)].copy()
@@ -589,7 +662,6 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
     if not all(c in data.columns for c in required) or pattern is None:
         return pd.DataFrame(columns=data.columns)
     
-    # Fuzzy Match Category Code
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     config_cats = set(clean_category_code(c) for c in color_categories)
     
@@ -608,21 +680,18 @@ def check_missing_color(data: pd.DataFrame, pattern: re.Pattern, color_categorie
         return True
 
     mask = target.apply(is_color_missing, axis=1)
-    # Add trigger comment
     target.loc[mask, 'Comment_Detail'] = "Color not found in Name or Color column"
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_sensitive_words(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Contains Sensitive Brand/Word"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_prohibited_products(data: pd.DataFrame, pattern: re.Pattern) -> pd.DataFrame:
     if not {'NAME'}.issubset(data.columns) or pattern is None: return pd.DataFrame(columns=data.columns)
     mask = data['NAME'].astype(str).str.strip().str.lower().str.contains(pattern, na=False)
-    # Detailed reporting
     data.loc[mask, 'Comment_Detail'] = "Matched Prohibited Keyword"
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
@@ -632,176 +701,33 @@ def check_brand_in_name(data: pd.DataFrame) -> pd.DataFrame:
                       if pd.notna(r['BRAND']) and pd.notna(r['NAME']) else False, axis=1)
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products_enhanced(
-    data: pd.DataFrame,
-    use_image_hash: bool = False, 
-    similarity_threshold: float = 0.85,
-    max_images_to_hash: int = 0,
-    known_colors: List[str] = None
-) -> Tuple[pd.DataFrame, Dict[str, int]]:
+# --- WRAPPER FOR DUPLICATES ---
+def check_duplicate_products(data: pd.DataFrame, 
+                             use_image_hash: bool = True, 
+                             similarity_threshold: float = 0.85, 
+                             exempt_categories: List[str] = None,
+                             known_colors: List[str] = None) -> pd.DataFrame:
     
-    required_cols = ['NAME', 'BRAND', 'SELLER_NAME', 'COLOR', 'PRODUCT_SET_SID']
-    if not all(col in data.columns for col in required_cols):
-        return pd.DataFrame(columns=data.columns), {}
-    
-    # --- 1. SETUP PATTERNS ---
-    
-    # A. Color Pattern
-    color_pattern = None
-    if known_colors:
-        sorted_colors = sorted([c for c in known_colors if c], key=len, reverse=True)
-        color_pattern = re.compile(r'\b(' + '|'.join(re.escape(c) for c in sorted_colors) + r')\b', re.IGNORECASE)
+    data_to_check = data.copy()
+    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
+        cats_to_check = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
+        exempt_set = set(clean_category_code(c) for c in exempt_categories)
+        data_to_check = data_to_check[~cats_to_check.isin(exempt_set)]
 
-    # B. Bundle Splitter (//, +, " with ")
-    bundle_pattern = re.compile(r'(\s*//\s*|\s*\+\s*|\s+with\s+|\s+plus\s+|\s+&\s+)', re.IGNORECASE)
-    
-    # C. Quantity Pattern (Matches "2X", "3x", "2pcs")
-    qty_pattern = re.compile(r'\b(\d+)\s*(?:x|pcs|pieces|pack)\b', re.IGNORECASE)
+    if data_to_check.empty: return pd.DataFrame(columns=data.columns)
 
-    # D. Scent Pattern
-    common_scents = [
-        'lavender', 'rose', 'ocean', 'lemon', 'unscented', 'jasmine', 'vanilla', 
-        'strawberry', 'cherry', 'apple', 'citrus', 'aloe', 'mint', 'peach', 'coconut'
-    ]
-    scent_pattern = re.compile(r'\b(' + '|'.join(common_scents) + r')\b', re.IGNORECASE)
+    result, stats = check_duplicate_products_enhanced(
+        data_to_check,
+        use_image_hash=False,
+        similarity_threshold=similarity_threshold,
+        max_images_to_hash=0,
+        known_colors=known_colors
+    )
+    if 'duplicate_stats' not in st.session_state:
+        st.session_state.duplicate_stats = {}
+    st.session_state.duplicate_stats = stats
+    return result
 
-    # E. Model Suffix Pattern (Pro, Max, Ultra, etc.)
-    suffix_pattern = re.compile(r'\b(pro|max|plus|ultra|mini|lite|promax|standard|air|play)\b', re.IGNORECASE)
-
-    # F. Number Pattern (Standalone digits like 11, 13, 20, 5, 6)
-    number_pattern = re.compile(r'\b(\d+)\b')
-
-    # --- HELPER FUNCTIONS ---
-    def get_colors_from_name(name_str):
-        if not color_pattern or pd.isna(name_str): return set()
-        return set(m.group(0).lower() for m in color_pattern.finditer(str(name_str)))
-
-    def get_addon_part(name_str):
-        if pd.isna(name_str): return ""
-        parts = bundle_pattern.split(str(name_str))
-        if len(parts) > 1: return normalize_text(parts[-1])
-        return ""
-        
-    def get_quantity(name_str):
-        if pd.isna(name_str): return None
-        m = qty_pattern.search(str(name_str))
-        return m.group(1) if m else None
-
-    def get_scent(name_str):
-        if pd.isna(name_str): return None
-        m = scent_pattern.search(str(name_str))
-        return m.group(1).lower() if m else None
-
-    def get_model_identifiers(name_str):
-        """Extracts numbers (11, 13) and suffixes (Pro, Ultra) to distinguish models."""
-        if pd.isna(name_str): return set(), set()
-        name_str = str(name_str).lower()
-        # Extract numbers (e.g., '11' from iPhone 11)
-        nums = set(number_pattern.findall(name_str))
-        # Extract suffixes (e.g., 'pro' from iPhone 11 Pro)
-        suffixes = set(suffix_pattern.findall(name_str))
-        return nums, suffixes
-
-    data_copy = data.copy()
-    
-    # Strategy 1: Exact Match
-    data_copy['match_key'] = data_copy.apply(create_match_key, axis=1)
-    normalized_duplicates = data_copy[
-        data_copy.duplicated(subset=['match_key', 'SELLER_NAME'], keep=False)
-    ]['PRODUCT_SET_SID'].tolist()
-    
-    image_duplicates = []
-    fuzzy_duplicates = []
-    SAFE_GROUP_SIZE = 200 
-    
-    grouped = data_copy.groupby('SELLER_NAME')
-    
-    for seller, group in grouped:
-        if len(group) < 2 or len(group) > SAFE_GROUP_SIZE:
-            continue
-            
-        products = group[['PRODUCT_SET_SID', 'NAME', 'BRAND', 'COLOR']].to_dict('records')
-        
-        for i, prod1 in enumerate(products):
-            brand1 = normalize_text(prod1['BRAND'])
-            color_col1 = normalize_text(prod1['COLOR'])
-            addon1 = get_addon_part(prod1['NAME'])
-            qty1 = get_quantity(prod1['NAME'])
-            scent1 = get_scent(prod1['NAME'])
-            nums1, suffixes1 = get_model_identifiers(prod1['NAME'])
-            
-            for prod2 in products[i+1:]:
-                # A. Brand Check
-                if brand1 != normalize_text(prod2['BRAND']):
-                    continue
-                
-                # B. Column Color Check
-                color_col2 = normalize_text(prod2['COLOR'])
-                if color_col1 and color_col2 and color_col1 != color_col2:
-                    continue
-
-                # C. Bundle/Add-on Check
-                addon2 = get_addon_part(prod2['NAME'])
-                if (addon1 and addon2 and addon1 != addon2) or ((addon1 and not addon2) or (not addon1 and addon2)):
-                    continue
-                
-                # D. Quantity Check
-                qty2 = get_quantity(prod2['NAME'])
-                if qty1 and qty2 and qty1 != qty2:
-                    continue
-
-                # E. Scent Check
-                scent2 = get_scent(prod2['NAME'])
-                if scent1 and scent2 and scent1 != scent2:
-                    continue
-                if (scent1 == 'unscented' and scent2 and scent2 != 'unscented') or \
-                   (scent2 == 'unscented' and scent1 and scent1 != 'unscented'):
-                    continue
-
-                # --- F. MODEL / SERIES CHECK (New) ---
-                nums2, suffixes2 = get_model_identifiers(prod2['NAME'])
-                
-                # Check 1: Mismatched Numbers (e.g. "11" vs "13")
-                # Logic: If both names have numbers, and those sets of numbers are COMPLETELY different -> SKIP
-                if nums1 and nums2 and nums1.isdisjoint(nums2):
-                    continue
-                
-                # Check 2: Mismatched Suffixes (e.g. "Pro" vs "Ultra", or "Pro" vs "Standard")
-                # Logic: If suffixes exist and they don't match -> SKIP
-                # We check symmetric difference. If one has 'pro' and other doesn't, it's a difference.
-                if suffixes1 != suffixes2:
-                    # Allow fuzzy match only if NO suffixes are present in either.
-                    # If one has 'pro' and other is empty, they are likely different variants.
-                    continue
-
-                # G. Name Similarity Check
-                name_sim = calculate_text_similarity(
-                    normalize_text(prod1['NAME']),
-                    normalize_text(prod2['NAME'])
-                )
-                
-                if name_sim >= similarity_threshold:
-                    # H. Name-Derived Color Conflict Check
-                    if known_colors:
-                        name_colors1 = get_colors_from_name(prod1['NAME'])
-                        name_colors2 = get_colors_from_name(prod2['NAME'])
-                        if name_colors1 and name_colors2 and name_colors1.isdisjoint(name_colors2):
-                            continue 
-                    
-                    fuzzy_duplicates.extend([prod1['PRODUCT_SET_SID'], prod2['PRODUCT_SET_SID']])
-    
-    all_duplicate_sids = set(normalized_duplicates + image_duplicates + fuzzy_duplicates)
-    result = data_copy[data_copy['PRODUCT_SET_SID'].isin(all_duplicate_sids)].copy()
-    
-    if 'match_key' in result.columns: result = result.drop(columns=['match_key'])
-    
-    stats = {
-        'normalized': len(normalized_duplicates),
-        'image_hash': 0,
-        'fuzzy': len(fuzzy_duplicates),
-        'total': len(all_duplicate_sids)
-    }
-    return result[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID']), stats
 def check_seller_approved_for_books(data: pd.DataFrame, book_category_codes: List[str], approved_book_sellers: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','SELLER_NAME'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     
@@ -956,7 +882,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        ("Duplicate product", check_duplicate_products, {'exempt_categories': support_files.get('duplicate_exempt_codes', [])}),
+        ("Duplicate product", check_duplicate_products, {
+            'exempt_categories': support_files.get('duplicate_exempt_codes', []),
+            'known_colors': support_files['colors']  # Pass colors here
+        }),
     ]
     
     progress_bar = st.progress(0)
@@ -979,7 +908,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     restricted_issue_keys = {}
 
     for i, (name, func, kwargs) in enumerate(validations):
-        # Explicit check: Run "Restricted brands" ONLY if country is Kenya
         if name == "Restricted brands" and country_validator.code != 'KE':
             continue
 
@@ -1018,7 +946,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         try:
             res = func(**ckwargs)
             if name != "Duplicate product" and not res.empty and 'PRODUCT_SET_SID' in res.columns:
-                # Generalized Flag Propagation Capture
                 if name in ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Seller Not approved to sell Refurb", "Restricted brands"]:
                     res['match_key'] = res.apply(create_match_key, axis=1)
                     if name not in restricted_issue_keys: restricted_issue_keys[name] = set()
@@ -1040,7 +967,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         progress_bar.progress((i + 1) / len(validations))
     
-    # Generalized Flag Propagation Application
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
         for flag_name, keys in restricted_issue_keys.items():
@@ -1063,9 +989,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         if 'PRODUCT_SET_SID' not in res.columns:
             continue
         
-        map_name = name
-        
-        # --- FIXED LOGIC TO MATCH USER SNIPPET EXACTLY ---
         if name == "Seller Not approved to sell Refurb":
             reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
         else:
@@ -1083,7 +1006,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 'ParentSKU': r.get('PARENTSKU', ''),
                 'Status': 'Rejected',
                 'Reason': reason_info[0],
-                'Comment': reason_info[1],  # Directly use mapping value, no dynamic comment
+                'Comment': reason_info[1],
                 'FLAG': name,
                 'SellerName': r.get('SELLER_NAME', '')
             })
@@ -1118,7 +1041,6 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
     df_to_write = df_p[[c for c in cols if c in df_p.columns]]
     df_to_write.to_excel(writer, index=False, sheet_name=sheet)
     
-    # IMPROVEMENT: Conditional Formatting
     if format_rules:
         workbook = writer.book
         worksheet = writer.sheets[sheet]
@@ -1128,7 +1050,6 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         
         if 'Status' in df_to_write.columns:
             status_idx = df_to_write.columns.get_loc('Status')
-            # Check range length (header is row 0)
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
                                          {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
             worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx,
@@ -1269,7 +1190,6 @@ with tab1:
         st.session_state.intersection_sids = set()
 
     if uploaded_files:
-        # Check if new files uploaded by comparing file names/sizes
         current_file_signature = sorted([f.name + str(f.size) for f in uploaded_files])
         if 'last_processed_files' not in st.session_state or st.session_state.last_processed_files != current_file_signature:
             
@@ -1280,7 +1200,7 @@ with tab1:
                 file_sids_sets = []
                 
                 for uploaded_file in uploaded_files:
-                    uploaded_file.seek(0) # Reset pointer
+                    uploaded_file.seek(0)
                     try:
                         if uploaded_file.name.endswith('.xlsx'):
                             raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
@@ -1315,7 +1235,6 @@ with tab1:
                     intersection_sids = set.intersection(*file_sids_sets)
                     intersection_count = len(intersection_sids)
                 
-                # STORE INTERSECTION SIDS
                 st.session_state.intersection_sids = intersection_sids
                 
                 data_prop = propagate_metadata(merged_data)
@@ -1340,9 +1259,8 @@ with tab1:
                             data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
                         )
                         
-                        # Store in Session State
                         st.session_state.final_report = final_report
-                        st.session_state.all_data_map = data # Store for lookups
+                        st.session_state.all_data_map = data
                         st.session_state.intersection_count = intersection_count
                         st.session_state.last_processed_files = current_file_signature
                         
@@ -1355,15 +1273,12 @@ with tab1:
                 st.error(f"Error: {e}")
                 st.code(traceback.format_exc())
 
-        # DISPLAY LOGIC (Uses Session State)
         if not st.session_state.final_report.empty:
             final_report = st.session_state.final_report
             data = st.session_state.all_data_map
             intersection_count = st.session_state.intersection_count
-            # RETRIEVE INTERSECTION SIDS
             intersection_sids = st.session_state.intersection_sids
             
-            # DEFINE VARIABLES FOR DISPLAY LOGIC
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
 
@@ -1375,7 +1290,6 @@ with tab1:
             sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
             
             st.markdown("---")
-            # RESPONSIVE METRICS CONTAINER
             with st.container():
                 st.header("Overall Results")
                 c1, c2, c3, c4, c5 = st.columns(5)
@@ -1408,9 +1322,7 @@ with tab1:
                 df_display = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
                 df_display = df_display[[c for c in display_cols if c in df_display.columns]]
 
-                # INTERACTIVE EXPANDERS WITH EDITING
                 with st.expander(f"{title} ({len(df_display)})"):
-                    # Filters
                     col1, col2 = st.columns([1, 1])
                     with col1:
                         search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
@@ -1418,7 +1330,6 @@ with tab1:
                         all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
                         seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
                     
-                    # Apply Filters
                     if search_term:
                         mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
                         df_display = df_display[mask]
@@ -1428,32 +1339,22 @@ with tab1:
                     if len(df_display) != len(df_flagged_report):
                         st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
 
-                    # Select All Checkbox
                     select_all_mode = st.checkbox("Select All", key=f"sa_{title}")
                     
-                    # Add Selection Column
                     df_display.insert(0, "Select", select_all_mode)
                     
-                    # DATA EDITOR
                     edited_df = st.data_editor(
                         df_display, 
                         hide_index=True, 
                         use_container_width=True,
                         column_config={"Select": st.column_config.CheckboxColumn(required=True)},
                         disabled=[c for c in df_display.columns if c != "Select"],
-                        # Dynamic Key ensures editor refreshes when Select All toggles
                         key=f"editor_{title}_{select_all_mode}" 
                     )
                     
-                    # APPROVE BUTTON LOGIC
                     to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
                     if to_approve:
                         if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
-                            # Update Session State with User Rules
-                            # Status -> Approved
-                            # Reason -> Cleared
-                            # Comment -> Cleared
-                            # FLAG -> 'Approved by User'
                             st.session_state.final_report.loc[
                                 st.session_state.final_report['ProductSetSid'].isin(to_approve), 
                                 ['Status', 'Reason', 'Comment', 'FLAG']
@@ -1462,7 +1363,6 @@ with tab1:
                             st.success("Updated! Rerunning to refresh...")
                             st.rerun()
 
-                    # EXPORT BUTTON for this specific flag
                     flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
                     st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
 
