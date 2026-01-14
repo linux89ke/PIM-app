@@ -12,7 +12,7 @@ import altair as alt
 import requests
 from difflib import SequenceMatcher
 import zipfile
-import concurrent.futures  # NEW: For parallel execution
+import concurrent.futures
 
 # -------------------------------------------------
 # 0. IMAGE HASHING IMPORTS & SETUP
@@ -48,16 +48,12 @@ def prefetch_image_hashes(urls: List[str], max_workers: int = 20) -> None:
     Downloads and hashes a list of URLs in parallel.
     Populates the global _IMAGE_HASH_CACHE.
     """
-    # Filter out URLs already in cache or invalid
     valid_urls = [u for u in urls if u and pd.notna(u) and str(u).lower() not in ['nan', 'none', ''] and u not in _IMAGE_HASH_CACHE]
-    
-    # Remove duplicates
     valid_urls = list(set(valid_urls))
     
     if not valid_urls:
         return
 
-    # Execute in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(fetch_single_hash, valid_urls)
 
@@ -91,11 +87,13 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------
 PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
+
+# REMOVED SELLER_RATING AND STOCK_QTY FROM FULL DATA COLS
 FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
-    "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", "SELLER_RATING",
-    "STOCK_QTY", "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
+    "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", 
+    "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
 ]
 FX_RATE = 132.0
 SPLIT_LIMIT = 9998 
@@ -236,10 +234,9 @@ def check_duplicate_products(
         products = group.to_dict('records')
         
         # --- PARALLEL IMAGE FETCHING ---
-        # Before looping, gather all URLs for this group and fetch them in parallel
         if use_image_hash:
             urls_to_fetch = [p['search_data']['img_url'] for p in products if p['search_data']['img_url']]
-            prefetch_image_hashes(urls_to_fetch, max_workers=20) # 20 Parallel threads
+            prefetch_image_hashes(urls_to_fetch, max_workers=20) 
         
         WINDOW_SIZE = 100 
         
@@ -284,7 +281,6 @@ def check_duplicate_products(
                         if url_A == url_B:
                             is_image_duplicate = True
                         else:
-                            # Retrieves already cached hash (because of prefetch)
                             hash_A = get_image_hash_fast(url_A)
                             if hash_A:
                                 hash_B = get_image_hash_fast(url_B)
@@ -936,17 +932,26 @@ def write_excel_single(df, sheet_name, cols, auxiliary_df=None, aux_sheet_name=N
             wb = writer.book
             ws = wb.add_worksheet('Sellers Data')
             fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
-            df['Rejected_Count'] = (df['Status'] == 'Rejected').astype(int)
-            df['Approved_Count'] = (df['Status'] == 'Approved').astype(int)
-            summ = df.groupby('SELLER_NAME').agg(
-                Rejected=('Rejected_Count', 'sum'),
-                Approved=('Approved_Count', 'sum'),
-                AvgRating=('SELLER_RATING', lambda x: pd.to_numeric(x, errors='coerce').mean()),
-                TotalStock=('STOCK_QTY', lambda x: pd.to_numeric(x, errors='coerce').sum())
-            ).reset_index().sort_values('Rejected', ascending=False)
-            summ.insert(0, 'Rank', range(1, len(summ) + 1))
-            ws.write(0, 0, "Sellers Summary (This File)", fmt)
-            summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
+            
+            # --- FIX: Ensure columns exist before aggregation to avoid KeyError ---
+            if 'STOCK_QTY' not in df.columns: df['STOCK_QTY'] = 0
+            if 'SELLER_RATING' not in df.columns: df['SELLER_RATING'] = 0
+            # --------------------------------------------------------------------
+
+            if 'Status' in df.columns:
+                df['Rejected_Count'] = (df['Status'] == 'Rejected').astype(int)
+                df['Approved_Count'] = (df['Status'] == 'Approved').astype(int)
+                
+                # Removed AvgRating and TotalStock as requested
+                summ = df.groupby('SELLER_NAME').agg(
+                    Rejected=('Rejected_Count', 'sum'),
+                    Approved=('Approved_Count', 'sum')
+                ).reset_index().sort_values('Rejected', ascending=False)
+                
+                summ.insert(0, 'Rank', range(1, len(summ) + 1))
+                ws.write(0, 0, "Sellers Summary (This File)", fmt)
+                summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
+    
     output.seek(0)
     return output
 
@@ -1190,7 +1195,7 @@ with tab1:
             c4.download_button("Full Data", full_data, full_name, mime=full_mime)
 
 # -------------------------------------------------
-# TAB 2 & 3: WEEKLY ANALYSIS & DATA LAKE
+# TAB 2: WEEKLY ANALYSIS
 # -------------------------------------------------
 with tab2:
     st.header("Weekly Analysis Dashboard")
