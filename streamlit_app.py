@@ -112,66 +112,140 @@ def create_match_key(row: pd.Series) -> str:
     return f"{brand}|{name}|{color}"
 
 # -------------------------------------------------
-# CORE DUPLICATE LOGIC (SIMPLIFIED)
+# CORE DUPLICATE LOGIC (SMART TOKEN + COLOR AWARE)
 # -------------------------------------------------
 def check_duplicate_products(
     data: pd.DataFrame, 
     exempt_categories: List[str] = None,
-    **kwargs # Captures unused args like use_image_hash to prevent errors
+    similarity_threshold: float = 0.70, # 70% word overlap triggers a duplicate
+    known_colors: List[str] = None, # Passed from support_files['colors']
+    **kwargs
 ) -> pd.DataFrame:
     """
-    Simplified Logic:
-    1. Filters out categories found in 'duplicate_exempt.txt'.
-    2. Normalizes Name, Color, and Seller.
-    3. Strict Check: If Name + Color + Seller are identical -> Keep First, Reject Rest.
+    Smart Logic with Color Protection:
+    1. Ignores order & fluff words (catches "BM800 Mic" vs "Mic BM800").
+    2. PROTECTS variations: If "White" vs "Black" is found in Name or Color column, it is SAFE.
+    3. Calculates overlap: If >70% match AND colors are same/missing -> Duplicate.
     """
     
-    # 1. Validation & Setup
+    # --- 1. SETUP ---
     required_cols = ['NAME', 'SELLER_NAME']
     if not all(col in data.columns for col in required_cols):
         return pd.DataFrame(columns=data.columns)
 
     data_to_check = data.copy()
 
-    # 2. Apply 'duplicate_exempt.txt' Logic
-    # If a product falls into an exempt category (e.g., Fashion), we skip checking it.
+    # Filter out Exempt Categories
     if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
         cats_to_check = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
         exempt_set = set(clean_category_code(c) for c in exempt_categories)
-        
-        # Only keep rows that are NOT in the exempt list
         data_to_check = data_to_check[~cats_to_check.isin(exempt_set)]
 
     if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # 3. Create Normalized Columns for Strict Comparison
-    # We create temporary columns to ensure "Red" matches "red "
-    data_to_check['_norm_name'] = data_to_check['NAME'].astype(str).str.strip().str.lower()
-    data_to_check['_norm_seller'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
-    
-    subset_cols = ['_norm_name', '_norm_seller']
-    
-    # Add Color to the check if it exists
-    if 'COLOR' in data_to_check.columns:
-        data_to_check['_norm_color'] = data_to_check['COLOR'].astype(str).fillna('').str.strip().str.lower()
-        subset_cols.append('_norm_color')
+    # --- 2. PREPARE COLOR LIST ---
+    # Convert known colors to a set for fast lookup
+    if known_colors:
+        color_set = set(str(c).lower().strip() for c in known_colors if c)
+    else:
+        color_set = set()
 
-    # 4. Identify Duplicates
-    # keep='first' means the 1st occurrence is False (Safe), and duplicates are True (Rejected)
-    dup_mask = data_to_check.duplicated(subset=subset_cols, keep='first')
-    
-    # 5. Extract Rejected Rows
-    rejected_rows = data_to_check[dup_mask].copy()
-    
-    # Update stats for the UI
-    st.session_state.duplicate_stats = {
-        'total': len(rejected_rows),
-        'method': 'Strict (Name + Color + Seller)'
+    # --- 3. HELPER FUNCTIONS ---
+    fluff_words = {
+        'professional', 'recording', 'condenser', 'studio', 'high', 'quality', 
+        'best', 'sale', 'new', 'for', 'with', 'and', 'the', 'kit', 'set', 
+        'combo', 'live', 'streaming', 'podcast', 'podcasting', 'broadcasting',
+        'voice', 'over', 'audio', 'sound', 'card', 'interface', 'mixer',
+        'phone', 'pc', 'laptop', 'gaming', 'video', 'youtube', 'tiktok'
     }
 
-    # Clean up temporary columns before returning
-    return rejected_rows[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    def get_token_data(row):
+        # A. Clean Name Tokens
+        name_text = str(row.get('NAME', '')).lower()
+        name_text = re.sub(r'[^\w\s]', '', name_text) 
+        tokens = set(name_text.split()) - fluff_words
+        
+        # B. Get Explicit Color (Column)
+        col_color = str(row.get('COLOR', '')).lower().strip()
+        if col_color in ['nan', 'none', '', 'null']: 
+            col_color = None
+        
+        # C. Extract Implied Color (From Name) using known list
+        found_colors_in_name = tokens.intersection(color_set)
+        
+        return {
+            'tokens': tokens,
+            'col_color': col_color,
+            'name_colors': found_colors_in_name
+        }
+
+    # --- 4. PRE-CALCULATE ATTRIBUTES ---
+    # This runs once per row, making the loop much faster
+    data_to_check['search_data'] = data_to_check.apply(get_token_data, axis=1)
+    
+    rejected_sids = []
+    
+    # --- 5. GROUP & COMPARE ---
+    grouped = data_to_check.groupby('SELLER_NAME')
+    
+    for seller, group in grouped:
+        if len(group) < 2: continue
+        
+        products = group.to_dict('records')
+        
+        # Sliding Window comparison (Compare row 1 vs 2-20)
+        WINDOW_SIZE = 50 
+        
+        for i in range(len(products)):
+            current = products[i]
+            if current['PRODUCT_SET_SID'] in rejected_sids: continue
+
+            data_A = current['search_data']
+            
+            for j in range(i + 1, min(i + WINDOW_SIZE, len(products))):
+                compare = products[j]
+                if compare['PRODUCT_SET_SID'] in rejected_sids: continue
+
+                data_B = compare['search_data']
+
+                # === CHECK 1: EXPLICIT COLOR COLUMN ===
+                # If column says "Black" vs "White", they are NOT duplicates.
+                if data_A['col_color'] and data_B['col_color']:
+                    if data_A['col_color'] != data_B['col_color']:
+                        continue # SAFE: Different explicit colors
+
+                # === CHECK 2: NAME DETECTED COLOR ===
+                # If name says "Samsung... Blue" vs "Samsung... Red", NOT duplicates.
+                # We check if the intersection of colors is empty (meaning no common color)
+                # AND both actually have colors mentioned.
+                if data_A['name_colors'] and data_B['name_colors']:
+                    if data_A['name_colors'].isdisjoint(data_B['name_colors']):
+                        continue # SAFE: Names contain different colors (e.g. {red} vs {blue})
+
+                # === CHECK 3: TOKEN SIMILARITY ===
+                tokens_A = data_A['tokens']
+                tokens_B = data_B['tokens']
+                
+                intersection = len(tokens_A.intersection(tokens_B))
+                union = len(tokens_A.union(tokens_B))
+                
+                if union == 0: continue
+                
+                similarity = intersection / union
+                
+                if similarity >= similarity_threshold:
+                    rejected_sids.append(compare['PRODUCT_SET_SID'])
+
+    # --- 6. RETURN RESULT ---
+    rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].isin(rejected_sids)].copy()
+    
+    st.session_state.duplicate_stats = {
+        'total': len(rejected_df),
+        'method': f'Smart Token (> {int(similarity_threshold*100)}%) + Color Check'
+    }
+
+    return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 # -------------------------------------------------
 # CACHED FILE LOADING
