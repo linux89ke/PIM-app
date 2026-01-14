@@ -12,6 +12,7 @@ import altair as alt
 import requests
 from difflib import SequenceMatcher
 import zipfile
+import concurrent.futures  # NEW: For parallel execution
 
 # -------------------------------------------------
 # 0. IMAGE HASHING IMPORTS & SETUP
@@ -23,40 +24,46 @@ except ImportError:
     st.error("Missing libraries! Please run: pip install imagehash Pillow requests")
     st.stop()
 
-# Global Cache for Image Hashes (cleared on script restart)
-# Maps Image URL -> Image Hash Object
+# Global Cache for Image Hashes
 _IMAGE_HASH_CACHE = {}
 
-def get_image_hash(url: str) -> Optional[imagehash.ImageHash]:
-    """
-    Downloads image from URL and computes Perceptual Hash (p-hash).
-    Returns None if download fails, timeout, or invalid URL.
-    Uses in-memory caching to avoid re-downloading the same image.
-    """
-    if not url or pd.isna(url) or str(url).lower() in ['nan', 'none', '']:
-        return None
-    
-    url = str(url).strip()
-    
-    # 1. Check Cache
-    if url in _IMAGE_HASH_CACHE:
-        return _IMAGE_HASH_CACHE[url]
-    
-    # 2. Download & Hash
+def fetch_single_hash(url: str) -> None:
+    """Helper function for the thread pool to fetch and cache a single hash."""
+    if not url or url in _IMAGE_HASH_CACHE:
+        return
+
     try:
-        # 3-second timeout to keep it fast
-        response = requests.get(url, timeout=3, stream=True)
+        # Reduced timeout to 2s for speed
+        response = requests.get(url, timeout=2, stream=True)
         if response.status_code == 200:
             img = Image.open(response.raw)
-            # p-hash is robust against resizing and minor compression
-            img_hash = imagehash.phash(img)
-            _IMAGE_HASH_CACHE[url] = img_hash
-            return img_hash
+            _IMAGE_HASH_CACHE[url] = imagehash.phash(img)
+        else:
+            _IMAGE_HASH_CACHE[url] = None
     except Exception:
-        pass # Fail silently on bad URLs to keep process moving
+        _IMAGE_HASH_CACHE[url] = None
+
+def prefetch_image_hashes(urls: List[str], max_workers: int = 20) -> None:
+    """
+    Downloads and hashes a list of URLs in parallel.
+    Populates the global _IMAGE_HASH_CACHE.
+    """
+    # Filter out URLs already in cache or invalid
+    valid_urls = [u for u in urls if u and pd.notna(u) and str(u).lower() not in ['nan', 'none', ''] and u not in _IMAGE_HASH_CACHE]
     
-    _IMAGE_HASH_CACHE[url] = None
-    return None
+    # Remove duplicates
+    valid_urls = list(set(valid_urls))
+    
+    if not valid_urls:
+        return
+
+    # Execute in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(fetch_single_hash, valid_urls)
+
+def get_image_hash_fast(url: str) -> Optional[imagehash.ImageHash]:
+    """Retreives hash from cache (instant)."""
+    return _IMAGE_HASH_CACHE.get(str(url).strip())
 
 # -------------------------------------------------
 # 1. LAYOUT CONFIGURATION
@@ -143,7 +150,7 @@ def create_match_key(row: pd.Series) -> str:
     return f"{brand}|{name}|{color}"
 
 # -------------------------------------------------
-# CORE DUPLICATE LOGIC (TOKEN + COLOR + IMAGE HASH)
+# CORE DUPLICATE LOGIC (PARALLEL IMAGE HASHING)
 # -------------------------------------------------
 def check_duplicate_products(
     data: pd.DataFrame, 
@@ -153,26 +160,16 @@ def check_duplicate_products(
     use_image_hash: bool = True,  
     **kwargs
 ) -> pd.DataFrame:
-    """
-    Aggressive Logic with Image Hashing:
-    1. Group by SELLER + BRAND.
-    2. Strip "usage context" words (TikTok, Gaming) to catch keyword stuffers.
-    3. Protect Color Variations (Safety Check).
-    4. CHECK: Text Similarity > 60% OR Image Hash Distance < 5.
-    """
     
-    # --- 1. SETUP & NORMALIZATION ---
+    # --- 1. SETUP ---
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols):
         return pd.DataFrame(columns=data.columns)
 
     data_to_check = data.copy()
-    
-    # Normalization for grouping
     data_to_check['_grp_seller'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
     data_to_check['_grp_brand'] = data_to_check['BRAND'].astype(str).str.strip().str.lower()
 
-    # Filter Exempt Categories
     if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
         cats_to_check = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
         exempt_set = set(clean_category_code(c) for c in exempt_categories)
@@ -181,47 +178,42 @@ def check_duplicate_products(
     if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # --- 2. PREPARE ATTRIBUTES ---
     if known_colors:
         color_set = set(str(c).lower().strip() for c in known_colors if c)
     else:
         color_set = set()
 
-    # AGGRESSIVE FLUFF LIST
     fluff_words = {
-        'professional', 'high', 'quality', 'best', 'sale', 'new', 'original', 
-        'genuine', 'authentic', 'premium', 'official', 'hot', 'promo', 'deal',
-        'combo', 'kit', 'set', 'pack', 'bundle', 'full', 'complete',
-        'for', 'with', 'and', 'the', 'in', 'on', 'at', 'to', 'of', 'plus',
-        'recording', 'condenser', 'studio', 'mic', 'microphone', 'sound', 'card', 
-        'interface', 'mixer', 'audio', 'voice', 'vocal', 'music', 'input', 'output',
-        'wired', 'wireless', 'usb', 'cable', 'equipment', 'device', 'gear', 'setup',
-        'live', 'streaming', 'stream', 'podcast', 'podcasting', 'broadcasting', 
-        'broadcast', 'gaming', 'gamer', 'game', 'karaoke', 'singing', 'song',
-        'teaching', 'class', 'online', 'school', 'zoom', 'meeting', 'home', 
-        'office', 'work', 'church', 'stage', 'performance', 'speech', 'dj',
-        'youtube', 'tiktok', 'facebook', 'instagram', 'skype', 'video', 'content', 
-        'creator', 'vlogging', 'vlog',
-        'pc', 'computer', 'laptop', 'desktop', 'phone', 'smartphone', 'mobile',
-        'android', 'ios', 'iphone', 'tablet', 'ipad', 'mac', 'windows'
+        'professional', 'high', 'quality', 'best', 'sale', 'new', 'original', 'genuine', 
+        'authentic', 'premium', 'official', 'hot', 'promo', 'deal', 'combo', 'kit', 
+        'set', 'pack', 'bundle', 'full', 'complete', 'for', 'with', 'and', 'the', 
+        'in', 'on', 'at', 'to', 'of', 'plus', 'recording', 'condenser', 'studio', 
+        'mic', 'microphone', 'sound', 'card', 'interface', 'mixer', 'audio', 'voice', 
+        'vocal', 'music', 'input', 'output', 'wired', 'wireless', 'usb', 'cable', 
+        'equipment', 'device', 'gear', 'setup', 'live', 'streaming', 'stream', 
+        'podcast', 'podcasting', 'broadcasting', 'broadcast', 'gaming', 'gamer', 
+        'game', 'karaoke', 'singing', 'song', 'teaching', 'class', 'online', 'school', 
+        'zoom', 'meeting', 'home', 'office', 'work', 'church', 'stage', 'performance', 
+        'speech', 'dj', 'youtube', 'tiktok', 'facebook', 'instagram', 'skype', 'video', 
+        'content', 'creator', 'vlogging', 'vlog', 'pc', 'computer', 'laptop', 
+        'desktop', 'phone', 'smartphone', 'mobile', 'android', 'ios', 'iphone', 
+        'tablet', 'ipad', 'mac', 'windows'
     }
 
     def get_token_data(row):
-        # A. Clean Name Tokens
         name_text = str(row.get('NAME', '')).lower()
         name_text = re.sub(r'[^\w\s]', '', name_text) 
         tokens = set(name_text.split()) - fluff_words
         
-        # B. Get Explicit Color
         col_color = str(row.get('COLOR', '')).lower().strip()
         if col_color in ['nan', 'none', '', 'null']: col_color = None
         
-        # C. Get Image URL (if hashing is enabled)
         img_url = None
         if use_image_hash and 'MAIN_IMAGE' in row:
-            img_url = row['MAIN_IMAGE']
+            raw_url = str(row['MAIN_IMAGE']).strip()
+            if raw_url.lower() not in ['nan', 'none', '']:
+                img_url = raw_url
 
-        # D. Extract Implied Color
         found_colors_in_name = tokens.intersection(color_set)
         
         return {
@@ -235,14 +227,20 @@ def check_duplicate_products(
     
     rejected_sids = []
     
-    # --- 3. GROUP & COMPARE ---
-    # Group by Seller+Brand to avoid cross-brand false positives
+    # --- 2. GROUPING & PARALLEL PREFETCH ---
     grouped = data_to_check.groupby(['_grp_seller', '_grp_brand'])
     
     for (seller, brand), group in grouped:
         if len(group) < 2: continue
         
         products = group.to_dict('records')
+        
+        # --- PARALLEL IMAGE FETCHING ---
+        # Before looping, gather all URLs for this group and fetch them in parallel
+        if use_image_hash:
+            urls_to_fetch = [p['search_data']['img_url'] for p in products if p['search_data']['img_url']]
+            prefetch_image_hashes(urls_to_fetch, max_workers=20) # 20 Parallel threads
+        
         WINDOW_SIZE = 100 
         
         for i in range(len(products)):
@@ -257,67 +255,50 @@ def check_duplicate_products(
 
                 data_B = compare['search_data']
 
-                # === CHECK 1: COLOR SAFETY ===
+                # 1. Color Check
                 if data_A['col_color'] and data_B['col_color'] and data_A['col_color'] != data_B['col_color']:
                     continue
                 if data_A['name_colors'] and data_B['name_colors'] and data_A['name_colors'].isdisjoint(data_B['name_colors']):
                     continue
 
-                # === CHECK 2: TEXT SIMILARITY ===
+                # 2. Text Check
                 tokens_A = data_A['tokens']
                 tokens_B = data_B['tokens']
                 
                 is_text_duplicate = False
-                
-                # If tokens exist, check overlap
                 if len(tokens_A) > 0 and len(tokens_B) > 0:
                     intersection = len(tokens_A.intersection(tokens_B))
                     union = len(tokens_A.union(tokens_B))
-                    if union > 0:
-                        similarity = intersection / union
-                        if similarity >= similarity_threshold:
-                            is_text_duplicate = True
+                    if union > 0 and (intersection / union) >= similarity_threshold:
+                        is_text_duplicate = True
                 elif len(tokens_A) == 0 and len(tokens_B) == 0:
-                    # If BOTH are empty after fluff removal (e.g., "Professional Mic"), treat as duplicate
                     is_text_duplicate = True
 
-                # === CHECK 3: IMAGE HASHING (Lazy) ===
+                # 3. Image Check (Instant Lookup from Cache)
                 is_image_duplicate = False
-                
-                # Check image if Text did NOT match (to find hidden duplicates)
-                # OR if text matched but you want extra verification (logic here trusts text first)
                 if use_image_hash and not is_text_duplicate:
                     url_A = data_A['img_url']
                     url_B = data_B['img_url']
                     
                     if url_A and url_B:
-                        # Fast check: Exact URL match
                         if url_A == url_B:
                             is_image_duplicate = True
                         else:
-                            # Slow check: Download & Hash
-                            hash_A = get_image_hash(url_A)
+                            # Retrieves already cached hash (because of prefetch)
+                            hash_A = get_image_hash_fast(url_A)
                             if hash_A:
-                                hash_B = get_image_hash(url_B)
-                                if hash_B:
-                                    # Hamming distance < 5 usually means identical image
-                                    if (hash_A - hash_B) < 5:
-                                        is_image_duplicate = True
+                                hash_B = get_image_hash_fast(url_B)
+                                if hash_B and (hash_A - hash_B) < 5:
+                                    is_image_duplicate = True
 
-                # === FINAL VERDICT ===
                 if is_text_duplicate or is_image_duplicate:
                     rejected_sids.append(compare['PRODUCT_SET_SID'])
 
-    # --- 4. RESULT ---
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].isin(rejected_sids)].copy()
     
-    method_str = f'Aggressive Token (> {int(similarity_threshold*100)}%)'
-    if use_image_hash:
-        method_str += ' + Image Hash'
-
     st.session_state.duplicate_stats = {
         'total': len(rejected_df),
-        'method': method_str
+        'method': f'Aggressive Token + Parallel Image Hash'
     }
 
     return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
@@ -771,7 +752,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
-            'use_image_hash': True # Enabled by default for thoroughness
+            'use_image_hash': True # Parallel hashing enabled
         }),
     ]
     
@@ -779,7 +760,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     status_text = st.empty()
     results = {}
     
-    # Pre-calculate duplication groups for easy expansion of SIDs later
     duplicate_groups = {}
     cols_for_dup = [c for c in ['NAME','BRAND','SELLER_NAME','COLOR'] if c in data.columns]
     if len(cols_for_dup) == 4:
@@ -925,10 +905,7 @@ def prepare_full_data_merged(data_df, final_report_df):
         r_cp = final_report_df.copy()
         d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
         r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
-        
-        merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]],
-                          left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
-        
+        merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
         if 'ProductSetSid_y' in merged.columns: merged.drop(columns=['ProductSetSid_y'], inplace=True)
         if 'ProductSetSid_x' in merged.columns: merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
         return merged
@@ -940,7 +917,6 @@ def to_excel_base(df, sheet, cols, writer, format_rules=False):
         if c not in df_p.columns: df_p[c] = pd.NA
     df_to_write = df_p[[c for c in cols if c in df_p.columns]]
     df_to_write.to_excel(writer, index=False, sheet_name=sheet)
-    
     if format_rules and 'Status' in df_to_write.columns:
         workbook = writer.book
         worksheet = writer.sheets[sheet]
@@ -981,7 +957,6 @@ def generate_smart_export(df, filename_prefix, export_type='simple', auxiliary_d
     else:
         cols = PRODUCTSETS_COLS
         sheet_name = "ProductSets"
-
     if len(df) <= SPLIT_LIMIT:
         if export_type == 'full':
             data = write_excel_single(df, sheet_name, cols, format_status=True, full_data_stats=True)
@@ -1025,9 +1000,7 @@ def log_validation_run(country, file, total, app, rej):
 st.title("Product Validation Tool")
 st.markdown("---")
 
-# LAYOUT TOGGLE
 if 'layout_mode' not in st.session_state: st.session_state.layout_mode = "centered" 
-
 with st.sidebar:
     st.header("Display Settings")
     layout_choice = st.radio("Layout Mode", ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"])
@@ -1052,12 +1025,7 @@ with tab1:
     country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
     country_validator = CountryValidator(country)
     
-    uploaded_files = st.file_uploader(
-        "Upload files (CSV/XLSX)",
-        type=['csv', 'xlsx'],
-        accept_multiple_files=True,
-        key="daily_files"
-    )
+    uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
     
     if 'final_report' not in st.session_state: st.session_state.final_report = pd.DataFrame()
     if 'all_data_map' not in st.session_state: st.session_state.all_data_map = pd.DataFrame()
@@ -1086,7 +1054,6 @@ with tab1:
                             except:
                                 uploaded_file.seek(0)
                                 raw_data = pd.read_csv(uploaded_file, sep=',', encoding='ISO-8859-1', dtype=str)
-                        
                         std_data = standardize_input_data(raw_data)
                         if 'PRODUCT_SET_SID' in std_data.columns:
                             file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
@@ -1109,7 +1076,6 @@ with tab1:
                     intersection_count = len(intersection_sids)
                 
                 st.session_state.intersection_sids = intersection_sids
-                
                 data_prop = propagate_metadata(merged_data)
                 is_valid, errors = validate_input_schema(data_prop)
                 
@@ -1224,13 +1190,12 @@ with tab1:
             c4.download_button("Full Data", full_data, full_name, mime=full_mime)
 
 # -------------------------------------------------
-# TAB 2: WEEKLY ANALYSIS
+# TAB 2 & 3: WEEKLY ANALYSIS & DATA LAKE
 # -------------------------------------------------
 with tab2:
     st.header("Weekly Analysis Dashboard")
     st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
     weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files", label_visibility="collapsed")
-    
     if weekly_files:
         combined_df = pd.DataFrame()
         with st.spinner("Aggregating files..."):
@@ -1240,7 +1205,6 @@ with tab2:
                         try: df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
                         except: f.seek(0); df = pd.read_excel(f, engine='openpyxl', dtype=str)
                     else: df = pd.read_csv(f, dtype=str)
-                    
                     df.columns = df.columns.str.strip()
                     df = standardize_input_data(df)
                     for col in ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']:
@@ -1251,35 +1215,25 @@ with tab2:
         if not combined_df.empty:
             combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
             rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
-            
             st.markdown("### Key Metrics")
             with st.container():
                 m1, m2, m3, m4 = st.columns(4)
-                total = len(combined_df)
-                rej_count = len(rejected)
-                rej_rate = (rej_count/total * 100) if total else 0
-                m1.metric("Total Products Checked", f"{total:,}")
-                m2.metric("Total Rejected", f"{rej_count:,}")
-                m3.metric("Rejection Rate", f"{rej_rate:.1f}%")
-                m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
-            
+                total = len(combined_df); rej_count = len(rejected); rej_rate = (rej_count/total * 100) if total else 0
+                m1.metric("Total Products Checked", f"{total:,}"); m2.metric("Total Rejected", f"{rej_count:,}"); m3.metric("Rejection Rate", f"{rej_rate:.1f}%"); m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
             st.markdown("---")
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("Top Rejection Reasons (Flags)")
                 if not rejected.empty and 'FLAG' in rejected.columns:
-                    reason_counts = rejected['FLAG'].value_counts().reset_index()
-                    reason_counts.columns = ['Flag', 'Count']
+                    reason_counts = rejected['FLAG'].value_counts().reset_index(); reason_counts.columns = ['Flag', 'Count']
                     chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(x=alt.X('Count'), y=alt.Y('Flag', sort='-x'), color=alt.value('#FF6B6B'), tooltip=['Flag', 'Count']).interactive()
                     st.altair_chart(chart, use_container_width=True)
             with c2:
                 st.subheader("Top Rejected Categories")
                 if not rejected.empty and 'CATEGORY' in rejected.columns:
-                    cat_counts = rejected['CATEGORY'].value_counts().reset_index()
-                    cat_counts.columns = ['Category', 'Count']
+                    cat_counts = rejected['CATEGORY'].value_counts().reset_index(); cat_counts.columns = ['Category', 'Count']
                     chart = alt.Chart(cat_counts.head(10)).mark_bar().encode(x=alt.X('Count'), y=alt.Y('Category', sort='-x'), color=alt.value('#4ECDC4'), tooltip=['Category', 'Count']).interactive()
                     st.altair_chart(chart, use_container_width=True)
-            
             c3, c4 = st.columns(2)
             with c3:
                 st.subheader("Seller Trust Score (Top 10)")
@@ -1298,21 +1252,16 @@ with tab2:
                         breakdown = filtered_rej.groupby(['SELLER_NAME', 'Reason']).size().reset_index(name='Count')
                         chart = alt.Chart(breakdown).mark_bar().encode(x=alt.X('SELLER_NAME'), y=alt.Y('Count'), color=alt.Color('Reason'), tooltip=['SELLER_NAME', 'Reason', 'Count']).interactive()
                         st.altair_chart(chart, use_container_width=True)
-            
             st.markdown("---")
             st.subheader("Top 5 Summaries")
             if not rejected.empty:
-                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index()
-                top_reasons.columns = ['Flag', 'Count']
-                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index()
-                top_sellers.columns = ['Seller', 'Rejection Count']
-                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index()
-                top_cats.columns = ['Category', 'Rejection Count']
+                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index(); top_reasons.columns = ['Flag', 'Count']
+                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index(); top_sellers.columns = ['Seller', 'Rejection Count']
+                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index(); top_cats.columns = ['Category', 'Rejection Count']
                 c1, c2, c3 = st.columns(3)
                 with c1: st.markdown("**Top 5 Reasons**"); st.dataframe(top_reasons, hide_index=True, use_container_width=True)
                 with c2: st.markdown("**Top 5 Sellers**"); st.dataframe(top_sellers, hide_index=True, use_container_width=True)
                 with c3: st.markdown("**Top 5 Categories**"); st.dataframe(top_cats, hide_index=True, use_container_width=True)
-                
                 summary_excel = BytesIO()
                 with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
                     pd.DataFrame([{'Metric': 'Total Rejected', 'Value': len(rejected)}, {'Metric': 'Total Checked', 'Value': len(combined_df)}, {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}]).to_excel(writer, sheet_name='Summary', index=False)
@@ -1322,9 +1271,6 @@ with tab2:
                 summary_excel.seek(0)
                 st.download_button(label="📥 Download Summary Excel", data=summary_excel, file_name=f"Weekly_Analysis_Summary_{datetime.now().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-# -------------------------------------------------
-# TAB 3: DATA LAKE
-# -------------------------------------------------
 with tab3:
     st.header("Data Lake Audit")
     file = st.file_uploader("Upload audit file", type=['jsonl','csv','xlsx'], key="audit_file")
