@@ -114,26 +114,33 @@ def create_match_key(row: pd.Series) -> str:
 # -------------------------------------------------
 # CORE DUPLICATE LOGIC (SMART TOKEN + COLOR AWARE)
 # -------------------------------------------------
+# -------------------------------------------------
+# CORE DUPLICATE LOGIC (AGGRESSIVE CONTEXT REMOVAL)
+# -------------------------------------------------
 def check_duplicate_products(
     data: pd.DataFrame, 
     exempt_categories: List[str] = None,
-    similarity_threshold: float = 0.70, # 70% word overlap triggers a duplicate
-    known_colors: List[str] = None, # Passed from support_files['colors']
+    similarity_threshold: float = 0.60, # Lowered threshold to 60% to catch more
+    known_colors: List[str] = None, 
     **kwargs
 ) -> pd.DataFrame:
     """
-    Smart Logic with Color Protection:
-    1. Ignores order & fluff words (catches "BM800 Mic" vs "Mic BM800").
-    2. PROTECTS variations: If "White" vs "Black" is found in Name or Color column, it is SAFE.
-    3. Calculates overlap: If >70% match AND colors are same/missing -> Duplicate.
+    Aggressive Logic:
+    1. Groups by SELLER + BRAND (Must match both).
+    2. Strips 'Usage' words (TikTok, Gaming, Studio) -> Leaves only 'BM800 V8'.
+    3. Calculate overlap. If only the Model/Spec words remain, they match 100%.
     """
     
-    # --- 1. SETUP ---
-    required_cols = ['NAME', 'SELLER_NAME']
+    # --- 1. SETUP & NORMALIZATION ---
+    required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols):
         return pd.DataFrame(columns=data.columns)
 
     data_to_check = data.copy()
+
+    # Normalize Brand and Seller for grouping
+    data_to_check['_grp_seller'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
+    data_to_check['_grp_brand'] = data_to_check['BRAND'].astype(str).str.strip().str.lower()
 
     # Filter out Exempt Categories
     if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
@@ -144,26 +151,42 @@ def check_duplicate_products(
     if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # --- 2. PREPARE COLOR LIST ---
-    # Convert known colors to a set for fast lookup
+    # --- 2. PREPARE ATTRIBUTES ---
     if known_colors:
         color_set = set(str(c).lower().strip() for c in known_colors if c)
     else:
         color_set = set()
 
-    # --- 3. HELPER FUNCTIONS ---
+    # EXPANDED Fluff List: Includes usage scenarios (TikTok, Gaming) & tech specs (Audio, XLR)
     fluff_words = {
-        'professional', 'recording', 'condenser', 'studio', 'high', 'quality', 
-        'best', 'sale', 'new', 'for', 'with', 'and', 'the', 'kit', 'set', 
-        'combo', 'live', 'streaming', 'podcast', 'podcasting', 'broadcasting',
-        'voice', 'over', 'audio', 'sound', 'card', 'interface', 'mixer',
-        'phone', 'pc', 'laptop', 'gaming', 'video', 'youtube', 'tiktok'
+        # Sales/Marketing
+        'professional', 'high', 'quality', 'best', 'sale', 'new', 'original', 
+        'genuine', 'authentic', 'premium', 'official', 'hot', 'promo', 'deal',
+        'combo', 'kit', 'set', 'pack', 'bundle', 'full', 'complete',
+        # Connectors/Prepositions
+        'for', 'with', 'and', 'the', 'in', 'on', 'at', 'to', 'of', 'plus',
+        # Audio Tech Terms
+        'recording', 'condenser', 'studio', 'mic', 'microphone', 'sound', 'card', 
+        'interface', 'mixer', 'audio', 'voice', 'vocal', 'music', 'input', 'output',
+        'wired', 'wireless', 'usb', 'cable', 'equipment', 'device', 'gear', 'setup',
+        # Usage Contexts (THE KEY TO CATCHING YOUR BM800s)
+        'live', 'streaming', 'stream', 'podcast', 'podcasting', 'broadcasting', 
+        'broadcast', 'gaming', 'gamer', 'game', 'karaoke', 'singing', 'song',
+        'teaching', 'class', 'online', 'school', 'zoom', 'meeting', 'home', 
+        'office', 'work', 'church', 'stage', 'performance', 'speech', 'dj',
+        'youtube', 'tiktok', 'facebook', 'instagram', 'skype', 'video', 'content', 
+        'creator', 'vlogging', 'vlog',
+        # Platforms/Devices
+        'pc', 'computer', 'laptop', 'desktop', 'phone', 'smartphone', 'mobile',
+        'android', 'ios', 'iphone', 'tablet', 'ipad', 'mac', 'windows'
     }
 
     def get_token_data(row):
         # A. Clean Name Tokens
         name_text = str(row.get('NAME', '')).lower()
+        # Keep only alphanumeric
         name_text = re.sub(r'[^\w\s]', '', name_text) 
+        # Remove fluff
         tokens = set(name_text.split()) - fluff_words
         
         # B. Get Explicit Color (Column)
@@ -171,7 +194,7 @@ def check_duplicate_products(
         if col_color in ['nan', 'none', '', 'null']: 
             col_color = None
         
-        # C. Extract Implied Color (From Name) using known list
+        # C. Extract Implied Color (From Name)
         found_colors_in_name = tokens.intersection(color_set)
         
         return {
@@ -180,22 +203,19 @@ def check_duplicate_products(
             'name_colors': found_colors_in_name
         }
 
-    # --- 4. PRE-CALCULATE ATTRIBUTES ---
-    # This runs once per row, making the loop much faster
     data_to_check['search_data'] = data_to_check.apply(get_token_data, axis=1)
     
     rejected_sids = []
     
-    # --- 5. GROUP & COMPARE ---
-    grouped = data_to_check.groupby('SELLER_NAME')
+    # --- 3. GROUP BY SELLER AND BRAND ---
+    # This prevents matching "Generic BM800" with "Sony BM800" (if that existed)
+    grouped = data_to_check.groupby(['_grp_seller', '_grp_brand'])
     
-    for seller, group in grouped:
+    for (seller, brand), group in grouped:
         if len(group) < 2: continue
         
         products = group.to_dict('records')
-        
-        # Sliding Window comparison (Compare row 1 vs 2-20)
-        WINDOW_SIZE = 50 
+        WINDOW_SIZE = 100 # Increased window size to catch scattered dupes
         
         for i in range(len(products)):
             current = products[i]
@@ -209,27 +229,26 @@ def check_duplicate_products(
 
                 data_B = compare['search_data']
 
-                # === CHECK 1: EXPLICIT COLOR COLUMN ===
-                # If column says "Black" vs "White", they are NOT duplicates.
+                # === CHECK 1: COLOR SAFETY ===
                 if data_A['col_color'] and data_B['col_color']:
-                    if data_A['col_color'] != data_B['col_color']:
-                        continue # SAFE: Different explicit colors
-
-                # === CHECK 2: NAME DETECTED COLOR ===
-                # If name says "Samsung... Blue" vs "Samsung... Red", NOT duplicates.
-                # We check if the intersection of colors is empty (meaning no common color)
-                # AND both actually have colors mentioned.
+                    if data_A['col_color'] != data_B['col_color']: continue 
+                
                 if data_A['name_colors'] and data_B['name_colors']:
-                    if data_A['name_colors'].isdisjoint(data_B['name_colors']):
-                        continue # SAFE: Names contain different colors (e.g. {red} vs {blue})
+                    if data_A['name_colors'].isdisjoint(data_B['name_colors']): continue 
 
-                # === CHECK 3: TOKEN SIMILARITY ===
+                # === CHECK 2: TOKEN SIMILARITY ===
                 tokens_A = data_A['tokens']
                 tokens_B = data_B['tokens']
                 
+                # If tokens match exactly (e.g. both just have {'bm800', 'v8'}), similarity is 1.0
                 intersection = len(tokens_A.intersection(tokens_B))
                 union = len(tokens_A.union(tokens_B))
                 
+                # Edge Case: If aggressive cleaning leaves NO tokens (e.g. "Professional Mic for PC"), 
+                # we skip it to avoid false flagging everything as empty=empty.
+                if len(tokens_A) == 0 or len(tokens_B) == 0:
+                    continue
+
                 if union == 0: continue
                 
                 similarity = intersection / union
@@ -237,16 +256,15 @@ def check_duplicate_products(
                 if similarity >= similarity_threshold:
                     rejected_sids.append(compare['PRODUCT_SET_SID'])
 
-    # --- 6. RETURN RESULT ---
+    # --- 4. RETURN RESULT ---
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].isin(rejected_sids)].copy()
     
     st.session_state.duplicate_stats = {
         'total': len(rejected_df),
-        'method': f'Smart Token (> {int(similarity_threshold*100)}%) + Color Check'
+        'method': f'Aggressive Token Match (> {int(similarity_threshold*100)}%)'
     }
 
     return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
 # -------------------------------------------------
 # CACHED FILE LOADING
 # -------------------------------------------------
