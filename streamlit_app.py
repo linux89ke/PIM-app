@@ -298,18 +298,18 @@ def check_duplicate_products(
                 if is_text_duplicate or is_image_duplicate:
                     potential_duplicates.append(compare['PRODUCT_SET_SID'])
 
-            # --- DECISION LOGIC: ONLY REJECT IF > 1 DUPLICATE FOUND (Total >= 3 SKUs) ---
-            # If len == 1: We found 1 duplicate (Original + 1 Copy = 2 SKUs). IGNORE.
-            # If len >= 2: We found 2+ duplicates (Original + 2 Copies = 3+ SKUs). REJECT ALL COPIES.
+            # --- DECISION LOGIC: ALLOW ONE DUPLICATE, REJECT EXCESS ---
+            # If len == 1: We found 1 duplicate (Original + 1 Copy = 2 SKUs). ALLOW ALL.
+            # If len >= 2: We found 2+ duplicates (Original + 2+ Copies = 3+ SKUs). ALLOW ONE, REJECT REST.
             if len(potential_duplicates) >= 2:
-                rejected_sids.update(potential_duplicates)
+                rejected_sids.update(potential_duplicates[1:])  # Allow first duplicate, reject the rest
 
     # Convert set back to dataframe
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].isin(rejected_sids)].copy()
     
     st.session_state.duplicate_stats = {
         'total': len(rejected_df),
-        'method': f'Aggressive Token + Parallel Image Hash (Allow 1 Pair)'
+        'method': f'Aggressive Token + Parallel Image Hash (Allow 1 Duplicate, Reject Excess)'
     }
 
     return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
