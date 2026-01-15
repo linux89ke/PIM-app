@@ -38,11 +38,13 @@ def fetch_single_hash(url: str) -> None:
         return
 
     try:
-        # Increased timeout and added retry logic for better reliability
-        response = requests.get(url, timeout=10, stream=True, headers={'User-Agent': 'Mozilla/5.0'})
+        # [STABILITY] Increased timeout to 10s and added headers to prevent 403 blocks
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, timeout=10, stream=True, headers=headers)
+        
         if response.status_code == 200:
             img = Image.open(response.raw)
-            # Resize large images to speed up hashing
+            # [OPTIMIZATION] Resize large images to 256x256 before hashing to speed up processing
             img.thumbnail((256, 256), Image.Resampling.LANCZOS)
             _IMAGE_HASH_CACHE[url] = imagehash.phash(img)
         else:
@@ -54,7 +56,6 @@ def prefetch_image_hashes(urls: List[str], max_workers: int = 10) -> None:
     """
     Downloads and hashes a list of URLs in parallel.
     Populates the global _IMAGE_HASH_CACHE.
-    Reduced max_workers to prevent overwhelming the network.
     """
     valid_urls = [u for u in urls if u and pd.notna(u) and str(u).lower() not in ['nan', 'none', ''] and u not in _IMAGE_HASH_CACHE]
     valid_urls = list(set(valid_urls))
@@ -62,23 +63,13 @@ def prefetch_image_hashes(urls: List[str], max_workers: int = 10) -> None:
     if not valid_urls:
         return
 
-    # Limit concurrent requests to prevent network overload
+    # [STABILITY] Reduced max_workers from 20 to 10 to prevent network congestion/timeouts
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(fetch_single_hash, valid_urls)
 
 def get_image_hash_fast(url: str) -> Optional[imagehash.ImageHash]:
     """Retreives hash from cache (instant)."""
     return _IMAGE_HASH_CACHE.get(str(url).strip())
-
-# -------------------------------------------------
-# Logging Configuration
-# -------------------------------------------------
-logging.basicConfig(
-    filename=f'validation_{datetime.now().strftime("%Y%m%d")}.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
 # Constants & Mapping
@@ -204,6 +195,7 @@ def check_duplicate_products(
         if col_color in ['nan', 'none', '', 'null']: col_color = None
         
         img_url = None
+        # Only extract URL if hashing is enabled
         if use_image_hash and 'MAIN_IMAGE' in row:
             raw_url = str(row['MAIN_IMAGE']).strip()
             if raw_url.lower() not in ['nan', 'none', '']:
@@ -234,9 +226,11 @@ def check_duplicate_products(
         # --- PARALLEL IMAGE FETCHING ---
         if use_image_hash:
             urls_to_fetch = [p['search_data']['img_url'] for p in products if p['search_data']['img_url']]
-            prefetch_image_hashes(urls_to_fetch, max_workers=20) 
+            # [OPTIMIZATION] Reduced workers to 10 for stability
+            prefetch_image_hashes(urls_to_fetch, max_workers=10) 
         
-        WINDOW_SIZE = min(50, len(products)) # Reduced window for speed
+        # [OPTIMIZATION] Reduced window size from 100 to 50 for faster checks
+        WINDOW_SIZE = min(50, len(products)) 
         
         for i in range(len(products)):
             current = products[i]
@@ -274,6 +268,7 @@ def check_duplicate_products(
 
                 # 3. Image Check (Instant Lookup from Cache)
                 is_image_duplicate = False
+                # [CONFIGURABLE] Only check images if flag is True
                 if use_image_hash and not is_text_duplicate:
                     url_A = data_A['img_url']
                     url_B = data_B['img_url']
@@ -293,8 +288,6 @@ def check_duplicate_products(
                     potential_duplicates.append(compare['PRODUCT_SET_SID'])
 
             # --- DECISION LOGIC: ONLY REJECT IF > 1 DUPLICATE FOUND (Total >= 3 SKUs) ---
-            # If len == 1: We found 1 duplicate (Original + 1 Copy = 2 SKUs). IGNORE.
-            # If len >= 2: We found 2+ duplicates (Original + 2 Copies = 3+ SKUs). REJECT ALL COPIES.
             if len(potential_duplicates) >= 2:
                 rejected_sids.update(potential_duplicates)
 
@@ -428,7 +421,7 @@ def load_support_files_lazy():
     with st.spinner("Loading configuration files..."):
         support_files = load_all_support_files()
     if not support_files.get('flags_mapping'):
-        st.error("Critical: flags.xlsx could not be loaded.")
+        st.error("Critical: flags.xlsx could not be loaded or is empty.")
         st.stop()
     return support_files
 
