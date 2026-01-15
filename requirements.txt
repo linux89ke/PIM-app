@@ -6,3 +6,5 @@ altair==4.2.2
 numpy>=1.24.0
 imagehash
 Pillow
+requests
+difflib
