@@ -5,7 +5,7 @@ from datetime import datetime
 import altair as alt
 
 # Import shared utilities
-from streamlit_app import load_all_support_files, standardize_input_data
+from streamlit_app import standardize_input_data
 
 st.title("📈 Weekly Analysis Dashboard")
 
