@@ -340,7 +340,14 @@ def load_excel_file(filename: str, column: Optional[str] = None):
         return [] if column else pd.DataFrame()
 
 @st.cache_data(ttl=3600)
-def load_restricted_brands_config(filename: str) -> Dict:
+def load_support_files_lazy():
+    """Lazy load support files only when needed."""
+    with st.spinner("Loading configuration files..."):
+        support_files = load_all_support_files()
+    if not support_files['flags_mapping']:
+        st.error("Critical: flags.xlsx could not be loaded.")
+        st.stop()
+    return support_files
     config = {}
     try:
         df1 = pd.read_excel(filename, sheet_name=0, engine='openpyxl', dtype=str)
@@ -1052,12 +1059,6 @@ try:
 except:
     # Default values when not in Streamlit context
     use_image_hash = True
-
-with st.spinner("Loading configuration files..."):
-    support_files = load_all_support_files()
-if not support_files['flags_mapping']:
-    st.error("Critical: flags.xlsx could not be loaded.")
-    st.stop()
 
 st.title("🏠 Product Validation Tool")
 st.markdown("---")

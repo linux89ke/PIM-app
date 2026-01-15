@@ -9,6 +9,8 @@ import traceback
 import json
 import xlsxwriter
 import altair as alt
+import time
+import altair as alt
 import requests
 from difflib import SequenceMatcher
 import zipfile
@@ -16,7 +18,7 @@ import concurrent.futures
 
 # Import shared utilities and functions
 from streamlit_app import (
-    load_all_support_files, CountryValidator, standardize_input_data,
+    load_support_files_lazy, CountryValidator, standardize_input_data,
     validate_input_schema, filter_by_country, propagate_metadata,
     validate_products, prepare_full_data_merged, generate_smart_export,
     to_excel_flag_data, log_validation_run, clear_image_cache
@@ -38,12 +40,8 @@ try:
 except:
     use_image_hash = True
 
-# Load configuration files
-with st.spinner("Loading configuration files..."):
-    support_files = load_all_support_files()
-if not support_files['flags_mapping']:
-    st.error("Critical: flags.xlsx could not be loaded.")
-    st.stop()
+# Load configuration files (lazy loading - only when needed)
+support_files = load_support_files_lazy()
 
 # Main content
 country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
@@ -117,11 +115,32 @@ if uploaded_files:
                     if col in data.columns: data[col] = data[col].astype(str).fillna('')
                 if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
 
-                with st.spinner("Running validations..."):
+                # Enhanced progress indicators
+                progress_container = st.container()
+                with progress_container:
+                    st.subheader("🔍 Validation Progress")
+                    overall_progress = st.progress(0)
+                    current_task = st.empty()
+                    task_progress = st.progress(0)
+                    stats_display = st.empty()
+
+                current_task.text("⏳ Preparing validation engine...")
+                overall_progress.progress(10)
+
+                with st.spinner("Running comprehensive validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+
+                    # Update progress during validation
+                    current_task.text("🔍 Running validation checks...")
+                    overall_progress.progress(30)
+
                     final_report, flag_dfs = validate_products(
                         data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, use_image_hash
                     )
+
+                    overall_progress.progress(90)
+                    current_task.text("📊 Finalizing results...")
+
                     st.session_state.final_report = final_report
                     st.session_state.all_data_map = data
                     st.session_state.intersection_count = intersection_count
@@ -134,6 +153,27 @@ if uploaded_files:
                     approved_df = final_report[final_report['Status'] == 'Approved']
                     rejected_df = final_report[final_report['Status'] == 'Rejected']
                     log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+
+                overall_progress.progress(100)
+                current_task.text("✅ Validation complete!")
+
+                # Show summary stats
+                total_processed = len(data)
+                approved_count = len(approved_df)
+                rejected_count = len(rejected_df)
+                rejection_rate = (rejected_count / total_processed * 100) if total_processed > 0 else 0
+
+                stats_display.markdown(f"""
+                **📈 Validation Summary:**
+                - **Total Products:** {total_processed:,}
+                - **Approved:** {approved_count:,} ({(approved_count/total_processed*100):.1f}%)
+                - **Rejected:** {rejected_count:,} ({rejection_rate:.1f}%)
+                - **Processing Time:** Complete
+                """)
+
+                # Clear progress indicators after a short delay
+                time.sleep(1)
+                progress_container.empty()
             else:
                 for e in errors: st.error(e)
         except Exception as e:
