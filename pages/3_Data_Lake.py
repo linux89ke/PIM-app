@@ -54,7 +54,6 @@ def parse_ksh_price(price_str):
 @st.cache_data
 def load_config_file(filename, file_type='excel', col=None):
     """Robust file loader."""
-    # Check paths
     paths_to_check = [filename, f"pages/{filename}", f"../{filename}"]
     valid_path = next((p for p in paths_to_check if os.path.exists(p)), None)
     
@@ -79,68 +78,76 @@ def load_config_file(filename, file_type='excel', col=None):
 # -------------------------------------------------
 
 def check_suspected_fake_price(row, fake_config_df):
-    """Checks if Price < Minimum Reference Price for that Brand."""
+    """
+    Checks if Price < Minimum Reference Price for that Brand AND Category.
+    """
     if fake_config_df is None: return None
     
     brand = str(row.get('BRAND', '')).strip().lower()
+    cat_code = str(row.get('CATEGORY_CODE', ''))
+    
+    # 1. Identify Brand Column
     config_brands = {c.lower(): c for c in fake_config_df.columns}
     
     if brand in config_brands:
-        real_col_name = config_brands[brand]
-        try:
-            threshold_series = pd.to_numeric(fake_config_df[real_col_name], errors='coerce').dropna()
-            if not threshold_series.empty:
-                min_threshold = threshold_series.min() 
+        real_brand_col = config_brands[brand]
+        
+        # 2. Identify Category Row
+        # Tries to find the row where the first column matches the Product's Category Code
+        # We assume the first column of the config file contains Category IDs
+        id_col = fake_config_df.columns[0] 
+        
+        match_row = fake_config_df[fake_config_df[id_col].apply(clean_code) == cat_code]
+        
+        if not match_row.empty:
+            # 3. Get Threshold
+            try:
+                threshold_val = match_row.iloc[0][real_brand_col]
+                min_threshold = float(str(threshold_val).replace(',', '').strip())
+                
+                # 4. Compare Price
                 current_price = parse_ksh_price(row.get('GLOBAL_SALE_PRICE', 0))
+                
                 if 0 < current_price < min_threshold:
                     return f"Suspected Fake: Price ({current_price}) below reference ({min_threshold})"
-        except: pass
+            except:
+                pass # Conversion error or empty value
+                
     return None
 
 def validate_sneakers(row, sneaker_cats, sensitive_brands):
-    """
-    Checks for protected names (Nike, Adidas) in title if Brand is Generic.
-    Uses strict regex boundaries to prevent partial matches.
-    """
+    """Strict regex check for protected brands in Generic items."""
     if row['CATEGORY_CODE'] in sneaker_cats:
         brand = str(row.get('BRAND', '')).strip().lower()
-        # List of 'Fake' brands
         if brand in ['generic', 'fashion', 'no brand', 'other', '', 'nan']:
             name = str(row.get('NAME', '')).lower()
-            
-            # Check for protected keywords using regex word boundary
             for bad_brand in sensitive_brands:
-                # regex: \bmatches word boundary\b (e.g. " nike " matches, "sniker" does not)
+                # Use word boundaries to match "Nike" but not "Sniker"
                 if re.search(r'\b' + re.escape(bad_brand) + r'\b', name):
                     return f"Counterfeit: Generic brand with '{bad_brand}' in name"
     return None
 
 def validate_jerseys(row, jerseys_df):
-    """Checks for protected team names in Jerseys category."""
+    """Checks for protected team names."""
     if jerseys_df is None: return None
     
-    # 1. Check Category
+    # Check Category
     if 'Categories' in jerseys_df:
         jersey_cats = set(jerseys_df['Categories'].astype(str).apply(clean_code))
-        if row['CATEGORY_CODE'] not in jersey_cats:
-            return None
-    else:
-        return None # Config error
+        if row['CATEGORY_CODE'] not in jersey_cats: return None
 
-    # 2. Check Exemptions
+    # Check Exemptions
     exempt = set([str(s).lower().strip() for s in jerseys_df['Exempted'] if str(s)!='nan']) if 'Exempted' in jerseys_df else set()
     seller = str(row.get('SELLER_NAME', '')).lower().strip()
-    if seller in exempt:
-        return None
+    if seller in exempt: return None
         
-    # 3. Check Protected Keywords
+    # Check Keywords
     keywords = [str(k).lower().strip() for k in jerseys_df['Checklist'] if str(k)!='nan'] if 'Checklist' in jerseys_df else []
     name = str(row.get('NAME', '')).lower()
     
     for k in keywords:
         if k and re.search(r'\b' + re.escape(k) + r'\b', name):
              return f"Counterfeit Jersey: Protected term '{k}' detected"
-             
     return None
 
 def validate_books(row, book_cats, approved_sellers):
@@ -178,10 +185,8 @@ def validate_restricted_brands(row, restricted_brands_df):
     if not match.empty:
         allowed_raw = str(match.iloc[0]['Sellers']).lower()
         current_seller = str(row.get('SELLER_NAME', '')).lower()
-        if allowed_raw != 'nan':
-            # Check partial match "seller1, seller2"
-            if current_seller not in allowed_raw:
-                return f"Restricted Brand: '{row.get('BRAND')}'"
+        if allowed_raw != 'nan' and current_seller not in allowed_raw:
+            return f"Restricted Brand: '{row.get('BRAND')}'"
     return None
 
 def validate_prohibited(row, prohibited_list):
@@ -206,7 +211,6 @@ with st.sidebar:
     st.header("1. Configuration")
     cat_ref_file = st.file_uploader("Upload Category Reference (xlsx/csv)", type=['xlsx', 'csv'])
     
-    # Load System Rules
     with st.spinner("Loading Validation Rules..."):
         suspected_fake_df = load_config_file("suspected_fake.xlsx", "excel")
         jerseys_config = load_config_file("Jerseys.xlsx", "excel")
@@ -224,11 +228,10 @@ with st.sidebar:
         if valid_colors:
             pattern = '|'.join(r'\b' + re.escape(c) + r'\b' for c in sorted(valid_colors, key=len, reverse=True))
             color_regex = re.compile(pattern, re.IGNORECASE)
-
     st.success("System Rules Loaded")
 
 st.title("🛡️ Data Lake Validator")
-st.markdown("Full compliance check: **Price, Counterfeit, Content, & Restrictions**.")
+st.markdown("Full compliance check including **Category-Specific Price Analysis**.")
 
 # 1. BUILD CATEGORY MAP
 path_to_code = {}
@@ -252,10 +255,8 @@ if cat_ref_file:
 prod_file = st.file_uploader("Upload Product File (download (3).csv)", type=['csv', 'xlsx'])
 
 if prod_file and path_to_code:
-    # Read File
     try:
-        if prod_file.name.endswith('.xlsx'): 
-            raw_df = pd.read_excel(prod_file, dtype=str)
+        if prod_file.name.endswith('.xlsx'): raw_df = pd.read_excel(prod_file, dtype=str)
         else:
             prod_file.seek(0)
             try:
@@ -292,7 +293,7 @@ if prod_file and path_to_code:
         if row['CATEGORY_CODE'] == 'N/A':
             reasons.append("Unmapped Category (Not found in Ref)")
         else:
-            # 1. Fake Price Check
+            # 1. Fake Price Check (Category Specific)
             res = check_suspected_fake_price(row, suspected_fake_df)
             if res: reasons.append(res)
                 
@@ -328,11 +329,10 @@ if prod_file and path_to_code:
             res = validate_prohibited(row, prohibited_ke)
             if res: reasons.append(res)
             
-        # 9. Single Word (Global)
+        # 9. Single Word
         res = validate_single_word(row)
         if res: reasons.append(res)
 
-        # Result Compilation
         status = "Rejected" if reasons else "Approved"
         row['Validation_Status'] = status
         row['Validation_Reason'] = "; ".join(reasons)
@@ -343,7 +343,6 @@ if prod_file and path_to_code:
     progress.progress(1.0)
     final_df = pd.DataFrame(results)
     
-    # 4. DISPLAY & EXPORT
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
     c1.metric("Total", len(final_df))
