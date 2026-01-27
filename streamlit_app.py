@@ -827,7 +827,7 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
-def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, use_image_hash: bool = True):
+def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, use_image_hash: bool = True, perform_quality_check: bool = True):
     # Ensure ID match compatibility
     data['PRODUCT_SET_SID'] = data['PRODUCT_SET_SID'].astype(str).str.strip()
     
@@ -882,6 +882,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
 
     for i, (name, func, kwargs) in enumerate(validations):
         if name == "Restricted brands" and country_validator.code != 'KE': continue
+
+        # CHECKBOX LOGIC: Skip Poor Images if perform_quality_check is False
+        if name == "Poor Images" and not perform_quality_check:
+            continue
 
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
             if name == "Sensitive words": continue
@@ -1145,13 +1149,19 @@ try:
         st.header("Performance Settings")
         use_image_hash = st.checkbox("Enable Image Hashing (for duplicate detection)", value=True, 
                                      help="Disable for faster processing on large datasets")
-        st.caption("⚡ Disabling image hashing speeds up processing significantly")
+        
+        # --- NEW TOGGLE HERE ---
+        check_image_quality = st.checkbox("Enable Quality Check (Blur/Glare)", value=True, 
+                                          help="Analyze image quality (slow). Uncheck to skip.")
+        
+        st.caption("⚡ Disabling hashing/quality checks speeds up processing significantly")
         
         if st.button("🧹 Clear Image Cache", help="Free up memory by clearing cached image hashes"):
             clear_image_cache()
             st.success("Image cache cleared!")
 except:
     use_image_hash = True
+    check_image_quality = True
 
 # Load Configuration Files
 try:
@@ -1236,7 +1246,9 @@ with tab1:
                     with st.spinner("Running validations..."):
                         common_sids_to_pass = intersection_sids if intersection_count > 0 else None
                         final_report, flag_dfs = validate_products(
-                            data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, use_image_hash=use_image_hash
+                            data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, 
+                            use_image_hash=use_image_hash, 
+                            perform_quality_check=check_image_quality # Pass the UI state here
                         )
                         st.session_state.final_report = final_report
                         st.session_state.all_data_map = data
