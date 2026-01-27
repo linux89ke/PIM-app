@@ -15,13 +15,15 @@ import zipfile
 import concurrent.futures
 
 # -------------------------------------------------
-# 0. IMAGE HASHING IMPORTS & SETUP
+# 0. IMAGE HASHING & PROCESSING IMPORTS
 # -------------------------------------------------
 try:
     import imagehash
     from PIL import Image
+    import cv2
+    import numpy as np
 except ImportError:
-    st.error("Missing libraries! Please run: pip install imagehash Pillow requests")
+    st.error("Missing libraries! Please run: pip install imagehash Pillow requests opencv-python-headless numpy")
     st.stop()
 
 # Global Cache for Image Hashes
@@ -106,6 +108,9 @@ NEW_FILE_MAPPING = {
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE'
 }
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
 # UTILITIES
@@ -384,6 +389,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Suspected Fake product': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit."),
             'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "Listing this product requires a valid warranty as per platform guidelines."),
             'Sensitive words': ('1000001 - Brand NOT Allowed', "Includes banned brands (Chanel, Rolex, etc)."),
+            'Poor Images': ('1000017 - Low Quality Image', "Image rejected: Blurry, too dark, has glare, or low resolution (<300px)."),
         }
     except Exception: return {}
 
@@ -500,6 +506,92 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # --- Validation Logic Functions ---
+
+def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame:
+    """
+    Downloads images and checks for:
+    1. Low Resolution (< 300x300)
+    2. Blurriness (Laplacian Variance < 100)
+    3. Darkness (Mean Brightness < 50)
+    4. Flash Glare (Too many blown-out pixels)
+    """
+    if 'MAIN_IMAGE' not in data.columns:
+        return pd.DataFrame(columns=data.columns)
+
+    # Filter only rows with valid URLs
+    valid_data = data[data['MAIN_IMAGE'].notna() & (data['MAIN_IMAGE'].str.strip() != '')].copy()
+    if valid_data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # Helper function to process a single image
+    def analyze_image_quality(row_data):
+        sid = row_data[0]
+        url = row_data[1]
+        
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            resp = requests.get(url, timeout=5, headers=headers)
+            if resp.status_code != 200:
+                return None # Could not check, skip rejection logic or handle as broken link
+            
+            # Convert bytes to numpy array for OpenCV
+            image_array = np.asarray(bytearray(resp.content), dtype="uint8")
+            img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            
+            if img is None: return None
+
+            h, w, _ = img.shape
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            
+            # 1. Resolution Check
+            if h < 300 or w < 300:
+                return (sid, f"Low Resolution ({w}x{h})")
+
+            # 2. Blurriness Check (Laplacian Variance)
+            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if blur_score < 100:
+                return (sid, f"Blurry (Score: {int(blur_score)})")
+
+            # 3. Darkness Check
+            avg_brightness = np.mean(gray)
+            if avg_brightness < 40:
+                return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
+
+            # 4. Glare Check (Pixels > 250)
+            _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
+            bright_ratio = np.count_nonzero(bright_mask) / gray.size
+            if bright_ratio > 0.05: # >5% pure white
+                return (sid, "Flash/Glare Detected")
+
+            return None # Pass
+            
+        except Exception:
+            return None
+
+    # Run in parallel
+    rejected_reasons = {}
+    rows_to_process = list(zip(valid_data['PRODUCT_SET_SID'], valid_data['MAIN_IMAGE']))
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = executor.map(analyze_image_quality, rows_to_process)
+        
+        for res in results:
+            if res:
+                sid, reason = res
+                rejected_reasons[sid] = reason
+
+    # Filter and return data
+    if not rejected_reasons:
+        return pd.DataFrame(columns=data.columns)
+        
+    mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
+    result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    
+    # Add the specific failure reason to the Comment Detail if needed
+    result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
+    
+    return result_df
+
 def check_restricted_brands(data: pd.DataFrame, restricted_config: Dict) -> pd.DataFrame:
     if not all(c in data.columns for c in ['NAME', 'BRAND', 'SELLER_NAME']) or not restricted_config:
         return pd.DataFrame(columns=data.columns)
@@ -743,6 +835,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     validations = [
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
+        # NEW VALIDATION
+        ("Poor Images", check_poor_images, {'max_workers': 10}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
             'approved_sellers_ke': support_files['approved_refurb_sellers_ke'],
