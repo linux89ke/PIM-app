@@ -419,7 +419,7 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'brands_list': load_txt_file('brands.txt'), # LOAD NEW FILE
+        'brands_list': load_txt_file('brands.txt'), # ADDED THIS FILE LOADER
     }
     return files
 
@@ -1069,6 +1069,159 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             final_df[c] = ""
             
     return country_validator.ensure_status_column(final_df), results
+
+# -------------------------------------------------
+# Export Logic
+# -------------------------------------------------
+def prepare_full_data_merged(data_df, final_report_df):
+    try:
+        d_cp = data_df.copy()
+        r_cp = final_report_df.copy()
+        d_cp['PRODUCT_SET_SID'] = d_cp['PRODUCT_SET_SID'].astype(str).str.strip()
+        r_cp['ProductSetSid'] = r_cp['ProductSetSid'].astype(str).str.strip()
+        merged = pd.merge(d_cp, r_cp[["ProductSetSid", "Status", "Reason", "Comment", "FLAG", "SellerName"]], left_on="PRODUCT_SET_SID", right_on="ProductSetSid", how='left')
+        if 'ProductSetSid_y' in merged.columns: merged.drop(columns=['ProductSetSid_y'], inplace=True)
+        if 'ProductSetSid_x' in merged.columns: merged.rename(columns={'ProductSetSid_x': 'PRODUCT_SET_SID'}, inplace=True)
+        return merged
+    except Exception: return pd.DataFrame()
+
+def to_excel_base(df, sheet, cols, writer, format_rules=False):
+    df_p = df.copy()
+    for c in cols:
+        if c not in df_p.columns: df_p[c] = pd.NA
+    df_to_write = df_p[[c for c in cols if c in df_p.columns]]
+    df_to_write.to_excel(writer, index=False, sheet_name=sheet)
+    if format_rules and 'Status' in df_to_write.columns:
+        workbook = writer.book
+        worksheet = writer.sheets[sheet]
+        red_fmt = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+        green_fmt = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+        status_idx = df_to_write.columns.get_loc('Status')
+        worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx, {'type': 'cell', 'criteria': 'equal', 'value': '"Rejected"', 'format': red_fmt})
+        worksheet.conditional_format(1, status_idx, len(df_to_write), status_idx, {'type': 'cell', 'criteria': 'equal', 'value': '"Approved"', 'format': green_fmt})
+
+def write_excel_single(df, sheet_name, cols, auxiliary_df=None, aux_sheet_name=None, aux_cols=None, format_status=False, full_data_stats=False):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        to_excel_base(df, sheet_name, cols, writer, format_rules=format_status)
+        if auxiliary_df is not None and not auxiliary_df.empty:
+            to_excel_base(auxiliary_df, aux_sheet_name, aux_cols, writer)
+        if full_data_stats and 'SELLER_NAME' in df.columns:
+            wb = writer.book
+            ws = wb.add_worksheet('Sellers Data')
+            fmt = wb.add_format({'bold': True, 'bg_color': '#E6F0FA', 'border': 1, 'align': 'center'})
+            
+            if 'STOCK_QTY' not in df.columns: df['STOCK_QTY'] = 0
+            if 'SELLER_RATING' not in df.columns: df['SELLER_RATING'] = 0
+
+            if 'Status' in df.columns:
+                df['Rejected_Count'] = (df['Status'] == 'Rejected').astype(int)
+                df['Approved_Count'] = (df['Status'] == 'Approved').astype(int)
+                
+                summ = df.groupby('SELLER_NAME').agg(
+                    Rejected=('Rejected_Count', 'sum'),
+                    Approved=('Approved_Count', 'sum')
+                ).reset_index().sort_values('Rejected', ascending=False)
+                
+                summ.insert(0, 'Rank', range(1, len(summ) + 1))
+                ws.write(0, 0, "Sellers Summary (This File)", fmt)
+                summ.to_excel(writer, sheet_name='Sellers Data', startrow=1, index=False)
+    
+    output.seek(0)
+    return output
+
+def generate_smart_export(df, filename_prefix, export_type='simple', auxiliary_df=None):
+    if export_type == 'full':
+        cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
+        sheet_name = "ProductSets"
+    else:
+        cols = PRODUCTSETS_COLS
+        sheet_name = "ProductSets"
+    if len(df) <= SPLIT_LIMIT:
+        if export_type == 'full':
+            data = write_excel_single(df, sheet_name, cols, format_status=True, full_data_stats=True)
+        else:
+            data = write_excel_single(df, sheet_name, cols, auxiliary_df=auxiliary_df, aux_sheet_name="RejectionReasons", aux_cols=REJECTION_REASONS_COLS, format_status=True)
+        return data, f"{filename_prefix}.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            chunk_count = 0
+            for i in range(0, len(df), SPLIT_LIMIT):
+                chunk = df.iloc[i : i + SPLIT_LIMIT]
+                chunk_count += 1
+                part_name = f"{filename_prefix}_Part_{chunk_count}.xlsx"
+                if export_type == 'full':
+                    excel_data = write_excel_single(chunk, sheet_name, cols, format_status=True, full_data_stats=True)
+                else:
+                    excel_data = write_excel_single(chunk, sheet_name, cols, auxiliary_df=auxiliary_df, aux_sheet_name="RejectionReasons", aux_cols=REJECTION_REASONS_COLS, format_status=True)
+                zf.writestr(part_name, excel_data.getvalue())
+        zip_buffer.seek(0)
+        return zip_buffer, f"{filename_prefix}.zip", "application/zip"
+
+def to_excel_flag_data(flag_df, flag_name):
+    output = BytesIO()
+    df_copy = flag_df.copy()
+    df_copy['FLAG'] = flag_name
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
+    output.seek(0)
+    return output
+
+def log_validation_run(country, file, total, app, rej):
+    try:
+        entry = {'timestamp': datetime.now().isoformat(), 'country': country, 'file': file, 'total': total, 'approved': app, 'rejected': rej}
+        with open('validation_audit.jsonl', 'a') as f: f.write(json.dumps(entry)+'\n')
+    except: pass
+
+# -------------------------------------------------
+# UI
+# -------------------------------------------------
+if 'layout_mode' not in st.session_state:
+    st.session_state.layout_mode = "centered"
+
+try:
+    st.set_page_config(
+        page_title="Product Validation Tool",
+        layout=st.session_state.layout_mode
+    )
+except:
+    pass
+
+st.title("Product Validation Tool")
+st.markdown("---") 
+try:
+    with st.sidebar:
+        st.header("Display Settings")
+        layout_choice = st.radio("Layout Mode", ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"])
+        new_mode = "wide" if "Wide" in layout_choice else "centered"
+        if new_mode != st.session_state.layout_mode:
+            st.session_state.layout_mode = new_mode
+            st.rerun()
+        
+        st.header("Performance Settings")
+        use_image_hash = st.checkbox("Enable Image Hashing (for duplicate detection)", value=True, 
+                                     help="Disable for faster processing on large datasets")
+        
+        # --- NEW TOGGLE HERE ---
+        check_image_quality = st.checkbox("Enable Quality Check (Blur/Glare)", value=True, 
+                                          help="Analyze image quality (slow). Uncheck to skip.")
+        
+        st.caption("⚡ Disabling hashing/quality checks speeds up processing significantly")
+        
+        if st.button("🧹 Clear Image Cache", help="Free up memory by clearing cached image hashes"):
+            clear_image_cache()
+            st.success("Image cache cleared!")
+except:
+    use_image_hash = True
+    check_image_quality = True
+
+# Load Configuration Files
+try:
+    support_files = load_support_files_lazy()
+except Exception as e:
+    st.error(f"Failed to load configuration files: {e}")
+    st.stop()
 
 # -------------------------------------------------
 # TAB 1: DAILY VALIDATION ONLY (Single View)
