@@ -322,36 +322,28 @@ def load_txt_file(filename: str) -> List[str]:
 @st.cache_data(ttl=3600)
 def load_brands_file(filename: str) -> List[str]:
     """Smart loader: Reads brands from TXT or CSV."""
-    # Ensure filename is string
     filename = str(filename)
-    
-    # 1. Force strict text reading for .txt files
-    if filename.lower().endswith('.txt'):
-        try:
-            with open(filename, 'r', encoding='utf-8') as f:
-                return [line.strip() for line in f if line.strip()]
-        except UnicodeDecodeError:
-            # Fallback for ISO-8859-1 encoding issues
-            with open(filename, 'r', encoding='ISO-8859-1') as f:
-                return [line.strip() for line in f if line.strip()]
-        except Exception as e:
-            logger.error(f"Error reading {filename}: {e}")
-            return []
-
-    # 2. Try CSV logic for other files
     try:
-        df = pd.read_csv(filename, encoding='utf-8', dtype=str)
-        # Check common column names
-        possible_cols = ['BRAND_DISPLAY_NAME', 'BRAND_SYSTEM_NAME', 'Brand', 'NAME', 'Name']
-        for col in possible_cols:
-            if col in df.columns:
-                return df[col].dropna().astype(str).str.strip().tolist()
-        if not df.empty and len(df.columns) > 0:
-             return df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
-    except Exception:
-        pass # Fallback
+        # Try reading as CSV first
+        try:
+            df = pd.read_csv(filename, encoding='utf-8', dtype=str)
+            # Check common column names
+            possible_cols = ['BRAND_DISPLAY_NAME', 'BRAND_SYSTEM_NAME', 'Brand', 'NAME', 'Name']
+            for col in possible_cols:
+                if col in df.columns:
+                    return df[col].dropna().astype(str).str.strip().tolist()
+            # If no known columns, and not empty, use first
+            if not df.empty and len(df.columns) > 0:
+                 return df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
+        except Exception:
+            pass # Fallback to plain text
 
-    return []
+        # Fallback: Read as plain text (one brand per line)
+        with open(filename, 'r', encoding='utf-8') as f:
+            return [line.strip() for line in f if line.strip()]
+    except Exception as e:
+        logger.error(f"Error reading brands file {filename}: {e}")
+        return []
 
 @st.cache_data(ttl=3600)
 def load_excel_file(filename: str, column: Optional[str] = None):
@@ -866,8 +858,8 @@ def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
 
 def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where Brand is 'Generic' but the FIRST WORD of the 
-    Product Name is a real brand name (e.g. "Nike Shoes").
+    Flags products where Brand is 'Generic' but the FIRST WORD of the Product Name 
+    is a real brand name (e.g. "Nike Shoes").
     
     IMPROVED VERSION: 
     1. Uses INDEXED LOOKUP for O(1) speed instead of slow Regex.
@@ -921,6 +913,7 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     }
     
     # 1. Filter for only 'Generic' brand items (Optimization)
+    # Using a boolean mask first is faster than string operations on the whole dataframe
     mask_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     generic_items = data[mask_generic].copy()
     
@@ -941,9 +934,13 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
         if len(b_lower) < 2: continue # Ignore 1-char brands
         
         # Get first word of brand as key
-        # e.g. "Dr. Rashel" -> key "dr."
+        # e.g. "Dr. Rashel" -> key "dr"
+        # We strip punctuation from the key to be robust
         first_word = b_lower.split()[0]
-        brand_index[first_word].append(b_lower)
+        # Remove punctuation like ':', '-', etc from key for matching
+        key = re.sub(r'[^\w]', '', first_word)
+        if key:
+            brand_index[key].append(b_lower)
         
     if not brand_index:
         return pd.DataFrame(columns=data.columns)
@@ -955,12 +952,11 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
         
         # Get first word of product name
         prod_first_word = name_val.split()[0]
-        # Remove punctuation from the key (e.g. "Dr." -> "dr")
-        prod_first_word_key = re.sub(r'[^\w]', '', prod_first_word)
+        # Clean it to match key format
+        prod_key = re.sub(r'[^\w]', '', prod_first_word)
         
         # Check if this word exists as a brand starter
-        # We check both the raw token and the stripped token to be safe
-        candidates = brand_index.get(prod_first_word) or brand_index.get(prod_first_word_key)
+        candidates = brand_index.get(prod_key)
         
         if not candidates:
             return False
