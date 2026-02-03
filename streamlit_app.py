@@ -12,7 +12,6 @@ import requests
 from difflib import SequenceMatcher
 import zipfile
 import concurrent.futures
-from collections import defaultdict
 
 # -------------------------------------------------
 # 0. IMAGE HASHING & PROCESSING IMPORTS
@@ -874,9 +873,8 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     is a real brand name (e.g. "Nike Shoes").
     
     IMPROVED VERSION: 
-    1. Uses INDEXED LOOKUP for O(1) speed instead of slow Regex.
+    1. Uses SET LOOKUP for O(1) speed instead of slow Regex.
     2. Filters out common generic descriptor words to reduce false positives.
-    3. Handles multi-word brands via prefix checking.
     
     Args:
         data: DataFrame with 'NAME' and 'BRAND' columns
@@ -925,61 +923,43 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     }
     
     # 1. Filter for only 'Generic' brand items (Optimization)
-    # Using a boolean mask first is faster than string operations on the whole dataframe
     mask_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     generic_items = data[mask_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
     
-    # 2. Build Fast Index (First Word -> List of Brands)
-    # We clean brands and group them by their first word
-    brand_index = defaultdict(list)
+    # 2. Build Fast Lookup Set (O(1) access)
+    # Normalize brands: lowercase, stripped
+    valid_brand_set = {
+        str(b).strip().lower()
+        for b in brands_list
+        if b
+        and str(b).strip().lower() not in GENERIC_BLACKLIST
+        and str(b).strip().lower() != 'generic'
+        and len(str(b).strip()) >= 3 # Ignore very short 1-2 char brands to avoid noise
+    }
     
-    for b in brands_list:
-        b_clean = str(b).strip()
-        if not b_clean: continue
-        
-        b_lower = b_clean.lower()
-        if b_lower in GENERIC_BLACKLIST: continue
-        if b_lower == 'generic': continue
-        if len(b_lower) < 2: continue # Ignore 1-char brands
-        
-        # Get first word of brand as key
-        # e.g. "Dr. Rashel" -> key "dr."
-        first_word = b_lower.split()[0]
-        brand_index[first_word].append(b_lower)
-        
-    if not brand_index:
+    if not valid_brand_set:
         return pd.DataFrame(columns=data.columns)
         
-    # 3. Check Function using Index
-    def is_hidden_brand(row):
-        name_val = str(row['NAME']).lower().strip()
-        if not name_val: return False
-        
-        # Get first word of product name
-        prod_first_word = name_val.split()[0]
-        
-        # Check if this word exists as a brand starter
-        candidates = brand_index.get(prod_first_word)
-        
-        if not candidates:
-            return False
-            
-        # Check against specific candidates
-        # This handles "Dr." finding ["dr. rashel", "dr. jart"]
-        # And checking if product starts with any of them
-        for cand in candidates:
-            if name_val.startswith(cand):
-                return True
-                
-        return False
+    # 3. Extract First Word of Product Name efficiently
+    def get_first_word_clean(name_val):
+        if pd.isna(name_val): return ""
+        s = str(name_val).strip()
+        if not s: return ""
+        # Split by space to get first token
+        first_token = s.split()[0]
+        # Remove punctuation like ':', '-', etc.
+        return re.sub(r'[^\w]', '', first_token).lower()
 
-    # Apply check
-    mask = generic_items.apply(is_hidden_brand, axis=1)
+    # Apply extraction
+    first_words = generic_items['NAME'].apply(get_first_word_clean)
     
-    return generic_items[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    # 4. Check membership in set
+    flagged_mask = first_words.isin(valid_brand_set)
+    
+    return generic_items[flagged_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     if not {'CATEGORY_CODE', 'NAME', 'SELLER_NAME'}.issubset(data.columns) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
