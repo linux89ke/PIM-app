@@ -12,6 +12,7 @@ import requests
 from difflib import SequenceMatcher
 import zipfile
 import concurrent.futures
+from collections import defaultdict
 
 # -------------------------------------------------
 # 0. IMAGE HASHING & PROCESSING IMPORTS
@@ -320,41 +321,37 @@ def load_txt_file(filename: str) -> List[str]:
 
 @st.cache_data(ttl=3600)
 def load_brands_file(filename: str) -> List[str]:
-    """Smart loader for brands file that handles both CSVs and TXT files."""
-    try:
-        # Check if file exists by trying to read it
+    """Smart loader: Reads brands from TXT or CSV."""
+    # Ensure filename is string
+    filename = str(filename)
+    
+    # 1. Force strict text reading for .txt files
+    if filename.lower().endswith('.txt'):
         try:
             with open(filename, 'r', encoding='utf-8') as f:
-                first_line = f.readline()
-        except FileNotFoundError:
+                return [line.strip() for line in f if line.strip()]
+        except UnicodeDecodeError:
+            # Fallback for ISO-8859-1 encoding issues
+            with open(filename, 'r', encoding='ISO-8859-1') as f:
+                return [line.strip() for line in f if line.strip()]
+        except Exception as e:
+            logger.error(f"Error reading {filename}: {e}")
             return []
 
-        # If it looks like a CSV (has comma and headers)
-        if ',' in first_line and ('BRAND' in first_line.upper() or 'CODE' in first_line.upper()):
-            try:
-                df = pd.read_csv(filename, encoding='utf-8', dtype=str)
-                # Try to find the best column
-                if 'BRAND_DISPLAY_NAME' in df.columns:
-                    return df['BRAND_DISPLAY_NAME'].dropna().unique().tolist()
-                elif 'BRAND_SYSTEM_NAME' in df.columns:
-                    return df['BRAND_SYSTEM_NAME'].dropna().unique().tolist()
-                elif 'Brand' in df.columns:
-                    return df['Brand'].dropna().unique().tolist()
-                else:
-                    # Fallback to 2nd column if >1 cols, else 1st
-                    if len(df.columns) > 1:
-                        return df.iloc[:, 1].dropna().unique().tolist()
-                    return df.iloc[:, 0].dropna().unique().tolist()
-            except Exception:
-                pass # Fallback to text reading
-        
-        # Fallback: Read as simple text file (one per line)
-        with open(filename, 'r', encoding='utf-8') as f:
-            data = [line.strip() for line in f if line.strip()]
-        return data
-    except Exception as e:
-        logger.error(f"Error reading brands file {filename}: {e}")
-        return []
+    # 2. Try CSV logic for other files
+    try:
+        df = pd.read_csv(filename, encoding='utf-8', dtype=str)
+        # Check common column names
+        possible_cols = ['BRAND_DISPLAY_NAME', 'BRAND_SYSTEM_NAME', 'Brand', 'NAME', 'Name']
+        for col in possible_cols:
+            if col in df.columns:
+                return df[col].dropna().astype(str).str.strip().tolist()
+        if not df.empty and len(df.columns) > 0:
+             return df.iloc[:, 0].dropna().astype(str).str.strip().tolist()
+    except Exception:
+        pass # Fallback
+
+    return []
 
 @st.cache_data(ttl=3600)
 def load_excel_file(filename: str, column: Optional[str] = None):
@@ -869,12 +866,13 @@ def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
 
 def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where Brand is 'Generic' but the FIRST WORD of the Product Name 
-    is a real brand name (e.g. "Nike Shoes").
+    Flags products where Brand is 'Generic' but the FIRST WORD of the 
+    Product Name is a real brand name (e.g. "Nike Shoes").
     
     IMPROVED VERSION: 
-    1. Uses SET LOOKUP for O(1) speed instead of slow Regex.
+    1. Uses INDEXED LOOKUP for O(1) speed instead of slow Regex.
     2. Filters out common generic descriptor words to reduce false positives.
+    3. Handles multi-word brands via prefix checking.
     
     Args:
         data: DataFrame with 'NAME' and 'BRAND' columns
@@ -929,37 +927,57 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
     
-    # 2. Build Fast Lookup Set (O(1) access)
-    # Normalize brands: lowercase, stripped
-    valid_brand_set = {
-        str(b).strip().lower()
-        for b in brands_list
-        if b
-        and str(b).strip().lower() not in GENERIC_BLACKLIST
-        and str(b).strip().lower() != 'generic'
-        and len(str(b).strip()) >= 3 # Ignore very short 1-2 char brands to avoid noise
-    }
+    # 2. Build Fast Index (First Word -> List of Brands)
+    # We clean brands and group them by their first word
+    brand_index = defaultdict(list)
     
-    if not valid_brand_set:
+    for b in brands_list:
+        b_clean = str(b).strip()
+        if not b_clean: continue
+        
+        b_lower = b_clean.lower()
+        if b_lower in GENERIC_BLACKLIST: continue
+        if b_lower == 'generic': continue
+        if len(b_lower) < 2: continue # Ignore 1-char brands
+        
+        # Get first word of brand as key
+        # e.g. "Dr. Rashel" -> key "dr."
+        first_word = b_lower.split()[0]
+        brand_index[first_word].append(b_lower)
+        
+    if not brand_index:
         return pd.DataFrame(columns=data.columns)
         
-    # 3. Extract First Word of Product Name efficiently
-    def get_first_word_clean(name_val):
-        if pd.isna(name_val): return ""
-        s = str(name_val).strip()
-        if not s: return ""
-        # Split by space to get first token
-        first_token = s.split()[0]
-        # Remove punctuation like ':', '-', etc.
-        return re.sub(r'[^\w]', '', first_token).lower()
+    # 3. Check Function using Index
+    def is_hidden_brand(row):
+        name_val = str(row['NAME']).lower().strip()
+        if not name_val: return False
+        
+        # Get first word of product name
+        prod_first_word = name_val.split()[0]
+        # Remove punctuation from the key (e.g. "Dr." -> "dr")
+        prod_first_word_key = re.sub(r'[^\w]', '', prod_first_word)
+        
+        # Check if this word exists as a brand starter
+        # We check both the raw token and the stripped token to be safe
+        candidates = brand_index.get(prod_first_word) or brand_index.get(prod_first_word_key)
+        
+        if not candidates:
+            return False
+            
+        # Check against specific candidates
+        # This handles "Dr." finding ["dr. rashel", "dr. jart"]
+        # And checking if product starts with any of them
+        for cand in candidates:
+            if name_val.startswith(cand):
+                return True
+                
+        return False
 
-    # Apply extraction
-    first_words = generic_items['NAME'].apply(get_first_word_clean)
+    # Apply check
+    mask = generic_items.apply(is_hidden_brand, axis=1)
     
-    # 4. Check membership in set
-    flagged_mask = first_words.isin(valid_brand_set)
-    
-    return generic_items[flagged_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    return generic_items[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     if not {'CATEGORY_CODE', 'NAME', 'SELLER_NAME'}.issubset(data.columns) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
