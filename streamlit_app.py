@@ -1226,6 +1226,15 @@ def write_excel_single(df, sheet_name, cols, auxiliary_df=None, aux_sheet_name=N
     output.seek(0)
     return output
 
+def to_excel_flag_data(flag_df, flag_name):
+    output = BytesIO()
+    df_copy = flag_df.copy()
+    df_copy['FLAG'] = flag_name
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
+    output.seek(0)
+    return output
+
 def generate_smart_export(df, filename_prefix, export_type='simple', auxiliary_df=None):
     if export_type == 'full':
         cols = FULL_DATA_COLS + [c for c in ["Status", "Reason", "Comment", "FLAG", "SellerName"] if c not in FULL_DATA_COLS]
@@ -1254,15 +1263,6 @@ def generate_smart_export(df, filename_prefix, export_type='simple', auxiliary_d
                 zf.writestr(part_name, excel_data.getvalue())
         zip_buffer.seek(0)
         return zip_buffer, f"{filename_prefix}.zip", "application/zip"
-
-def to_excel_flag_data(flag_df, flag_name):
-    output = BytesIO()
-    df_copy = flag_df.copy()
-    df_copy['FLAG'] = flag_name
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        to_excel_base(df_copy, "ProductSets", FULL_DATA_COLS, writer)
-    output.seek(0)
-    return output
 
 def log_validation_run(country, file, total, app, rej):
     try:
