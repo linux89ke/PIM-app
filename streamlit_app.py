@@ -319,6 +319,44 @@ def load_txt_file(filename: str) -> List[str]:
         return []
 
 @st.cache_data(ttl=3600)
+def load_brands_file(filename: str) -> List[str]:
+    """Smart loader for brands file that handles both CSVs and TXT files."""
+    try:
+        # Check if file exists by trying to read it
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
+        except FileNotFoundError:
+            return []
+
+        # If it looks like a CSV (has comma and headers)
+        if ',' in first_line and ('BRAND' in first_line.upper() or 'CODE' in first_line.upper()):
+            try:
+                df = pd.read_csv(filename, encoding='utf-8', dtype=str)
+                # Try to find the best column
+                if 'BRAND_DISPLAY_NAME' in df.columns:
+                    return df['BRAND_DISPLAY_NAME'].dropna().unique().tolist()
+                elif 'BRAND_SYSTEM_NAME' in df.columns:
+                    return df['BRAND_SYSTEM_NAME'].dropna().unique().tolist()
+                elif 'Brand' in df.columns:
+                    return df['Brand'].dropna().unique().tolist()
+                else:
+                    # Fallback to 2nd column if >1 cols, else 1st
+                    if len(df.columns) > 1:
+                        return df.iloc[:, 1].dropna().unique().tolist()
+                    return df.iloc[:, 0].dropna().unique().tolist()
+            except Exception:
+                pass # Fallback to text reading
+        
+        # Fallback: Read as simple text file (one per line)
+        with open(filename, 'r', encoding='utf-8') as f:
+            data = [line.strip() for line in f if line.strip()]
+        return data
+    except Exception as e:
+        logger.error(f"Error reading brands file {filename}: {e}")
+        return []
+
+@st.cache_data(ttl=3600)
 def load_excel_file(filename: str, column: Optional[str] = None):
     try:
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
@@ -419,7 +457,7 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'brands_list': load_txt_file('brands.txt'), # ADDED THIS FILE LOADER
+        'brands_list': load_brands_file('brands.txt'), # ADDED THIS FILE LOADER
     }
     return files
 
@@ -844,7 +882,7 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
 
     # 2. Compile Regex for all brands in the list
     # Sort by length (desc) to match longer brand names first (e.g. "Giorgio Armani" before "Armani")
-    sorted_brands = sorted([str(b).strip() for b in brands_list if b], key=len, reverse=True)
+    sorted_brands = sorted([str(b).strip() for b in brands_list if b and str(b).strip().lower() != 'generic'], key=len, reverse=True)
     if not sorted_brands:
         return pd.DataFrame(columns=data.columns)
         
