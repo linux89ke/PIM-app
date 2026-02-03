@@ -832,8 +832,8 @@ def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
 
 def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where Brand is 'Generic' but a real brand name 
-    appears in the Product Name.
+    Flags products where Brand is 'Generic' but the FIRST WORD of the 
+    Product Name is a real brand name (e.g. "Nike Shoes").
     """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
@@ -849,9 +849,11 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     if not sorted_brands:
         return pd.DataFrame(columns=data.columns)
         
-    pattern = re.compile(r'\b(' + '|'.join(re.escape(b) for b in sorted_brands) + r')\b', re.IGNORECASE)
+    # ^  : Anchors match to the start of the string (The First Word)
+    # \b : Ensures it matches the whole word (e.g. "Apple" matches, "Applepie" does not)
+    pattern = re.compile(r'^(' + '|'.join(re.escape(b) for b in sorted_brands) + r')\b', re.IGNORECASE)
 
-    # 3. Check if Name contains any of the brands
+    # 3. Check if Name starts with any of the brands
     mask = generic_items['NAME'].astype(str).str.strip().str.contains(pattern, regex=True, na=False)
     
     return generic_items[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
