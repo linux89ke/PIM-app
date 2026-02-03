@@ -38,7 +38,7 @@ if weekly_files:
                 df.columns = df.columns.str.strip()
                 df = standardize_input_data(df)
                 
-                # Standardize columns
+                # Ensure essential analysis columns exist
                 for col in ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']:
                     if col not in df.columns: df[col] = pd.NA
                 
@@ -68,9 +68,11 @@ if weekly_files:
         
         # A. Top 10 Sellers (with Top 3 Reasons)
         seller_deep_dive = []
+        top_10_sellers_list = [] # Store list for the SKU dump
+        
         if not rejected.empty:
             top_10_sellers_series = rejected['SELLER_NAME'].value_counts().head(10)
-            top_10_sellers_list = top_10_sellers_series.index.tolist() # Save list for SKU export later
+            top_10_sellers_list = top_10_sellers_series.index.tolist()
             
             for seller, count in top_10_sellers_series.items():
                 seller_data = rejected[rejected['SELLER_NAME'] == seller]
@@ -79,12 +81,10 @@ if weekly_files:
                 for i, (flag, f_count) in enumerate(top_flags.items(), 1):
                     row[f'Top Reason {i}'] = f"{flag} ({f_count})"
                 seller_deep_dive.append(row)
-        else:
-            top_10_sellers_list = []
             
         df_seller_deep_dive = pd.DataFrame(seller_deep_dive)
 
-        # B. Top 10 Reasons (Horizontal) & C. Top 10 Reasons (Vertical List)
+        # B & C. Top 10 Reasons (Horizontal & Vertical)
         reason_deep_dive = []
         reason_vertical_list = []
 
@@ -139,7 +139,6 @@ if weekly_files:
             workbook = writer.book
             wrap_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
             
-            # Summary Sheets
             pd.DataFrame([{'Metric': 'Total Rejected', 'Value': len(rejected)}, {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}]).to_excel(writer, sheet_name='Summary', index=False)
             
             if not df_seller_deep_dive.empty:
@@ -164,23 +163,44 @@ if weekly_files:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-        # 2. Top Sellers SKU Dump (New Request)
+        # 2. Top Sellers SKU Dump (With Custom Columns)
         if not rejected.empty:
-            # Filter rejected dataframe for only the top 10 sellers identified earlier
+            # Filter for Top 10 Sellers
             sku_dump_df = rejected[rejected['SELLER_NAME'].isin(top_10_sellers_list)].copy()
             
-            # Select only relevant columns for the SKU dump
-            cols_to_keep = ['SELLER_NAME', 'PRODUCT_SET_SID', 'FLAG', 'Reason', 'CATEGORY']
-            sku_dump_df = sku_dump_df[[c for c in cols_to_keep if c in sku_dump_df.columns]]
+            # Define specific columns requested
+            # Note: We use 'FLAG' for the requested 'flag' column
+            # We map 'Reason' to 'Comment' if 'Comment' doesn't exist
+            requested_cols = [
+                'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'COLOR_FAMILY', 
+                'MAIN_IMAGE', 'VARIATION', 'PARENTSKU', 'SELLER_NAME', 
+                'SELLER_SKU', 'Comment', 'FLAG'
+            ]
             
-            # Sort for readability
-            sku_dump_df = sku_dump_df.sort_values(by=['SELLER_NAME', 'FLAG'])
+            # Ensure 'Comment' exists (Map 'Reason' to 'Comment' if needed)
+            if 'Comment' not in sku_dump_df.columns and 'Reason' in sku_dump_df.columns:
+                sku_dump_df['Comment'] = sku_dump_df['Reason']
+            
+            # Ensure all other columns exist (fill with NA if missing in source file)
+            for col in requested_cols:
+                if col not in sku_dump_df.columns:
+                    sku_dump_df[col] = pd.NA
+                    
+            # Select and reorder exactly as requested
+            sku_dump_df = sku_dump_df[requested_cols]
+            
+            # Sort by Seller then Brand
+            sku_dump_df = sku_dump_df.sort_values(by=['SELLER_NAME', 'BRAND'])
             
             sku_excel = BytesIO()
             with pd.ExcelWriter(sku_excel, engine='xlsxwriter') as writer:
                 sku_dump_df.to_excel(writer, sheet_name='Top Sellers SKUs', index=False)
-                writer.sheets['Top Sellers SKUs'].set_column('B:B', 20) # Widen SKU column
-                writer.sheets['Top Sellers SKUs'].set_column('A:A', 20) # Widen Seller Name
+                
+                # Basic formatting
+                worksheet = writer.sheets['Top Sellers SKUs']
+                worksheet.set_column('A:A', 30)  # Name
+                worksheet.set_column('B:D', 15)  # Brand, Cat, Color
+                worksheet.set_column('K:L', 30)  # Comment, Flag
             
             sku_excel.seek(0)
             
@@ -190,5 +210,5 @@ if weekly_files:
                     data=sku_excel,
                     file_name=f"Top10_Sellers_Rejected_SKUs_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Contains raw list of Product IDs (SKUs) for only the top 10 most rejected sellers."
+                    help="Includes NAME, BRAND, CATEGORY, COLOR, IMAGES, SELLER INFO, COMMENTS, etc."
                 )
