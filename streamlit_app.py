@@ -382,7 +382,8 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type – Color."),
             'Unnecessary words in NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title and avoid unnecessary keywords."),
             'Generic BRAND Issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"),
-            'Fashion brand issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"), # ADDED THIS FLAG
+            'Fashion brand issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"),
+            'Hidden Brand in Name': ('1000014 - Creation of brand name required', "You have listed this as Generic, but the product name includes a specific brand. Please use the correct Brand field."), # ADDED THIS FLAG
             'Counterfeit Sneakers': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit or fake."),
             'Seller Approve to sell books': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
@@ -419,6 +420,7 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
+        'brands_list': load_txt_file('brands.txt'), # ADDED THIS FILE LOADER
     }
     return files
 
@@ -828,6 +830,32 @@ def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
     mask = is_fashion_brand & is_not_fas_cat
     return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
+def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
+    """
+    Flags products where Brand is 'Generic' but a real brand name 
+    appears in the Product Name.
+    """
+    if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
+        return pd.DataFrame(columns=data.columns)
+
+    # 1. Filter for only 'Generic' items first (Optimization)
+    generic_items = data[data['BRAND'].astype(str).str.strip().str.lower() == 'generic'].copy()
+    if generic_items.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # 2. Compile Regex for all brands in the list
+    # Sort by length (desc) to match longer brand names first (e.g. "Giorgio Armani" before "Armani")
+    sorted_brands = sorted([str(b).strip() for b in brands_list if b], key=len, reverse=True)
+    if not sorted_brands:
+        return pd.DataFrame(columns=data.columns)
+        
+    pattern = re.compile(r'\b(' + '|'.join(re.escape(b) for b in sorted_brands) + r')\b', re.IGNORECASE)
+
+    # 3. Check if Name contains any of the brands
+    mask = generic_items['NAME'].astype(str).str.strip().str.contains(pattern, regex=True, na=False)
+    
+    return generic_items[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     if not {'CATEGORY_CODE', 'NAME', 'SELLER_NAME'}.issubset(data.columns) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
     jersey_cats = [clean_category_code(c) for c in jerseys_df['Categories'].astype(str).unique() if c.lower() != 'nan']
@@ -873,7 +901,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Unnecessary words in NAME", check_unnecessary_words, {'pattern': compile_regex_patterns(support_files['unnecessary_words'])}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': support_files['book_category_codes']}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
-        ("Fashion brand issues", check_fashion_brand_issues, {}), # NEW FLAG HERE
+        ("Fashion brand issues", check_fashion_brand_issues, {}),
+        ("Hidden Brand in Name", check_hidden_brand_in_name, {'brands_list': support_files.get('brands_list', [])}), # NEW FLAG HERE
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {
