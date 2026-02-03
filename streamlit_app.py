@@ -869,10 +869,19 @@ def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
 
 def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where Brand is 'Generic' but the FIRST WORD of the 
-    Product Name is a real brand name (e.g. "Nike Shoes").
+    Flags products where Brand is 'Generic' but the FIRST WORD of the Product Name 
+    is a real brand name (e.g. "Nike Shoes").
     
-    IMPROVED VERSION: Filters out common generic descriptor words to reduce false positives.
+    IMPROVED VERSION: 
+    1. Uses SET LOOKUP for O(1) speed instead of slow Regex.
+    2. Filters out common generic descriptor words to reduce false positives.
+    
+    Args:
+        data: DataFrame with 'NAME' and 'BRAND' columns
+        brands_list: List of valid brand names from brands.txt
+    
+    Returns:
+        DataFrame with flagged products
     """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
@@ -914,44 +923,46 @@ def check_hidden_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd
     }
     
     # 1. Filter for only 'Generic' brand items (Optimization)
-    generic_items = data[data['BRAND'].astype(str).str.strip().str.lower() == 'generic'].copy()
+    # Using a boolean mask first is faster than string operations on the whole dataframe
+    mask_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
+    generic_items = data[mask_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
     
-    # 2. Filter brands list to exclude generic words
-    # Sort by length (desc) to match longer brand names first (e.g. "Giorgio Armani" before "Armani")
-    filtered_brands = sorted(
-        [str(b).strip() for b in brands_list 
-         if b 
-         and str(b).strip().lower() not in GENERIC_BLACKLIST  # Exclude generic words
-         and str(b).strip().lower() != 'generic'                # Exclude 'generic' itself
-         and len(str(b).strip()) >= 2                           # Minimum 2 characters
-        ],
-        key=len, 
-        reverse=True
-    )
+    # 2. Build Fast Lookup Set (O(1) access)
+    # Normalize brands: lowercase, stripped
+    valid_brand_set = {
+        str(b).strip().lower()
+        for b in brands_list
+        if b
+        and str(b).strip().lower() not in GENERIC_BLACKLIST
+        and str(b).strip().lower() != 'generic'
+        and len(str(b).strip()) >= 3 # Ignore very short 1-2 char brands to avoid noise
+    }
     
-    if not filtered_brands:
+    if not valid_brand_set:
         return pd.DataFrame(columns=data.columns)
-    
-    # 3. Process in chunks of 1000 brands to prevent Regex error
-    chunk_size = 1000
-    flagged_indices = set()
-    
-    for i in range(0, len(filtered_brands), chunk_size):
-        chunk = filtered_brands[i:i+chunk_size]
-        # Build regex pattern: ^(Brand1|Brand2|...)\b
-        # Use re.escape to handle special chars like "." in "Dr."
-        try:
-            pattern = re.compile(r'^(' + '|'.join(re.escape(b) for b in chunk) + r')\b', re.IGNORECASE)
-            matches = generic_items[generic_items['NAME'].astype(str).str.strip().str.contains(pattern, regex=True, na=False)]
-            flagged_indices.update(matches.index)
-        except Exception as e:
-            logger.error(f"Regex error in chunk {i}: {e}")
-            continue
+        
+    # 3. Extract First Word of Product Name efficiently
+    def get_first_word_clean(name_val):
+        if pd.isna(name_val): return ""
+        s = str(name_val).strip()
+        if not s: return ""
+        # Split by space to get first token
+        first_token = s.split()[0]
+        # Remove punctuation like ':', '-', etc.
+        return re.sub(r'[^\w]', '', first_token).lower()
 
-    return generic_items.loc[list(flagged_indices)].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    # Apply extraction
+    # Note: Vectorized operations are usually faster but apply() with a simple python function 
+    # is robust for this specific "first word" logic
+    first_words = generic_items['NAME'].apply(get_first_word_clean)
+    
+    # 4. Check membership in set
+    flagged_mask = first_words.isin(valid_brand_set)
+    
+    return generic_items[flagged_mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     if not {'CATEGORY_CODE', 'NAME', 'SELLER_NAME'}.issubset(data.columns) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
