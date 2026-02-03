@@ -382,6 +382,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type – Color."),
             'Unnecessary words in NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title and avoid unnecessary keywords."),
             'Generic BRAND Issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"),
+            'Fashion brand issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"), # ADDED THIS FLAG
             'Counterfeit Sneakers': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit or fake."),
             'Seller Approve to sell books': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
             'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
@@ -807,6 +808,26 @@ def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
     fas_cats = set(clean_category_code(c) for c in valid_category_codes_fas)
     return data[data_cats.isin(fas_cats) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
+def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: List[str]) -> pd.DataFrame:
+    """
+    Flags products where the Brand is 'Fashion' but the category 
+    is NOT listed in the Fashion (FAS) category list.
+    """
+    if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns): 
+        return pd.DataFrame(columns=data.columns)
+    
+    data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
+    fas_cats = set(clean_category_code(c) for c in valid_category_codes_fas)
+    
+    # Check for Brand 'Fashion' (case-insensitive)
+    is_fashion_brand = data['BRAND'].astype(str).str.strip().str.lower() == 'fashion'
+    
+    # Check if category is NOT in the FAS list
+    is_not_fas_cat = ~data_cats.isin(fas_cats)
+    
+    mask = is_fashion_brand & is_not_fas_cat
+    return data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> pd.DataFrame:
     if not {'CATEGORY_CODE', 'NAME', 'SELLER_NAME'}.issubset(data.columns) or jerseys_df.empty: return pd.DataFrame(columns=data.columns)
     jersey_cats = [clean_category_code(c) for c in jerseys_df['Categories'].astype(str).unique() if c.lower() != 'nan']
@@ -852,6 +873,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Unnecessary words in NAME", check_unnecessary_words, {'pattern': compile_regex_patterns(support_files['unnecessary_words'])}),
         ("Single-word NAME", check_single_word_name, {'book_category_codes': support_files['book_category_codes']}),
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
+        ("Fashion brand issues", check_fashion_brand_issues, {}), # NEW FLAG HERE
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {
@@ -913,7 +935,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         status_text.text(f"Running: {name}")
         
-        if name == "Generic BRAND Issues":
+        # --- MODIFIED LOGIC HERE FOR FAS LIST ---
+        if name in ["Generic BRAND Issues", "Fashion brand issues"]:
             fas = support_files.get('category_fas', pd.DataFrame())
             ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
         elif name == "Missing COLOR":
