@@ -892,9 +892,15 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
             
             # Check if name starts with this brand
             if name_clean.startswith(brand_clean):
-                # Return the original brand in Title Case for display
-                return brand.title()
-        
+                
+                # OPTIONAL SAFETY: Check that the character after the match isn't a letter
+                # This prevents "Dr" matching "Dress"
+                if len(name_clean) > len(brand_clean):
+                    next_char = name_clean[len(brand_clean)]
+                    if next_char.isalnum():
+                        continue 
+                
+                return brand.title() # Return nice Title Case
         return None
 
     # 3. Apply detection
