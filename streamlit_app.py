@@ -828,15 +828,20 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where BRAND is 'Generic' but the NAME starts with 
+    Flags products where BRAND is 'Generic' (or similar) but the NAME starts with 
     a known brand from brands.txt.
     """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Filter for Generic items only
-    is_generic = data['BRAND'].astype(str).str.strip().lower() == 'generic'
-    generic_items = data[is_generic].copy()
+    # 1. Flexible Generic Filter
+    # Catches 'Generic', 'Fashion', 'Unbranded', 'No Brand', 'Gen', 'Other'
+    generic_keywords = ['generic', 'fashion', 'unbranded', 'no brand', 'gen', 'other']
+    # Use a temporary lowercase column for checking to avoid modifying original
+    temp_brand = data['BRAND'].astype(str).str.strip().str.lower()
+    
+    # Filter only rows that are considered "Generic"
+    generic_items = data[temp_brand.isin(generic_keywords)].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
@@ -844,77 +849,47 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     # 2. Sort brands by length (descending) to catch "Dr Rashel" before "Dr"
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
 
-    def detect_brand(name):
-        name_clean = str(name).strip().lower()
-        # Fix: Iterate directly instead of using startswith with tuple incorrectly
-        for b in sorted_brands:
-            if name_clean.startswith(b):
-                return b.title()
-        return None
-
-    # 3. Apply detection
-    generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
-    flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
-    
-    if not flagged.empty:
-        flagged['Comment_Detail'] = "Detected Brand: " + flagged['Detected_Brand']
-        
-    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+    # 3. Define Fluff words to ignore at the start
+    fluff_prefixes = [
+        'new', 'sale', 'hot', 'original', 'genuine', 'authentic', 'official', 
+        'premium', 'promo', 'best', '2024', '2025', 'high quality', 'latest', 'luxury', 'classic'
+    ]
     
     def clean_start_of_name(name):
-        """Removes common marketing words from the start of the string."""
+        """Removes common marketing words and symbols from the start of the string."""
         s = str(name).strip().lower()
-        # Remove non-alphanumeric chars from start (like "!! Dr Rashel")
+        # Remove non-alphanumeric chars from start (e.g. "!! Dr Rashel")
         s = re.sub(r'^[^a-z0-9]+', '', s)
         
-        # Strip known prefixes
-        # We repeat this loop to catch things like "New Original Dr Rashel"
+        # Strip known prefixes recursively
         changed = True
         while changed:
             changed = False
             for prefix in fluff_prefixes:
                 if s.startswith(prefix + " "): # Check for word boundary
                     s = s[len(prefix):].strip()
+                    # Clean symbols again after removing a word
+                    s = re.sub(r'^[^a-z0-9]+', '', s)
                     changed = True
         return s
 
-    def detect_brand(row):
-        # clean the name first
-        clean_name = clean_start_of_name(row['NAME'])
+    def detect_brand(name):
+        # Clean the name first
+        clean_name = clean_start_of_name(name)
         
-        if clean_name.startswith(brand_tuple):
-            # Find exact match
-            for b in sorted_brands:
-                if clean_name.startswith(b):
-                    # Double check to ensure we didn't match half a word
-                    # e.g. brand "Go" matching "Gold Watch"
-                    # We check if the match is the whole string OR followed by space/punctuation
-                    remaining = clean_name[len(b):]
-                    if not remaining or not remaining[0].isalnum():
-                        return b.title()
+        # Iterate through brands directly
+        for b in sorted_brands:
+            if clean_name.startswith(b):
+                # Boundary Check: Ensure we didn't match half a word
+                # e.g. brand "Go" should not match "Gold Watch"
+                remaining = clean_name[len(b):]
+                if not remaining or not remaining[0].isalnum():
+                    return b.title()
         return None
 
     # 4. Apply detection
-    generic_items['Detected_Brand'] = generic_items.apply(detect_brand, axis=1)
-    
-    flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
-    
-    if not flagged.empty:
-        flagged['Comment_Detail'] = "Detected Brand: " + flagged['Detected_Brand']
-        
-    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-    def detect_brand(name):
-        name_clean = str(name).strip().lower()
-        if name_clean.startswith(brand_tuple):
-            # Find which specific brand it started with
-            for b in sorted_brands:
-                if name_clean.startswith(b):
-                    return b.title() # Return 'Dr Rashel' instead of 'dr rashel'
-        return None
-
-    # 3. Apply detection
     generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
+    
     flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
     
     if not flagged.empty:
@@ -1277,6 +1252,16 @@ try:
         if st.button("🧹 Clear Image Cache", help="Free up memory by clearing cached image hashes"):
             clear_image_cache()
             st.success("Image cache cleared!")
+
+        st.markdown("---")
+        st.header("Debug Info")
+        # Check if files loaded
+        # We access support_files safely here
+        try:
+             # Lazy load happens in main body, but we can check if it exists in memory yet
+             # If not, it will load when main body runs.
+             pass
+        except: pass
 except:
     use_image_hash = True
     check_image_quality = True
@@ -1284,6 +1269,15 @@ except:
 # Load Configuration Files
 try:
     support_files = load_support_files_lazy()
+    
+    # Optional Debug in Sidebar
+    with st.sidebar:
+        if 'known_brands' in support_files:
+            count = len(support_files['known_brands'])
+            st.write(f"Brands Loaded: **{count}**")
+        else:
+            st.error("brands.txt not loaded!")
+
 except Exception as e:
     st.error(f"Failed to load configuration files: {e}")
     st.stop()
