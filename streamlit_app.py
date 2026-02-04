@@ -828,22 +828,79 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where BRAND is 'Generic' but the NAME starts with 
+    Flags products where BRAND is 'Generic' (or similar) but the NAME starts with 
     a known brand from brands.txt.
     """
+    # Debugging: Uncomment to see in your terminal if brands are loaded
+    # print(f"DEBUG: Loaded {len(brands_list)} brands for checking.")
+
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Filter for Generic items only
-    is_generic = data['BRAND'].astype(str).str.strip().lower() == 'generic'
-    generic_items = data[is_generic].copy()
+    # 1. Flexible Generic Filter
+    # Catches 'Generic', 'Fashion', 'Unbranded', 'No Brand', 'Gen'
+    generic_keywords = ['generic', 'fashion', 'unbranded', 'no brand', 'gen', 'other']
+    data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
+    
+    # Filter only rows that are considered "Generic"
+    generic_items = data[data['BRAND_LOWER'].isin(generic_keywords)].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # 2. Sort brands by length (descending) to catch "Dr Rashel" before "Dr"
+    # 2. Sort brands by length (descending)
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
     brand_tuple = tuple(sorted_brands)
+
+    # 3. Define Fluff words to ignore at the start
+    # e.g. "New Dr Rashel..." will become "Dr Rashel..."
+    fluff_prefixes = [
+        'new', 'sale', 'hot', 'original', 'genuine', 'authentic', 'official', 
+        'premium', 'promo', 'best', '2024', '2025', 'high quality', 'latest'
+    ]
+    
+    def clean_start_of_name(name):
+        """Removes common marketing words from the start of the string."""
+        s = str(name).strip().lower()
+        # Remove non-alphanumeric chars from start (like "!! Dr Rashel")
+        s = re.sub(r'^[^a-z0-9]+', '', s)
+        
+        # Strip known prefixes
+        # We repeat this loop to catch things like "New Original Dr Rashel"
+        changed = True
+        while changed:
+            changed = False
+            for prefix in fluff_prefixes:
+                if s.startswith(prefix + " "): # Check for word boundary
+                    s = s[len(prefix):].strip()
+                    changed = True
+        return s
+
+    def detect_brand(row):
+        # clean the name first
+        clean_name = clean_start_of_name(row['NAME'])
+        
+        if clean_name.startswith(brand_tuple):
+            # Find exact match
+            for b in sorted_brands:
+                if clean_name.startswith(b):
+                    # Double check to ensure we didn't match half a word
+                    # e.g. brand "Go" matching "Gold Watch"
+                    # We check if the match is the whole string OR followed by space/punctuation
+                    remaining = clean_name[len(b):]
+                    if not remaining or not remaining[0].isalnum():
+                        return b.title()
+        return None
+
+    # 4. Apply detection
+    generic_items['Detected_Brand'] = generic_items.apply(detect_brand, axis=1)
+    
+    flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
+    
+    if not flagged.empty:
+        flagged['Comment_Detail'] = "Detected Brand: " + flagged['Detected_Brand']
+        
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
     def detect_brand(name):
         name_clean = str(name).strip().lower()
