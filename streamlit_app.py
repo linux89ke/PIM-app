@@ -828,20 +828,18 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where BRAND is 'Generic' (or similar) but the NAME starts with 
+    Flags products where BRAND is 'Generic' but the NAME starts with 
     a known brand from brands.txt.
+    
+    IMPROVED VERSION: Handles special characters (apostrophes, periods, hyphens)
+    by normalizing text before comparison.
     """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Flexible Generic Filter
-    # Catches 'Generic', 'Fashion', 'Unbranded', 'No Brand', 'Gen', 'Other'
-    generic_keywords = ['generic', 'fashion', 'unbranded', 'no brand', 'gen', 'other']
-    # Use a temporary lowercase column for checking to avoid modifying original
-    temp_brand = data['BRAND'].astype(str).str.strip().str.lower()
-    
-    # Filter only rows that are considered "Generic"
-    generic_items = data[temp_brand.isin(generic_keywords)].copy()
+    # 1. Filter for Generic items only
+    is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
+    generic_items = data[is_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
@@ -849,47 +847,37 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     # 2. Sort brands by length (descending) to catch "Dr Rashel" before "Dr"
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
 
-    # 3. Define Fluff words to ignore at the start
-    fluff_prefixes = [
-        'new', 'sale', 'hot', 'original', 'genuine', 'authentic', 'official', 
-        'premium', 'promo', 'best', '2024', '2025', 'high quality', 'latest', 'luxury', 'classic'
-    ]
-    
-    def clean_start_of_name(name):
-        """Removes common marketing words and symbols from the start of the string."""
-        s = str(name).strip().lower()
-        # Remove non-alphanumeric chars from start (e.g. "!! Dr Rashel")
-        s = re.sub(r'^[^a-z0-9]+', '', s)
-        
-        # Strip known prefixes recursively
-        changed = True
-        while changed:
-            changed = False
-            for prefix in fluff_prefixes:
-                if s.startswith(prefix + " "): # Check for word boundary
-                    s = s[len(prefix):].strip()
-                    # Clean symbols again after removing a word
-                    s = re.sub(r'^[^a-z0-9]+', '', s)
-                    changed = True
-        return s
+    def normalize_text(text):
+        """
+        Normalize text by:
+        - Converting to lowercase
+        - Removing apostrophes, periods, hyphens
+        - Collapsing multiple spaces to single space
+        - Stripping leading/trailing whitespace
+        """
+        text = str(text).lower()
+        # Remove special characters that might interfere (apostrophes, periods, hyphens)
+        text = re.sub(r"['\.\-]", ' ', text)
+        # Collapse multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
 
     def detect_brand(name):
-        # Clean the name first
-        clean_name = clean_start_of_name(name)
+        name_clean = normalize_text(name)
         
-        # Iterate through brands directly
-        for b in sorted_brands:
-            if clean_name.startswith(b):
-                # Boundary Check: Ensure we didn't match half a word
-                # e.g. brand "Go" should not match "Gold Watch"
-                remaining = clean_name[len(b):]
-                if not remaining or not remaining[0].isalnum():
-                    return b.title()
+        # Check each brand (already sorted by length, longest first)
+        for brand in sorted_brands:
+            brand_clean = normalize_text(brand)
+            
+            # Check if name starts with this brand
+            if name_clean.startswith(brand_clean):
+                # Return the original brand in Title Case for display
+                return brand.title()
+        
         return None
 
-    # 4. Apply detection
+    # 3. Apply detection
     generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
-    
     flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
     
     if not flagged.empty:
