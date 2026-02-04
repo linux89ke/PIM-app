@@ -32,7 +32,6 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
     
     # 2. Map known internal codes to standard names
-    # (Key is lowercase version of the header found in file)
     mapping = {
         'cod_productset_sid': 'PRODUCT_SET_SID',
         'dsc_name': 'NAME',
@@ -48,7 +47,6 @@ def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
         if col_lower in mapping:
             new_cols[col] = mapping[col_lower]
         else:
-            # Fallback: Just convert to UPPERCASE (e.g. 'Name' -> 'NAME')
             new_cols[col] = col.upper()
             
     df = df.rename(columns=new_cols)
@@ -67,20 +65,21 @@ def to_excel_download(df):
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     # Quick Check: Do we have the columns we need?
     if 'NAME' not in data.columns or 'BRAND' not in data.columns:
-        st.error(f"❌ Missing columns! Found: {list(data.columns)}")
+        # Fallback: Try finding columns that look like them
         return pd.DataFrame()
 
     if not brands_list:
         return pd.DataFrame()
 
     # 1. Filter for Generic items only (Case-insensitive check)
+    # Catches 'Generic', 'generic', 'Generic Brand'
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     generic_items = data[is_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame()
 
-    # 2. Sort brands longest first
+    # 2. Sort brands longest first to catch "Dr Rashel" before "Dr"
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
 
     # 3. Text Normalizer
@@ -149,31 +148,40 @@ if uploaded_files and brands:
         progress = st.progress(0)
         
         for i, file in enumerate(uploaded_files):
+            df = pd.DataFrame()
             try:
-                # Robust CSV Reading
+                # --- IMPROVED CSV READING LOGIC ---
                 if file.name.endswith('.csv'):
                     file.seek(0)
-                    # Try reading with default comma
-                    df = pd.read_csv(file, dtype=str)
-                    
-                    # If it looks like it failed (only 1 column), try semicolon
-                    if len(df.columns) <= 1:
+                    try:
+                        # Attempt 1: Try Semi-Colon First (Most common for your files)
+                        df = pd.read_csv(file, sep=';', dtype=str, on_bad_lines='skip')
+                        # Check if it actually split columns
+                        if len(df.columns) <= 1:
+                            raise ValueError("One column detected, trying comma.")
+                    except:
+                        # Attempt 2: Fallback to Comma
                         file.seek(0)
-                        df = pd.read_csv(file, sep=';', dtype=str)
+                        try:
+                            df = pd.read_csv(file, sep=',', dtype=str, on_bad_lines='skip')
+                        except Exception as e:
+                            st.error(f"Failed to read CSV {file.name}. Please check delimiters.")
+                            continue
                 else:
                     df = pd.read_excel(file, dtype=str)
                 
-                # Standardize Columns
-                df = standardize_input_data(df)
-                
-                # Run Check
-                result = check_generic_with_brand_in_name(df, brands)
-                
-                if not result.empty:
-                    # Select columns to display
-                    cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'Detected_Brand', 'SELLER_NAME']
-                    final_cols = [c for c in cols if c in result.columns]
-                    all_results.append(result[final_cols])
+                if not df.empty:
+                    # Standardize Columns
+                    df = standardize_input_data(df)
+                    
+                    # Run Check
+                    result = check_generic_with_brand_in_name(df, brands)
+                    
+                    if not result.empty:
+                        # Select columns to display
+                        cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'Detected_Brand', 'SELLER_NAME']
+                        final_cols = [c for c in cols if c in result.columns]
+                        all_results.append(result[final_cols])
                 
             except Exception as e:
                 st.error(f"Error reading {file.name}: {e}")
