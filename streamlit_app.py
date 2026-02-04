@@ -471,15 +471,36 @@ class CountryValidator:
 # Data Loading & Validation Functions
 # -------------------------------------------------
 def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    ROBUST VERSION:
+    Ensures all columns are UPPERCASE so validations can find 'NAME' and 'BRAND'.
+    Handles mapping from internal codes (dsc_name) to standard names.
+    """
     df = df.copy()
-    df = df.rename(columns=NEW_FILE_MAPPING)
-    if 'ACTIVE_STATUS_COUNTRY' in df.columns:
-        df['ACTIVE_STATUS_COUNTRY'] = (
-            df['ACTIVE_STATUS_COUNTRY'].astype(str).str.lower()
-            .str.replace('jumia-', '', regex=False).str.strip().str.upper()
-        )
-    for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS']:
-        if col in df.columns: df[col] = df[col].astype('category')
+    
+    # 1. Strip whitespace from headers
+    df.columns = df.columns.str.strip()
+    
+    # 2. Map known internal codes to standard names
+    # Create a lower-case map for case-insensitive matching
+    map_lower = {k.lower(): v for k, v in NEW_FILE_MAPPING.items()}
+    
+    new_cols = {}
+    for col in df.columns:
+        col_lower = col.lower()
+        if col_lower in map_lower:
+            new_cols[col] = map_lower[col_lower]
+        else:
+            # Fallback: Force uppercase (e.g. 'Name' -> 'NAME')
+            new_cols[col] = col.upper()
+            
+    df = df.rename(columns=new_cols)
+    
+    # 3. Ensure essential columns exist (prevent KeyErrors)
+    for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS', 'NAME', 'SELLER_NAME']:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
+            
     return df
 
 def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
@@ -830,55 +851,54 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     """
     Flags products where BRAND is 'Generic' but the NAME starts with 
     a known brand from brands.txt.
+    
+    IMPROVED VERSION: Handles special characters (apostrophes, periods, hyphens)
+    by normalizing text before comparison.
     """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Filter for Generic items only
+    # 1. Filter for Generic items only (Strict)
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     generic_items = data[is_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # 2. Sort brands by length (descending) to catch "Dr Rashel" before "Dr"
+    # 2. Sort brands by length (descending)
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
 
     def normalize_text(text):
         """
-        Normalize text for comparison:
-        - Lowercase
-        - Remove apostrophes, periods, hyphens
-        - Collapse spaces
+        Normalize text by:
+        - Converting to lowercase
+        - Removing apostrophes, periods, hyphens
+        - Collapsing multiple spaces to single space
+        - Stripping leading/trailing whitespace
         """
         text = str(text).lower()
-        text = re.sub(r"['\.\-]", ' ', text) # Replace special chars with space
-        text = re.sub(r'\s+', ' ', text)     # Collapse multiple spaces
+        # Remove special characters that might interfere (apostrophes, periods, hyphens)
+        text = re.sub(r"['\.\-]", ' ', text)
+        # Collapse multiple spaces
+        text = re.sub(r'\s+', ' ', text)
         return text.strip()
 
     def detect_brand(name):
         name_clean = normalize_text(name)
         
+        # Check each brand (already sorted by length, longest first)
         for brand in sorted_brands:
             brand_clean = normalize_text(brand)
             
-            # Check if normalized name starts with normalized brand
+            # Check if name starts with this brand
             if name_clean.startswith(brand_clean):
-                
-                # OPTIONAL SAFETY: Check that the character after the match isn't a letter
-                # This prevents "Dr" matching "Dress"
-                if len(name_clean) > len(brand_clean):
-                    next_char = name_clean[len(brand_clean)]
-                    if next_char.isalnum():
-                        continue 
-                
-                return brand.title() # Return nice Title Case
+                # Return the original brand in Title Case for display
+                return brand.title()
+        
         return None
 
-    # 3. Run Detection
+    # 3. Apply detection
     generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
-    
-    # 4. Filter only those that matched
     flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
     
     if not flagged.empty:
