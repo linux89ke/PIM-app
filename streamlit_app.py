@@ -828,36 +828,38 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
 
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
     """
-    Flags products where BRAND is 'Generic' (or similar) but the NAME starts with 
+    Flags products where BRAND is 'Generic' but the NAME starts with 
     a known brand from brands.txt.
     """
-    # Debugging: Uncomment to see in your terminal if brands are loaded
-    # print(f"DEBUG: Loaded {len(brands_list)} brands for checking.")
-
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Flexible Generic Filter
-    # Catches 'Generic', 'Fashion', 'Unbranded', 'No Brand', 'Gen'
-    generic_keywords = ['generic', 'fashion', 'unbranded', 'no brand', 'gen', 'other']
-    data['BRAND_LOWER'] = data['BRAND'].astype(str).str.strip().str.lower()
-    
-    # Filter only rows that are considered "Generic"
-    generic_items = data[data['BRAND_LOWER'].isin(generic_keywords)].copy()
+    # 1. Filter for Generic items only
+    is_generic = data['BRAND'].astype(str).str.strip().lower() == 'generic'
+    generic_items = data[is_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # 2. Sort brands by length (descending)
+    # 2. Sort brands by length (descending) to catch "Dr Rashel" before "Dr"
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
-    brand_tuple = tuple(sorted_brands)
 
-    # 3. Define Fluff words to ignore at the start
-    # e.g. "New Dr Rashel..." will become "Dr Rashel..."
-    fluff_prefixes = [
-        'new', 'sale', 'hot', 'original', 'genuine', 'authentic', 'official', 
-        'premium', 'promo', 'best', '2024', '2025', 'high quality', 'latest'
-    ]
+    def detect_brand(name):
+        name_clean = str(name).strip().lower()
+        # Fix: Iterate directly instead of using startswith with tuple incorrectly
+        for b in sorted_brands:
+            if name_clean.startswith(b):
+                return b.title()
+        return None
+
+    # 3. Apply detection
+    generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
+    flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
+    
+    if not flagged.empty:
+        flagged['Comment_Detail'] = "Detected Brand: " + flagged['Detected_Brand']
+        
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
     
     def clean_start_of_name(name):
         """Removes common marketing words from the start of the string."""
