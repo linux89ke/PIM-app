@@ -1,4 +1,3 @@
-Africa's Best
 Aunt Jackie'S
 Bake N Top
 BANNISTER'S
@@ -12,11 +11,9 @@ C&Q
 Catherine'S
 Centellian 24
 Chef'N
-China Image
 Clean Haven
 Clean N Clear
 Clean Paws
-Colombe Incubators And Poultry Materials ( CIAPM )
 Cow And Gate
 Cream 2
 Creme 21
@@ -300,7 +297,6 @@ Aqua
 Aquafresh
 Aquaphor
 Arabia
-Arabian
 Arabica
 ARABIYAT
 ARABIYAT PRESTIGE
@@ -383,7 +379,6 @@ Baidyanath
 Bajaj
 Baker
 Bakers
-Balaclava
 Balance
 Ballet
 Bambeado
@@ -467,7 +462,6 @@ BLACK Mamba
 BLACK+DECKER
 Blackberry
 Blackview
-Blanket
 Bliss Hair
 Blooming
 Blooming Baby
@@ -485,7 +479,6 @@ Bod Man
 Boden
 Bodi
 Bodum
-Body
 Body Care
 Body Essence
 Body Luxuries
@@ -676,7 +669,6 @@ Chest
 Chicago Skates
 Chicco
 Chin Hua
-China Factory Made
 Chino
 Chiyu
 Choki Choki
@@ -694,9 +686,6 @@ Ck
 Clarion
 Clarity
 Clarks
-Classic
-Classic Make Up
-CLEAN
 CLEAN & Clear
 Cleanox
 Clear Essence
@@ -721,7 +710,6 @@ Colgate
 Collagen
 Collagen Peptide
 Colmi
-Colorful
 Comb
 Combo
 Comfort
@@ -738,9 +726,6 @@ Contigo
 Continental
 Converse
 COOFIX
-Cooking Set
-Cookware
-CORDLESS
 Corel
 Corella
 Corn
@@ -815,7 +800,6 @@ Dear Body
 DECHO
 Deco Art
 Deep Bass
-Defender
 Deli
 Delia Cosmetics
 DELL
@@ -1060,8 +1044,6 @@ Fetop
 Fibre Star
 Fina
 Finder
-Finish
-Finishing Touch
 Fire
 First Class Lady
 Fit
@@ -1075,9 +1057,7 @@ Flip
 Flip Back
 FLOATING ARK
 Floshyne
-Flower
 Flower Power Raw Honey
-Flowers
 FLOYDEEZ
 Floz
 Flushrenic
@@ -1430,13 +1410,6 @@ Ju Qian
 Ju Sports
 JUCA
 Juki
-Jumia arts
-Jumia Bundles
-Jumia Cds
-Jumia Deals
-Jumia Mall
-Jumia Sports
-Jumia Stationary
 Juming
 Jumiso
 Jumlee
@@ -1791,15 +1764,9 @@ K1Go
 K1X
 K2 Mounts
 K2 Skates
-K26
 K2Calore
-K2R
-K3
-K688
 K7 Computing
 K7 Star
-K88H
-K9
 K9 Coil
 K9 Favourite
 K9 Sport Julius
@@ -3103,7 +3070,6 @@ Key To My Heart
 Keya
 Keyang
 Keyara ORGANICS
-Keyboards
 Keybord
 Keyco
 Keyed Up Labs
@@ -4601,10 +4567,7 @@ Me
 Meakida
 Med
 Medi peel
-Media
 Medicate Sticks
-Medicated
-Medicine
 Medicube
 Medimix
 Medimix Ayurvedic
@@ -4615,7 +4578,6 @@ Megir
 Meidu
 Mejagron
 Mekis
-Melamine
 Melamine Ware
 Melano
 Melii
@@ -5277,15 +5239,12 @@ Sony
 Soundcore
 Soundstar
 SOUTH Moon
-SOUTH Moon
 SP
 Spa
-SPATULE
 SPATULE
 Spice
 Spice MARINE
 Spider
-Spigen
 Spigen
 Sport
 Spotliner
@@ -5293,38 +5252,16 @@ Spry
 SQ
 SRITRANG
 Staedtler
-Staedtler
-Staedtler
 Staillon
-Staillon
-Staillon
-Stain less
-Stainless
 STALLION
 Stanley
-Stanley
-Stanley
-Stanley BLACK & DECKER
 Stanley BLACK & DECKER
 Star
 Stardrops
-Stardrops
-Stardrops
-Starlink
-Starlink
 Starlink
 Starlux
-Starlux
-Starlux
-Startimes
-Startimes
 Startimes
 Starworth
-Starworth
-Starworth
-STATWRAP
-STATWRAP
-STATWRAP
 STATWRAP
 Steel Factory
 Steel Function
@@ -5341,3 +5278,4 @@ SUNTEX
 SWEEPER
 SWITCH
 SWS
+Casio
