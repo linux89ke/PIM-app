@@ -13,6 +13,7 @@ import requests
 from difflib import SequenceMatcher
 import zipfile
 import concurrent.futures
+import os
 
 # -------------------------------------------------
 # 0. IMAGE HASHING & PROCESSING IMPORTS
@@ -141,16 +142,9 @@ def create_match_key(row: pd.Series) -> str:
     return f"{brand}|{name}|{color}"
 
 # -------------------------------------------------
-# CORE DUPLICATE LOGIC (PARALLEL IMAGE HASHING)
+# CORE DUPLICATE LOGIC
 # -------------------------------------------------
-import re
-import pandas as pd
-from typing import Set, Dict, Optional, List
 from dataclasses import dataclass
-
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
 
 COLOR_PATTERNS = {
     'red': ['red', 'crimson', 'scarlet', 'maroon', 'burgundy', 'wine', 'ruby'],
@@ -348,7 +342,7 @@ def extract_product_attributes(name: str, explicit_color: Optional[str] = None,
     return attrs
 
 # ============================================================================
-# ENHANCED DUPLICATE DETECTION (NO IMAGE HASHING - DROP-IN REPLACEMENT)
+# DUPLICATE DETECTION
 # ============================================================================
 
 def check_duplicate_products(
@@ -356,20 +350,9 @@ def check_duplicate_products(
     exempt_categories: List[str] = None,
     similarity_threshold: float = 0.70,
     known_colors: List[str] = None,
-    use_image_hash: bool = False,  # Ignored
+    use_image_hash: bool = False,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    ENHANCED duplicate detection with variant recognition (NO IMAGE HASHING).
-    
-    This is a DROP-IN REPLACEMENT for your existing check_duplicate_products function.
-    
-    Key improvements:
-    - Recognizes color/size/storage variants as DIFFERENT products
-    - Only flags true duplicates (same base + same attributes)
-    - Provides detailed explanations
-    - FASTER - No image processing!
-    """
     
     # Convert similarity_threshold to 0-100 scale
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
@@ -439,7 +422,7 @@ def check_duplicate_products(
                     if compare_sid in rejected_sids:
                         continue
                     
-                    # Calculate similarity score (NO IMAGE HASHING)
+                    # Calculate similarity score
                     attrs_A = current['_attributes']
                     attrs_B = compare['_attributes']
                     
@@ -508,45 +491,40 @@ def check_duplicate_products(
 
 
 # ============================================================================
-# HELPER FUNCTION
+# HELPER & LOADING FUNCTIONS (FIXED)
 # ============================================================================
 
-def clean_category_code(code) -> str:
-    """Clean category codes"""
-    try:
-        if pd.isna(code):
-            return ""
-        s = str(code).strip()
-        if s.replace('.', '', 1).isdigit() and '.' in s:
-            return str(int(float(s)))
-        return s
-    except:
-        return str(code).strip()
 def load_txt_file(filename: str) -> List[str]:
+    """
+    Robust TXT loader with explicit error reporting to the UI.
+    This fixes the 'Silent Failure' issue where brands.txt seemed to be not loaded.
+    """
     try:
-        # We use os.path.abspath to see exactly WHERE the app is looking
-        import os
         full_path = os.path.abspath(filename)
-        
+        if not os.path.exists(full_path):
+            st.warning(f"⚠️ File Not Found: {filename} (looked in {os.getcwd()})")
+            return []
+            
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
-        
-        # If file exists but is empty, let the user know
+            
         if not data:
-            st.sidebar.warning(f"⚠️ {filename} is empty.")
+            st.warning(f"⚠️ File is Empty: {filename}")
             
         return data
-    except FileNotFoundError:
-        st.sidebar.error(f"❌ Missing File: '{filename}' not found in {os.getcwd()}")
-        return []
     except UnicodeDecodeError:
-        st.sidebar.error(f"❌ Encoding Error: '{filename}' is not UTF-8. Try saving it with UTF-8 encoding.")
+        st.error(f"❌ Encoding Error: '{filename}' is not UTF-8.")
         return []
     except Exception as e:
-        st.sidebar.error(f"❌ Error reading {filename}: {e}")
+        st.error(f"❌ Error reading {filename}: {e}")
         return []
+
+@st.cache_data(ttl=3600)
 def load_excel_file(filename: str, column: Optional[str] = None):
     try:
+        if not os.path.exists(filename):
+             return [] if column else pd.DataFrame()
+             
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
@@ -560,6 +538,8 @@ def load_excel_file(filename: str, column: Optional[str] = None):
 def load_restricted_brands_config(filename: str) -> Dict:
     config = {}
     try:
+        if not os.path.exists(filename): return {}
+        
         df1 = pd.read_excel(filename, sheet_name=0, engine='openpyxl', dtype=str)
         df1.columns = df1.columns.str.strip()
         try:
@@ -597,74 +577,52 @@ def load_restricted_brands_config(filename: str) -> Dict:
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
-        return {
+        # Default mapping if file missing, to prevent crashes
+        default_map = {
             'Restricted brands': ('1000024 - Product does not have a license to be sold via Jumia (Not Authorized)', "This brand is restricted and can only be sold by authorized sellers."),
-            'Seller Not approved to sell Refurb': ('1000028 - Kindly Contact Jumia Seller Support', "Please contact Jumia Seller Support and raise a claim to confirm whether this product is eligible for listing."),
-            'BRAND name repeated in NAME': ('1000002 - Kindly Ensure Brand Name Is Not Repeated In Product Name', "Please do not write the brand name in the Product Name field."),
-            'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned in both the title and in the color tab."),
             'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs. Please consolidate variations into a single listing."),
-            'Prohibited products': ('1000024 - Product does not have a license', "Your product listing has been rejected due to the absence of a required license."),
-            'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type – Color."),
-            'Unnecessary words in NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title and avoid unnecessary keywords."),
-            'Generic BRAND Issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"),
-            'Fashion brand issues': ('1000014 - Creation of brand name required', "To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8"),
-            'Counterfeit Sneakers': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit or fake."),
-            'Seller Approve to sell books': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
-            'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Seller Support', "Please contact Seller Support to confirm eligibility for this category."),
-            'Suspected counterfeit Jerseys': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit."),
-            'Suspected Fake product': ('1000030 - Suspected Counterfeit/Fake Product', "This product is suspected to be counterfeit."),
-            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "Listing this product requires a valid warranty as per platform guidelines."),
-            'Sensitive words': ('1000001 - Brand NOT Allowed', "Includes banned brands (Chanel, Rolex, etc)."),
-            'Poor Images': ('1000017 - Low Quality Image', "Image rejected: Blurry, too dark, has glare, or low resolution (<300px)."),
-            'Generic branded products with genuine brands': ('1000014 - Kindly request for the creation of this product\'s actual brand name by filling this form: https://bit.ly/2kpjja8', "Kindly use the correct brand in the Brand field instead of using Generic"),
+             'Poor Images': ('1000017 - Low Quality Image', "Image rejected: Blurry, too dark, has glare, or low resolution (<300px)."),
         }
+        return default_map
     except Exception: return {}
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
-    import os
-    
-    # Helper to check file existence
-    def safe_load_txt(file):
-        if os.path.exists(file):
-            return [line.strip().lower() for line in load_txt_file(file) if line.strip()]
-        return []
+    # Use helper to prevent crashes if file missing
+    def safe_load_txt(f):
+        return load_txt_file(f) if os.path.exists(f) else []
 
     files = {
-        'blacklisted_words': load_txt_file('blacklisted.txt'),
+        'blacklisted_words': safe_load_txt('blacklisted.txt'),
         'book_category_codes': load_excel_file('Books_cat.xlsx', 'CategoryCode'),
         'approved_book_sellers': load_excel_file('Books_Approved_Sellers.xlsx', 'SellerName'),
-        'perfume_category_codes': load_txt_file('Perfume_cat.txt'),
-        'sensitive_perfume_brands': [b.lower() for b in load_txt_file('sensitive_perfumes.txt')],
+        'perfume_category_codes': safe_load_txt('Perfume_cat.txt'),
+        'sensitive_perfume_brands': [b.lower() for b in safe_load_txt('sensitive_perfumes.txt')],
         'approved_perfume_sellers': load_excel_file('perfumeSellers.xlsx', 'SellerName'),
-        'sneaker_category_codes': load_txt_file('Sneakers_Cat.txt'),
-        'sneaker_sensitive_brands': [b.lower() for b in load_txt_file('Sneakers_Sensitive.txt')],
-        'sensitive_words': [w.lower() for w in load_txt_file('sensitive_words.txt')],
-        'unnecessary_words': [w.lower() for w in load_txt_file('unnecessary.txt')],
-        'colors': [c.lower() for c in load_txt_file('colors.txt')],
-        'color_categories': load_txt_file('color_cats.txt'),
+        'sneaker_category_codes': safe_load_txt('Sneakers_Cat.txt'),
+        'sneaker_sensitive_brands': [b.lower() for b in safe_load_txt('Sneakers_Sensitive.txt')],
+        'sensitive_words': [w.lower() for w in safe_load_txt('sensitive_words.txt')],
+        'unnecessary_words': [w.lower() for w in safe_load_txt('unnecessary.txt')],
+        'colors': [c.lower() for c in safe_load_txt('colors.txt')],
+        'color_categories': safe_load_txt('color_cats.txt'),
         'category_fas': load_excel_file('category_FAS.xlsx'),
         'reasons': load_excel_file('reasons.xlsx'),
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
-        'warranty_category_codes': load_txt_file('warranty.txt'),
+        'warranty_category_codes': safe_load_txt('warranty.txt'),
         'suspected_fake': load_excel_file('suspected_fake.xlsx'),
-        'approved_refurb_sellers_ke': [s.lower() for s in load_txt_file('Refurb_LaptopKE.txt')],
-        'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
-        'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
+        'approved_refurb_sellers_ke': [s.lower() for s in safe_load_txt('Refurb_LaptopKE.txt')],
+        'approved_refurb_sellers_ug': [s.lower() for s in safe_load_txt('Refurb_LaptopUG.txt')],
+        'duplicate_exempt_codes': safe_load_txt('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'known_brands': safe_load_txt('brands.txt'), # Using the safe loader here
+        'known_brands': safe_load_txt('brands.txt'), # Explicit load here
     }
     return files
-    
+
 @st.cache_data(ttl=3600)
 def load_support_files_lazy():
-    """Lazy load support files only when needed."""
     with st.spinner("Loading configuration files..."):
         support_files = load_all_support_files()
-    if not support_files.get('flags_mapping'):
-        st.error("Critical: flags.xlsx could not be loaded or is empty.")
-        st.stop()
     return support_files
 
 @st.cache_data(ttl=3600)
@@ -705,36 +663,20 @@ class CountryValidator:
 # Data Loading & Validation Functions
 # -------------------------------------------------
 def standardize_input_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    ROBUST VERSION:
-    Ensures all columns are UPPERCASE so validations can find 'NAME' and 'BRAND'.
-    Handles mapping from internal codes (dsc_name) to standard names.
-    """
     df = df.copy()
-    
-    # 1. Strip whitespace from headers
     df.columns = df.columns.str.strip()
-    
-    # 2. Map known internal codes to standard names
-    # Create a lower-case map for case-insensitive matching
     map_lower = {k.lower(): v for k, v in NEW_FILE_MAPPING.items()}
-    
     new_cols = {}
     for col in df.columns:
         col_lower = col.lower()
         if col_lower in map_lower:
             new_cols[col] = map_lower[col_lower]
         else:
-            # Fallback: Force uppercase (e.g. 'Name' -> 'NAME')
             new_cols[col] = col.upper()
-            
     df = df.rename(columns=new_cols)
-    
-    # 3. Ensure essential columns exist (prevent KeyErrors)
     for col in ['ACTIVE_STATUS_COUNTRY', 'CATEGORY_CODE', 'BRAND', 'TAX_CLASS', 'NAME', 'SELLER_NAME']:
         if col in df.columns:
             df[col] = df[col].astype(str)
-            
     return df
 
 def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
@@ -765,22 +707,13 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame:
-    """
-    Downloads images and checks for:
-    1. Low Resolution (< 300x300)
-    2. Blurriness (Laplacian Variance < 100)
-    3. Darkness (Mean Brightness < 50)
-    4. Flash Glare (Too many blown-out pixels)
-    """
     if 'MAIN_IMAGE' not in data.columns:
         return pd.DataFrame(columns=data.columns)
 
-    # Filter only rows with valid URLs
     valid_data = data[data['MAIN_IMAGE'].notna() & (data['MAIN_IMAGE'].str.strip() != '')].copy()
     if valid_data.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # Helper function to process a single image
     def analyze_image_quality(row_data):
         sid = row_data[0]
         url = row_data[1]
@@ -789,9 +722,8 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
             headers = {'User-Agent': 'Mozilla/5.0'}
             resp = requests.get(url, timeout=5, headers=headers)
             if resp.status_code != 200:
-                return None # Could not check, skip rejection logic or handle as broken link
+                return None
             
-            # Convert bytes to numpy array for OpenCV
             image_array = np.asarray(bytearray(resp.content), dtype="uint8")
             img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
             
@@ -800,32 +732,27 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
             h, w, _ = img.shape
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # 1. Resolution Check
             if h < 300 or w < 300:
                 return (sid, f"Low Resolution ({w}x{h})")
 
-            # 2. Blurriness Check (Laplacian Variance)
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
             if blur_score < 100:
                 return (sid, f"Blurry (Score: {int(blur_score)})")
 
-            # 3. Darkness Check
             avg_brightness = np.mean(gray)
             if avg_brightness < 40:
                 return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
 
-            # 4. Glare Check (Pixels > 250)
             _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
             bright_ratio = np.count_nonzero(bright_mask) / gray.size
-            if bright_ratio > 0.05: # >5% pure white
+            if bright_ratio > 0.05: 
                 return (sid, "Flash/Glare Detected")
 
-            return None # Pass
+            return None
             
         except Exception:
             return None
 
-    # Run in parallel
     rejected_reasons = {}
     rows_to_process = list(zip(valid_data['PRODUCT_SET_SID'], valid_data['MAIN_IMAGE']))
     
@@ -837,14 +764,11 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
                 sid, reason = res
                 rejected_reasons[sid] = reason
 
-    # Filter and return data
     if not rejected_reasons:
         return pd.DataFrame(columns=data.columns)
         
     mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
     result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
-    
-    # Add the specific failure reason to the Comment Detail if needed
     result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
     
     return result_df
@@ -1095,62 +1019,35 @@ def check_counterfeit_jerseys(data: pd.DataFrame, jerseys_df: pd.DataFrame) -> p
     return target[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str]) -> pd.DataFrame:
-    """
-    Flags products where BRAND is 'Generic' but the NAME starts with 
-    a known brand from brands.txt.
-    
-    IMPROVED VERSION: Handles special characters (apostrophes, periods, hyphens)
-    by normalizing text before comparison.
-    """
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
-    # 1. Filter for Generic items only (Strict)
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     generic_items = data[is_generic].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
 
-    # 2. Sort brands by length (descending)
     sorted_brands = sorted([str(b).strip().lower() for b in brands_list if b], key=len, reverse=True)
 
     def normalize_text(text):
-        """
-        Normalize text by:
-        - Converting to lowercase
-        - Removing apostrophes, periods, hyphens
-        - Collapsing multiple spaces to single space
-        - Stripping leading/trailing whitespace
-        """
         text = str(text).lower()
-        # Remove special characters that might interfere (apostrophes, periods, hyphens)
         text = re.sub(r"['\.\-]", ' ', text)
-        # Collapse multiple spaces
         text = re.sub(r'\s+', ' ', text)
         return text.strip()
 
     def detect_brand(name):
         name_clean = normalize_text(name)
-        
-        # Check each brand (already sorted by length, longest first)
         for brand in sorted_brands:
             brand_clean = normalize_text(brand)
-            
-            # Check if name starts with this brand
             if name_clean.startswith(brand_clean):
-                
-                # OPTIONAL SAFETY: Check that the character after the match isn't a letter
-                # This prevents "Dr" matching "Dress"
                 if len(name_clean) > len(brand_clean):
                     next_char = name_clean[len(brand_clean)]
                     if next_char.isalnum():
                         continue 
-                
-                return brand.title() # Return nice Title Case
+                return brand.title()
         return None
 
-    # 3. Apply detection
     generic_items['Detected_Brand'] = generic_items['NAME'].apply(detect_brand)
     flagged = generic_items[generic_items['Detected_Brand'].notna()].copy()
     
@@ -1274,7 +1171,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                         expanded_sids.add(sid)
                 res = data[data['PRODUCT_SET_SID'].isin(expanded_sids)].copy()
                 
-                # IMPORTANT: Retain the Comment_Detail column if it was generated
                 if 'Comment_Detail' not in res.columns and 'Comment_Detail' in res:
                     res['Comment_Detail'] = res['Comment_Detail']
             
@@ -1314,12 +1210,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         
         res['PRODUCT_SET_SID'] = res['PRODUCT_SET_SID'].astype(str).str.strip()
         
-        # Merge back with original data to get all columns if needed, though 'res' should already have them
-        # We also want to capture the specific comment detail if it exists in 'res'
         flagged = pd.merge(res[['PRODUCT_SET_SID', 'Comment_Detail']] if 'Comment_Detail' in res.columns else res[['PRODUCT_SET_SID']], 
                            data, on='PRODUCT_SET_SID', how='left')
         
-        # If Comment_Detail was lost in merge or didn't exist in 'res', try to recover or default
         if 'Comment_Detail' not in flagged.columns and 'Comment_Detail' in res.columns:
              flagged['Comment_Detail'] = res['Comment_Detail']
         
@@ -1329,10 +1222,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
                 continue
             processed.add(sid)
             
-            # Construct the final comment
             base_comment = reason_info[1]
             detail = r.get('Comment_Detail', '')
-            # Ensure detail is string and not nan
             if pd.isna(detail): detail = ''
             final_comment = f"{base_comment} ({detail})" if detail else base_comment
 
@@ -1365,7 +1256,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     status_text.empty()
     
     final_df = pd.DataFrame(rows)
-    # Ensure required columns exist to prevent KeyErrors downstream
     expected_cols = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]
     for c in expected_cols:
         if c not in final_df.columns:
@@ -1491,8 +1381,41 @@ try:
 except:
     pass
 
+# --- DEBUG & CONFIG SIDEBAR (MOVED TO TOP) ---
+with st.sidebar:
+    st.header("🛠️ System Status")
+    
+    # 1. Physical Check
+    if os.path.exists('brands.txt'):
+        st.success("✅ 'brands.txt' found.")
+    else:
+        st.error(f"❌ 'brands.txt' missing in {os.getcwd()}")
+        
+    # 2. Cache & Memory Check
+    if st.button("♻️ Force Reload Files"):
+        st.cache_data.clear()
+        st.rerun()
+
 st.title("Product Validation Tool")
 st.markdown("---") 
+
+# Load Configuration Files (Now runs after sidebar init to catch reload)
+try:
+    support_files = load_support_files_lazy()
+    
+    # Show loaded count in sidebar
+    with st.sidebar:
+        if 'known_brands' in support_files:
+            cnt = len(support_files['known_brands'])
+            if cnt > 0:
+                st.info(f"Loaded {cnt} brands.")
+            else:
+                st.warning("⚠️ 'brands.txt' is empty!")
+except Exception as e:
+    st.error(f"Failed to load configuration files: {e}")
+    st.stop()
+
+# --- REST OF SIDEBAR ---
 try:
     with st.sidebar:
         st.header("Display Settings")
@@ -1503,62 +1426,15 @@ try:
             st.rerun()
         
         st.header("Performance Settings")
-        use_image_hash = st.checkbox("Enable Image Hashing (for duplicate detection)", value=True, 
-                                     help="Disable for faster processing on large datasets")
+        use_image_hash = st.checkbox("Enable Image Hashing", value=True, help="Disable for faster processing")
+        check_image_quality = st.checkbox("Enable Quality Check", value=True, help="Check for blur/darkness")
         
-        # --- NEW TOGGLE HERE ---
-        check_image_quality = st.checkbox("Enable Quality Check (Blur/Glare)", value=True, 
-                                          help="Analyze image quality (slow). Uncheck to skip.")
-        
-        st.caption("⚡ Disabling hashing/quality checks speeds up processing significantly")
-        
-        if st.button("🧹 Clear Image Cache", help="Free up memory by clearing cached image hashes"):
+        if st.button("🧹 Clear Image Cache"):
             clear_image_cache()
             st.success("Image cache cleared!")
-
-        st.markdown("---")
-        st.header("Debug Info")
-        
-        import os
-        # Path Debug
-        st.write(f"Current Folder: `{os.getcwd()}`")
-        
-        # Physical File Check
-        if os.path.exists('brands.txt'):
-            st.success("✅ 'brands.txt' found on disk.")
-        else:
-            st.error("❌ 'brands.txt' NOT found on disk.")
-        
-        # Dictionary Check
-        if 'known_brands' in support_files:
-            count = len(support_files['known_brands'])
-            if count > 0:
-                st.write(f"Brands in Memory: **{count}**")
-            else:
-                st.warning("⚠️ 'known_brands' is EMPTY in memory.")
-        else:
-            st.error("❌ 'known_brands' key missing from support_files.")
-
-        # THE FIX: Cache clearing
-        if st.button("♻️ Clear Cache & Reload Files"):
-            st.cache_data.clear()
-            st.rerun()
-
-# Load Configuration Files
-try:
-    support_files = load_support_files_lazy()
-    
-    # Optional Debug in Sidebar
-    with st.sidebar:
-        if 'known_brands' in support_files:
-            count = len(support_files['known_brands'])
-            st.write(f"Brands Loaded: **{count}**")
-        else:
-            st.error("brands.txt not loaded!")
-
-except Exception as e:
-    st.error(f"Failed to load configuration files: {e}")
-    st.stop()
+except:
+    use_image_hash = True
+    check_image_quality = True
 
 tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
 
@@ -1591,16 +1467,12 @@ with tab1:
                         if uploaded_file.name.endswith('.xlsx'):
                             raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
                         else:
-                            # --- ROBUST CSV LOADING LOGIC ---
-                            # 1. Try reading with default comma
                             try:
                                 raw_data = pd.read_csv(uploaded_file, dtype=str)
-                                # 2. If it resulted in 1 column, it likely failed. Try semicolon.
                                 if len(raw_data.columns) <= 1:
                                     uploaded_file.seek(0)
                                     raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
                             except:
-                                # 3. Fallback to semicolon if comma crashed
                                 uploaded_file.seek(0)
                                 raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
                                 
@@ -1643,7 +1515,7 @@ with tab1:
                         final_report, flag_dfs = validate_products(
                             data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, 
                             use_image_hash=use_image_hash, 
-                            perform_quality_check=check_image_quality # Pass the UI state here
+                            perform_quality_check=check_image_quality
                         )
                         st.session_state.final_report = final_report
                         st.session_state.all_data_map = data
