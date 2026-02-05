@@ -192,7 +192,6 @@ Acnesol
 Acrylic mink
 ACS
 Activated
-Active
 Activilong
 ACURE
 Addis
@@ -252,7 +251,6 @@ Alpha Arbutin
 Alseyee Bio
 Althea
 ALUMINAID
-Aluminium
 Aluminium Plast
 Aluminor
 Alva
@@ -264,7 +262,6 @@ Amara
 Amaya
 Amaze
 Amazfit
-Amazing
 Amazon
 Amber
 Ambie
@@ -356,7 +353,6 @@ Audio-Technica
 AURA
 Aurelia
 Aussie
-Authentic
 Autodesk
 Automatiq
 Aveeno
@@ -373,12 +369,10 @@ Ay
 Ayurvedic
 Aztas Underwear
 Azzaro
-Baby
 Baby Banda
 Baby Care
 Baby Delight
 Babybee
-Backpack
 Bag For YOU
 Bag Hook
 Bag Lady
@@ -428,9 +422,7 @@ Benefit
 Benice
 Bento
 Berluti
-Best
 Best Buy
-Best Of China
 Bestcare
 Bestway
 Beta Tools
@@ -5010,8 +5002,6 @@ Protex
 Puma
 Punex
 Punpple
-PURE
-PURE EGYPTIAN
 PURE Glow
 PURE Indian White
 PURE Naturals
