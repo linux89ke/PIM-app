@@ -524,14 +524,27 @@ def clean_category_code(code) -> str:
         return str(code).strip()
 def load_txt_file(filename: str) -> List[str]:
     try:
+        # We use os.path.abspath to see exactly WHERE the app is looking
+        import os
+        full_path = os.path.abspath(filename)
+        
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
+        
+        # If file exists but is empty, let the user know
+        if not data:
+            st.sidebar.warning(f"⚠️ {filename} is empty.")
+            
         return data
-    except Exception as e:
-        logger.error(f"Error reading {filename}: {e}")
+    except FileNotFoundError:
+        st.sidebar.error(f"❌ Missing File: '{filename}' not found in {os.getcwd()}")
         return []
-
-@st.cache_data(ttl=3600)
+    except UnicodeDecodeError:
+        st.sidebar.error(f"❌ Encoding Error: '{filename}' is not UTF-8. Try saving it with UTF-8 encoding.")
+        return []
+    except Exception as e:
+        st.sidebar.error(f"❌ Error reading {filename}: {e}")
+        return []
 def load_excel_file(filename: str, column: Optional[str] = None):
     try:
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
