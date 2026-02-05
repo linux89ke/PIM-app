@@ -143,173 +143,385 @@ def create_match_key(row: pd.Series) -> str:
 # -------------------------------------------------
 # CORE DUPLICATE LOGIC (PARALLEL IMAGE HASHING)
 # -------------------------------------------------
+import re
+import pandas as pd
+from typing import Set, Dict, Optional, List
+from dataclasses import dataclass
+
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
+
+COLOR_PATTERNS = {
+    'red': ['red', 'crimson', 'scarlet', 'maroon', 'burgundy', 'wine', 'ruby'],
+    'blue': ['blue', 'navy', 'royal', 'sky', 'azure', 'cobalt', 'sapphire'],
+    'green': ['green', 'lime', 'olive', 'emerald', 'mint', 'forest', 'jade'],
+    'black': ['black', 'onyx', 'ebony', 'jet', 'charcoal', 'midnight'],
+    'white': ['white', 'ivory', 'cream', 'pearl', 'snow', 'alabaster'],
+    'gray': ['gray', 'grey', 'silver', 'slate', 'ash', 'graphite'],
+    'yellow': ['yellow', 'gold', 'golden', 'amber', 'lemon', 'mustard'],
+    'orange': ['orange', 'tangerine', 'peach', 'coral', 'apricot'],
+    'pink': ['pink', 'rose', 'magenta', 'fuchsia', 'salmon', 'blush'],
+    'purple': ['purple', 'violet', 'lavender', 'plum', 'mauve', 'lilac'],
+    'brown': ['brown', 'tan', 'beige', 'khaki', 'chocolate', 'coffee', 'bronze'],
+    'multicolor': ['multicolor', 'multicolour', 'multi-color', 'rainbow', 'mixed']
+}
+
+COLOR_VARIANT_TO_BASE = {}
+for base_color, variants in COLOR_PATTERNS.items():
+    for variant in variants:
+        COLOR_VARIANT_TO_BASE[variant] = base_color
+
+@dataclass
+class ProductAttributes:
+    """Product attribute container"""
+    base_name: str
+    colors: Set[str]
+    sizes: Set[str]
+    storage: Set[str]
+    memory: Set[str]
+    quantities: Set[str]
+    raw_name: str
+    
+    def get_variant_key(self) -> str:
+        parts = [self.base_name]
+        if self.colors:
+            parts.append("_color_" + "_".join(sorted(self.colors)))
+        if self.sizes:
+            parts.append("_size_" + "_".join(sorted(self.sizes)))
+        if self.storage:
+            parts.append("_storage_" + "_".join(sorted(self.storage)))
+        if self.memory:
+            parts.append("_memory_" + "_".join(sorted(self.memory)))
+        if self.quantities:
+            parts.append("_qty_" + "_".join(sorted(self.quantities)))
+        return "|".join(parts).lower()
+    
+    def get_base_key(self) -> str:
+        return self.base_name.lower()
+
+# ============================================================================
+# ATTRIBUTE EXTRACTION
+# ============================================================================
+
+def extract_colors(text: str, explicit_color: Optional[str] = None) -> Set[str]:
+    """Extract colors from text"""
+    colors = set()
+    if not text:
+        text = ""
+    text_lower = str(text).lower()
+    
+    if explicit_color and pd.notna(explicit_color):
+        color_lower = str(explicit_color).lower().strip()
+        for variant, base in COLOR_VARIANT_TO_BASE.items():
+            if variant in color_lower:
+                colors.add(base)
+    
+    for variant, base in COLOR_VARIANT_TO_BASE.items():
+        if re.search(r'\b' + re.escape(variant) + r'\b', text_lower):
+            colors.add(base)
+    
+    return colors
+
+def extract_sizes(text: str) -> Set[str]:
+    """Extract sizes from text"""
+    if not text:
+        return set()
+    sizes = set()
+    text_lower = str(text).lower()
+    
+    size_map = {
+        r'\bxxs\b|2xs': 'xxs',
+        r'\bxs\b|xsmall|extra small': 'xs',
+        r'\bs\b|small': 'small',
+        r'\bm\b|medium': 'medium',
+        r'\bl\b|large': 'large',
+        r'\bxl\b|xlarge|extra large': 'xl',
+        r'\bxxl\b|2xl': 'xxl',
+        r'\bxxxl\b|3xl': 'xxxl'
+    }
+    
+    for pattern, size in size_map.items():
+        if re.search(pattern, text_lower):
+            sizes.add(size)
+    
+    # Dimensions
+    for match in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(?:inch|inches|")\b', text_lower):
+        sizes.add(f"{match.group(1)}inch")
+    
+    return sizes
+
+def extract_storage(text: str) -> Set[str]:
+    """Extract storage capacities"""
+    if not text:
+        return set()
+    storage = set()
+    for match in re.finditer(r'\b(\d+)\s*(?:gb|tb)\b', str(text).lower()):
+        value, unit = match.group(1), match.group(0)
+        storage.add(f"{value}{'tb' if 'tb' in unit else 'gb'}")
+    return storage
+
+def extract_memory(text: str) -> Set[str]:
+    """Extract RAM"""
+    if not text:
+        return set()
+    memory = set()
+    for match in re.finditer(r'\b(\d+)\s*(?:gb|mb)\s*(?:ram|memory|ddr)\b', str(text).lower()):
+        value = match.group(1)
+        if 2 <= int(value) <= 128:
+            memory.add(f"{value}gb")
+    return memory
+
+def extract_quantities(text: str) -> Set[str]:
+    """Extract pack quantities"""
+    if not text:
+        return set()
+    quantities = set()
+    patterns = [
+        r'\b(\d+)[- ]?pack\b',
+        r'\bpack\s+of\s+(\d+)\b',
+        r'\b(\d+)[- ]?(?:pieces?|pcs?)\b'
+    ]
+    text_lower = str(text).lower()
+    for pattern in patterns:
+        for match in re.finditer(pattern, text_lower):
+            quantities.add(f"{match.group(1)}pack")
+    return quantities
+
+def remove_attributes(text: str) -> str:
+    """Remove all attributes to get base name"""
+    if not text:
+        return ""
+    
+    base = str(text).lower()
+    
+    # Remove colors
+    for variant in COLOR_VARIANT_TO_BASE.keys():
+        base = re.sub(r'\b' + re.escape(variant) + r'\b', '', base)
+    
+    # Remove sizes, storage, memory, dimensions
+    base = re.sub(r'\b(?:xxs|xs|small|medium|large|xl|xxl|xxxl)\b', '', base)
+    base = re.sub(r'\b\d+\s*(?:gb|tb|inch|inches|"|ram|memory|ddr|pack|piece|pcs)\b', '', base)
+    
+    # Remove noise words
+    noise = ['new', 'original', 'genuine', 'authentic', 'official', 'premium', 
+             'quality', 'best', 'hot', 'sale', 'promo', 'deal']
+    for word in noise:
+        base = re.sub(r'\b' + word + r'\b', '', base)
+    
+    base = re.sub(r'[^\w\s]', ' ', base)
+    base = re.sub(r'\s+', ' ', base)
+    return base.strip()
+
+def extract_product_attributes(name: str, explicit_color: Optional[str] = None, 
+                               brand: Optional[str] = None) -> ProductAttributes:
+    """Master extraction function"""
+    if not name or pd.isna(name):
+        name = ""
+    
+    name_str = str(name).strip()
+    
+    colors = extract_colors(name_str, explicit_color)
+    sizes = extract_sizes(name_str)
+    storage = extract_storage(name_str)
+    memory = extract_memory(name_str)
+    quantities = extract_quantities(name_str)
+    
+    attrs = ProductAttributes(
+        base_name="",
+        colors=colors,
+        sizes=sizes,
+        storage=storage,
+        memory=memory,
+        quantities=quantities,
+        raw_name=name_str
+    )
+    
+    base_name = remove_attributes(name_str)
+    
+    if brand and pd.notna(brand):
+        brand_lower = str(brand).lower().strip()
+        if brand_lower not in base_name and brand_lower not in ['generic', 'fashion']:
+            base_name = f"{brand_lower} {base_name}"
+    
+    attrs.base_name = base_name.strip()
+    return attrs
+
+# ============================================================================
+# ENHANCED DUPLICATE DETECTION (NO IMAGE HASHING - DROP-IN REPLACEMENT)
+# ============================================================================
+
 def check_duplicate_products(
-    data: pd.DataFrame, 
+    data: pd.DataFrame,
     exempt_categories: List[str] = None,
-    similarity_threshold: float = 0.60, 
-    known_colors: List[str] = None, 
-    use_image_hash: bool = True,  
+    similarity_threshold: float = 0.70,
+    known_colors: List[str] = None,
+    use_image_hash: bool = False,  # Ignored
     **kwargs
 ) -> pd.DataFrame:
+    """
+    ENHANCED duplicate detection with variant recognition (NO IMAGE HASHING).
     
-    # --- 1. SETUP ---
+    This is a DROP-IN REPLACEMENT for your existing check_duplicate_products function.
+    
+    Key improvements:
+    - Recognizes color/size/storage variants as DIFFERENT products
+    - Only flags true duplicates (same base + same attributes)
+    - Provides detailed explanations
+    - FASTER - No image processing!
+    """
+    
+    # Convert similarity_threshold to 0-100 scale
+    duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
+    
+    # Validate required columns
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols):
         return pd.DataFrame(columns=data.columns)
-
+    
     data_to_check = data.copy()
-    data_to_check['_grp_seller'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
-    data_to_check['_grp_brand'] = data_to_check['BRAND'].astype(str).str.strip().str.lower()
-
+    
+    # Apply category exemptions
     if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
-        cats_to_check = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
+        data_cats = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
         exempt_set = set(clean_category_code(c) for c in exempt_categories)
-        data_to_check = data_to_check[~cats_to_check.isin(exempt_set)]
-
+        data_to_check = data_to_check[~data_cats.isin(exempt_set)]
+    
     if data_to_check.empty:
         return pd.DataFrame(columns=data.columns)
-
-    if known_colors:
-        color_set = set(str(c).lower().strip() for c in known_colors if c)
-    else:
-        color_set = set()
-
-    fluff_words = {
-        'professional', 'high', 'quality', 'best', 'sale', 'new', 'original', 'genuine', 
-        'authentic', 'premium', 'official', 'hot', 'promo', 'deal', 'combo', 'kit', 
-        'set', 'pack', 'bundle', 'full', 'complete', 'for', 'with', 'and', 'the', 
-        'in', 'on', 'at', 'to', 'of', 'plus', 'recording', 'condenser', 'studio', 
-        'mic', 'microphone', 'sound', 'card', 'interface', 'mixer', 'audio', 'voice', 
-        'vocal', 'music', 'input', 'output', 'wired', 'wireless', 'usb', 'cable', 
-        'equipment', 'device', 'gear', 'setup', 'live', 'streaming', 'stream', 
-        'podcast', 'podcasting', 'broadcasting', 'broadcast', 'gaming', 'gamer', 
-        'game', 'karaoke', 'singing', 'song', 'teaching', 'class', 'online', 'school', 
-        'zoom', 'meeting', 'home', 'office', 'work', 'church', 'stage', 'performance', 
-        'speech', 'dj', 'youtube', 'tiktok', 'facebook', 'instagram', 'skype', 'video', 
-        'content', 'creator', 'vlogging', 'vlog', 'pc', 'computer', 'laptop', 
-        'desktop', 'phone', 'smartphone', 'mobile', 'android', 'ios', 'iphone', 
-        'tablet', 'ipad', 'mac', 'windows'
-    }
-
-    def get_token_data(row):
-        name_text = str(row.get('NAME', '')).lower()
-        name_text = re.sub(r'[^\w\s]', '', name_text) 
-        tokens = set(name_text.split()) - fluff_words
-        
-        col_color = str(row.get('COLOR', '')).lower().strip()
-        if col_color in ['nan', 'none', '', 'null']: col_color = None
-        
-        img_url = None
-        # Only extract URL if hashing is enabled
-        if use_image_hash and 'MAIN_IMAGE' in row:
-            raw_url = str(row['MAIN_IMAGE']).strip()
-            if raw_url.lower() not in ['nan', 'none', '']:
-                img_url = raw_url
-
-        found_colors_in_name = tokens.intersection(color_set)
-        
-        return {
-            'tokens': tokens,
-            'col_color': col_color,
-            'name_colors': found_colors_in_name,
-            'img_url': img_url
-        }
-
-    data_to_check['search_data'] = data_to_check.apply(get_token_data, axis=1)
     
-    # Use a set for faster lookups
+    # Extract attributes
+    def extract_attrs_row(row):
+        return extract_product_attributes(
+            name=row['NAME'],
+            explicit_color=row.get('COLOR'),
+            brand=row.get('BRAND')
+        )
+    
+    data_to_check['_attributes'] = data_to_check.apply(extract_attrs_row, axis=1)
+    data_to_check['_base_key'] = data_to_check['_attributes'].apply(lambda x: x.get_base_key())
+    data_to_check['_variant_key'] = data_to_check['_attributes'].apply(lambda x: x.get_variant_key())
+    data_to_check['_seller_lower'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
+    
+    # Group and detect duplicates
     rejected_sids = set()
+    duplicate_details = {}
     
-    # --- 2. GROUPING & PARALLEL PREFETCH ---
-    grouped = data_to_check.groupby(['_grp_seller', '_grp_brand'])
+    grouped = data_to_check.groupby(['_seller_lower', '_base_key'])
     
-    for (seller, brand), group in grouped:
-        if len(group) < 2: continue
+    for (seller, base_key), group in grouped:
+        if len(group) < 2:
+            continue
         
-        products = group.to_dict('records')
+        # Sub-group by variant
+        variant_groups = group.groupby('_variant_key')
         
-        # --- PARALLEL IMAGE FETCHING ---
-        if use_image_hash:
-            urls_to_fetch = [p['search_data']['img_url'] for p in products if p['search_data']['img_url']]
-            # [OPTIMIZATION] Reduced workers to 10 for stability
-            prefetch_image_hashes(urls_to_fetch, max_workers=10) 
-        
-        # [OPTIMIZATION] Reduced window size from 100 to 50 for faster checks
-        WINDOW_SIZE = min(50, len(products)) 
-        
-        for i in range(len(products)):
-            current = products[i]
-            if current['PRODUCT_SET_SID'] in rejected_sids: continue
-
-            data_A = current['search_data']
+        for variant_key, variant_group in variant_groups:
+            if len(variant_group) < 2:
+                continue
             
-            # --- BUFFER LIST: STORE POTENTIAL DUPLICATES FOR THIS ANCHOR ---
-            potential_duplicates = []
+            products = variant_group.to_dict('records')
             
-            for j in range(i + 1, min(i + WINDOW_SIZE, len(products))):
-                compare = products[j]
-                if compare['PRODUCT_SET_SID'] in rejected_sids: continue
-
-                data_B = compare['search_data']
-
-                # 1. Color Check
-                if data_A['col_color'] and data_B['col_color'] and data_A['col_color'] != data_B['col_color']:
-                    continue
-                if data_A['name_colors'] and data_B['name_colors'] and data_A['name_colors'].isdisjoint(data_B['name_colors']):
-                    continue
-
-                # 2. Text Check
-                tokens_A = data_A['tokens']
-                tokens_B = data_B['tokens']
+            # Compare within same variant
+            for i in range(len(products)):
+                current = products[i]
+                current_sid = str(current['PRODUCT_SET_SID'])
                 
-                is_text_duplicate = False
-                if len(tokens_A) > 0 and len(tokens_B) > 0:
-                    intersection = len(tokens_A.intersection(tokens_B))
-                    union = len(tokens_A.union(tokens_B))
-                    if union > 0 and (intersection / union) >= similarity_threshold:
-                        is_text_duplicate = True
-                elif len(tokens_A) == 0 and len(tokens_B) == 0:
-                    is_text_duplicate = True
-
-                # 3. Image Check (Instant Lookup from Cache)
-                is_image_duplicate = False
-                # [CONFIGURABLE] Only check images if flag is True
-                if use_image_hash and not is_text_duplicate:
-                    url_A = data_A['img_url']
-                    url_B = data_B['img_url']
+                if current_sid in rejected_sids:
+                    continue
+                
+                potential_duplicates = []
+                
+                for j in range(i + 1, len(products)):
+                    compare = products[j]
+                    compare_sid = str(compare['PRODUCT_SET_SID'])
                     
-                    if url_A and url_B:
-                        if url_A == url_B:
-                            is_image_duplicate = True
-                        else:
-                            hash_A = get_image_hash_fast(url_A)
-                            if hash_A:
-                                hash_B = get_image_hash_fast(url_B)
-                                if hash_B and (hash_A - hash_B) < 5:
-                                    is_image_duplicate = True
-
-                # --- IF MATCH FOUND, ADD TO POTENTIAL LIST ---
-                if is_text_duplicate or is_image_duplicate:
-                    potential_duplicates.append(compare['PRODUCT_SET_SID'])
-
-            # --- DECISION LOGIC: ONLY REJECT IF > 1 DUPLICATE FOUND (Total >= 3 SKUs) ---
-            if len(potential_duplicates) >= 2:
-                rejected_sids.update(potential_duplicates)
-
-    # Convert set back to dataframe
-    rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].isin(rejected_sids)].copy()
+                    if compare_sid in rejected_sids:
+                        continue
+                    
+                    # Calculate similarity score (NO IMAGE HASHING)
+                    attrs_A = current['_attributes']
+                    attrs_B = compare['_attributes']
+                    
+                    score = 0
+                    
+                    # Name similarity (70 points)
+                    tokens_A = set(attrs_A.base_name.split())
+                    tokens_B = set(attrs_B.base_name.split())
+                    if tokens_A and tokens_B:
+                        similarity = len(tokens_A & tokens_B) / len(tokens_A | tokens_B)
+                        score += similarity * 70
+                    
+                    # Same seller bonus (30 points)
+                    if current['_seller_lower'] == compare['_seller_lower']:
+                        score += 30
+                    
+                    if score >= duplicate_threshold:
+                        potential_duplicates.append({
+                            'sid': compare_sid,
+                            'score': score
+                        })
+                
+                # Flag if 2+ duplicates found
+                if len(potential_duplicates) >= 2:
+                    for dup in potential_duplicates:
+                        rejected_sids.add(dup['sid'])
+                        
+                        attrs = current['_attributes']
+                        variant_desc = []
+                        if attrs.colors:
+                            variant_desc.append(f"Color: {', '.join(attrs.colors)}")
+                        if attrs.sizes:
+                            variant_desc.append(f"Size: {', '.join(attrs.sizes)}")
+                        if attrs.storage:
+                            variant_desc.append(f"Storage: {', '.join(attrs.storage)}")
+                        
+                        duplicate_details[dup['sid']] = {
+                            'base': base_key[:40],
+                            'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
+                            'score': dup['score']
+                        }
     
-    st.session_state.duplicate_stats = {
-        'total': len(rejected_df),
-        'method': f'Aggressive Token + Parallel Image Hash (Allow 1 Pair)'
-    }
-
+    # Build results
+    if not rejected_sids:
+        return pd.DataFrame(columns=data.columns)
+    
+    rejected_df = data_to_check[
+        data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)
+    ].copy()
+    
+    # Add comments
+    def add_comment(row):
+        sid = str(row['PRODUCT_SET_SID'])
+        if sid in duplicate_details:
+            details = duplicate_details[sid]
+            return f"Duplicate: Base '{details['base']}', {details['variant']}, Confidence: {details['score']:.0f}%"
+        return "Duplicate detected"
+    
+    rejected_df['Comment_Detail'] = rejected_df.apply(add_comment, axis=1)
+    
+    # Clean up
+    cols_to_drop = ['_attributes', '_base_key', '_variant_key', '_seller_lower']
+    rejected_df = rejected_df.drop(columns=[c for c in cols_to_drop if c in rejected_df.columns])
+    
     return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-# -------------------------------------------------
-# CACHED FILE LOADING
-# -------------------------------------------------
-@st.cache_data(ttl=3600)
+
+# ============================================================================
+# HELPER FUNCTION
+# ============================================================================
+
+def clean_category_code(code) -> str:
+    """Clean category codes"""
+    try:
+        if pd.isna(code):
+            return ""
+        s = str(code).strip()
+        if s.replace('.', '', 1).isdigit() and '.' in s:
+            return str(int(float(s)))
+        return s
+    except:
+        return str(code).strip()
 def load_txt_file(filename: str) -> List[str]:
     try:
         with open(filename, 'r', encoding='utf-8') as f:
