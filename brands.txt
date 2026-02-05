@@ -4,8 +4,6 @@ AILYONS
 Airmax
 Amaya
 Anadia
-Android
-Apple
 Ariana Grande
 Armaf
 Asenware
@@ -126,7 +124,7 @@ Pedro
 Persil
 Peruvian
 Phillip
-Phillips 66
+Phillips
 POEDAGAR
 Premier
 Purito
@@ -273,7 +271,6 @@ Medicube
 Pond'S
 sarahtech
 Swirl
-Nairobi
 Dymatize
 Niceone
 Aspatek
@@ -571,7 +568,6 @@ Kokonux
 Kezzi
 Kakoo
 Ezviz
-Jumia Sports
 Kio Baby
 viscose
 Knitmania Uk Ltd
@@ -2678,7 +2674,6 @@ Lattafa and Yara
 Nature'S Measure
 Ribena
 Beauty of Joseon
-Cases
 Yale
 Vivo
 TRAPP
@@ -2688,7 +2683,6 @@ Butterfly
 Kyoto
 Cidea
 SOLDER
-Playstation
 DOUBLE DOSE
 Extreme
 Empire
@@ -3385,16 +3379,13 @@ HAISION
 Maches
 UGREAT
 Coco
-Hair
 Marshall Headphones
 Max Man
 SHENGKE
 Yamaha
 Horizons
-Phone Case
 SP
 Cclamp
-X3
 GDLITE
 Touch Me
 Owngreat
@@ -3445,7 +3436,6 @@ Gen
 Cup & Kettle
 AceCamp
 AXIS - Y
-Africa's Best
 Chandni
 Medicine
 Yara Home
@@ -3523,7 +3513,6 @@ Dera
 Parfums De Marly
 HUILE
 Boss
-Fashion Style
 Mikalla
 Crocs Kids
 Flip
@@ -3560,7 +3549,7 @@ Cella
 Crown
 Plasticine
 Mabox
-Hisense Original
+Hisense
 5 Star
 Cp
 BSG Organics
@@ -5150,7 +5139,6 @@ Kimocat
 Kinston
 Katie Alice
 Kenyan Rural Women
-KÃ©ranove
 Kawu
 Kathrein
 Jumree
@@ -6090,7 +6078,7 @@ Brylcreem
 Bubchen
 Budweiser
 Bugatti
-Bulgari (Bvlgari)
+Bulgari
 Bulova
 Bumble and bumble
 Burt's Bees
