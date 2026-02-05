@@ -8,74 +8,24 @@ from typing import Dict, List, Tuple, Optional, Set
 import traceback
 import json
 import xlsxwriter
-import altair as alt
-import requests
-from difflib import SequenceMatcher
 import zipfile
 import concurrent.futures
 import os
+import requests
+import numpy as np
 
 # -------------------------------------------------
-# 0. IMAGE HASHING & PROCESSING IMPORTS
+# 0. IMAGE PROCESSING IMPORTS (For Poor Images Only)
 # -------------------------------------------------
 try:
-    import imagehash
     from PIL import Image
     import cv2
-    import numpy as np
 except ImportError:
-    st.error("Missing libraries! Please run: pip install imagehash Pillow requests opencv-python-headless numpy")
+    st.error("Missing libraries! Please run: pip install Pillow requests opencv-python-headless numpy")
     st.stop()
 
-# Global Cache for Image Hashes
-_IMAGE_HASH_CACHE = {}
-
-def clear_image_cache():
-    """Clear the image hash cache to free memory."""
-    global _IMAGE_HASH_CACHE
-    _IMAGE_HASH_CACHE.clear()
-
-def fetch_single_hash(url: str) -> None:
-    """Helper function for the thread pool to fetch and cache a single hash."""
-    if not url or url in _IMAGE_HASH_CACHE:
-        return
-
-    try:
-        # [STABILITY] Increased timeout to 10s and added headers to prevent 403 blocks
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        response = requests.get(url, timeout=10, stream=True, headers=headers)
-        
-        if response.status_code == 200:
-            img = Image.open(response.raw)
-            # [OPTIMIZATION] Resize large images to 256x256 before hashing to speed up processing
-            img.thumbnail((256, 256), Image.Resampling.LANCZOS)
-            _IMAGE_HASH_CACHE[url] = imagehash.phash(img)
-        else:
-            _IMAGE_HASH_CACHE[url] = None
-    except Exception:
-        _IMAGE_HASH_CACHE[url] = None
-
-def prefetch_image_hashes(urls: List[str], max_workers: int = 10) -> None:
-    """
-    Downloads and hashes a list of URLs in parallel.
-    Populates the global _IMAGE_HASH_CACHE.
-    """
-    valid_urls = [u for u in urls if u and pd.notna(u) and str(u).lower() not in ['nan', 'none', ''] and u not in _IMAGE_HASH_CACHE]
-    valid_urls = list(set(valid_urls))
-    
-    if not valid_urls:
-        return
-
-    # [STABILITY] Reduced max_workers from 20 to 10 to prevent network congestion/timeouts
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        executor.map(fetch_single_hash, valid_urls)
-
-def get_image_hash_fast(url: str) -> Optional[imagehash.ImageHash]:
-    """Retreives hash from cache (instant)."""
-    return _IMAGE_HASH_CACHE.get(str(url).strip())
-
 # -------------------------------------------------
-# Constants & Mapping
+# CONSTANTS & MAPPING
 # -------------------------------------------------
 PRODUCTSETS_COLS = ["ProductSetSid", "ParentSKU", "Status", "Reason", "Comment", "FLAG", "SellerName"]
 REJECTION_REASONS_COLS = ['CODE - REJECTION_REASON', 'COMMENT']
@@ -142,7 +92,7 @@ def create_match_key(row: pd.Series) -> str:
     return f"{brand}|{name}|{color}"
 
 # -------------------------------------------------
-# CORE DUPLICATE LOGIC
+# ATTRIBUTE EXTRACTION (Needed for Text Duplicate Check)
 # -------------------------------------------------
 from dataclasses import dataclass
 
@@ -179,76 +129,48 @@ class ProductAttributes:
     
     def get_variant_key(self) -> str:
         parts = [self.base_name]
-        if self.colors:
-            parts.append("_color_" + "_".join(sorted(self.colors)))
-        if self.sizes:
-            parts.append("_size_" + "_".join(sorted(self.sizes)))
-        if self.storage:
-            parts.append("_storage_" + "_".join(sorted(self.storage)))
-        if self.memory:
-            parts.append("_memory_" + "_".join(sorted(self.memory)))
-        if self.quantities:
-            parts.append("_qty_" + "_".join(sorted(self.quantities)))
+        if self.colors: parts.append("_color_" + "_".join(sorted(self.colors)))
+        if self.sizes: parts.append("_size_" + "_".join(sorted(self.sizes)))
+        if self.storage: parts.append("_storage_" + "_".join(sorted(self.storage)))
+        if self.memory: parts.append("_memory_" + "_".join(sorted(self.memory)))
+        if self.quantities: parts.append("_qty_" + "_".join(sorted(self.quantities)))
         return "|".join(parts).lower()
     
     def get_base_key(self) -> str:
         return self.base_name.lower()
 
-# ============================================================================
-# ATTRIBUTE EXTRACTION
-# ============================================================================
-
 def extract_colors(text: str, explicit_color: Optional[str] = None) -> Set[str]:
-    """Extract colors from text"""
     colors = set()
-    if not text:
-        text = ""
+    if not text: text = ""
     text_lower = str(text).lower()
     
     if explicit_color and pd.notna(explicit_color):
         color_lower = str(explicit_color).lower().strip()
         for variant, base in COLOR_VARIANT_TO_BASE.items():
-            if variant in color_lower:
-                colors.add(base)
+            if variant in color_lower: colors.add(base)
     
     for variant, base in COLOR_VARIANT_TO_BASE.items():
         if re.search(r'\b' + re.escape(variant) + r'\b', text_lower):
             colors.add(base)
-    
     return colors
 
 def extract_sizes(text: str) -> Set[str]:
-    """Extract sizes from text"""
-    if not text:
-        return set()
+    if not text: return set()
     sizes = set()
     text_lower = str(text).lower()
-    
     size_map = {
-        r'\bxxs\b|2xs': 'xxs',
-        r'\bxs\b|xsmall|extra small': 'xs',
-        r'\bs\b|small': 'small',
-        r'\bm\b|medium': 'medium',
-        r'\bl\b|large': 'large',
-        r'\bxl\b|xlarge|extra large': 'xl',
-        r'\bxxl\b|2xl': 'xxl',
-        r'\bxxxl\b|3xl': 'xxxl'
+        r'\bxxs\b|2xs': 'xxs', r'\bxs\b|xsmall|extra small': 'xs', r'\bs\b|small': 'small',
+        r'\bm\b|medium': 'medium', r'\bl\b|large': 'large', r'\bxl\b|xlarge|extra large': 'xl',
+        r'\bxxl\b|2xl': 'xxl', r'\bxxxl\b|3xl': 'xxxl'
     }
-    
     for pattern, size in size_map.items():
-        if re.search(pattern, text_lower):
-            sizes.add(size)
-    
-    # Dimensions
+        if re.search(pattern, text_lower): sizes.add(size)
     for match in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(?:inch|inches|")\b', text_lower):
         sizes.add(f"{match.group(1)}inch")
-    
     return sizes
 
 def extract_storage(text: str) -> Set[str]:
-    """Extract storage capacities"""
-    if not text:
-        return set()
+    if not text: return set()
     storage = set()
     for match in re.finditer(r'\b(\d+)\s*(?:gb|tb)\b', str(text).lower()):
         value, unit = match.group(1), match.group(0)
@@ -256,26 +178,17 @@ def extract_storage(text: str) -> Set[str]:
     return storage
 
 def extract_memory(text: str) -> Set[str]:
-    """Extract RAM"""
-    if not text:
-        return set()
+    if not text: return set()
     memory = set()
     for match in re.finditer(r'\b(\d+)\s*(?:gb|mb)\s*(?:ram|memory|ddr)\b', str(text).lower()):
         value = match.group(1)
-        if 2 <= int(value) <= 128:
-            memory.add(f"{value}gb")
+        if 2 <= int(value) <= 128: memory.add(f"{value}gb")
     return memory
 
 def extract_quantities(text: str) -> Set[str]:
-    """Extract pack quantities"""
-    if not text:
-        return set()
+    if not text: return set()
     quantities = set()
-    patterns = [
-        r'\b(\d+)[- ]?pack\b',
-        r'\bpack\s+of\s+(\d+)\b',
-        r'\b(\d+)[- ]?(?:pieces?|pcs?)\b'
-    ]
+    patterns = [r'\b(\d+)[- ]?pack\b', r'\bpack\s+of\s+(\d+)\b', r'\b(\d+)[- ]?(?:pieces?|pcs?)\b']
     text_lower = str(text).lower()
     for pattern in patterns:
         for match in re.finditer(pattern, text_lower):
@@ -283,234 +196,51 @@ def extract_quantities(text: str) -> Set[str]:
     return quantities
 
 def remove_attributes(text: str) -> str:
-    """Remove all attributes to get base name"""
-    if not text:
-        return ""
-    
+    if not text: return ""
     base = str(text).lower()
-    
-    # Remove colors
     for variant in COLOR_VARIANT_TO_BASE.keys():
         base = re.sub(r'\b' + re.escape(variant) + r'\b', '', base)
-    
-    # Remove sizes, storage, memory, dimensions
     base = re.sub(r'\b(?:xxs|xs|small|medium|large|xl|xxl|xxxl)\b', '', base)
     base = re.sub(r'\b\d+\s*(?:gb|tb|inch|inches|"|ram|memory|ddr|pack|piece|pcs)\b', '', base)
-    
-    # Remove noise words
-    noise = ['new', 'original', 'genuine', 'authentic', 'official', 'premium', 
-             'quality', 'best', 'hot', 'sale', 'promo', 'deal']
+    noise = ['new', 'original', 'genuine', 'authentic', 'official', 'premium', 'quality', 'best', 'hot', 'sale', 'promo', 'deal']
     for word in noise:
         base = re.sub(r'\b' + word + r'\b', '', base)
-    
     base = re.sub(r'[^\w\s]', ' ', base)
     base = re.sub(r'\s+', ' ', base)
     return base.strip()
 
-def extract_product_attributes(name: str, explicit_color: Optional[str] = None, 
-                               brand: Optional[str] = None) -> ProductAttributes:
-    """Master extraction function"""
-    if not name or pd.isna(name):
-        name = ""
-    
+def extract_product_attributes(name: str, explicit_color: Optional[str] = None, brand: Optional[str] = None) -> ProductAttributes:
+    if not name or pd.isna(name): name = ""
     name_str = str(name).strip()
-    
     colors = extract_colors(name_str, explicit_color)
     sizes = extract_sizes(name_str)
     storage = extract_storage(name_str)
     memory = extract_memory(name_str)
     quantities = extract_quantities(name_str)
     
-    attrs = ProductAttributes(
-        base_name="",
-        colors=colors,
-        sizes=sizes,
-        storage=storage,
-        memory=memory,
-        quantities=quantities,
-        raw_name=name_str
-    )
-    
+    attrs = ProductAttributes(base_name="", colors=colors, sizes=sizes, storage=storage, memory=memory, quantities=quantities, raw_name=name_str)
     base_name = remove_attributes(name_str)
-    
     if brand and pd.notna(brand):
         brand_lower = str(brand).lower().strip()
         if brand_lower not in base_name and brand_lower not in ['generic', 'fashion']:
             base_name = f"{brand_lower} {base_name}"
-    
     attrs.base_name = base_name.strip()
     return attrs
 
-# ============================================================================
-# DUPLICATE DETECTION
-# ============================================================================
-
-def check_duplicate_products(
-    data: pd.DataFrame,
-    exempt_categories: List[str] = None,
-    similarity_threshold: float = 0.70,
-    known_colors: List[str] = None,
-    use_image_hash: bool = False,
-    **kwargs
-) -> pd.DataFrame:
-    
-    # Convert similarity_threshold to 0-100 scale
-    duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
-    
-    # Validate required columns
-    required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
-    if not all(col in data.columns for col in required_cols):
-        return pd.DataFrame(columns=data.columns)
-    
-    data_to_check = data.copy()
-    
-    # Apply category exemptions
-    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
-        data_cats = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
-        exempt_set = set(clean_category_code(c) for c in exempt_categories)
-        data_to_check = data_to_check[~data_cats.isin(exempt_set)]
-    
-    if data_to_check.empty:
-        return pd.DataFrame(columns=data.columns)
-    
-    # Extract attributes
-    def extract_attrs_row(row):
-        return extract_product_attributes(
-            name=row['NAME'],
-            explicit_color=row.get('COLOR'),
-            brand=row.get('BRAND')
-        )
-    
-    data_to_check['_attributes'] = data_to_check.apply(extract_attrs_row, axis=1)
-    data_to_check['_base_key'] = data_to_check['_attributes'].apply(lambda x: x.get_base_key())
-    data_to_check['_variant_key'] = data_to_check['_attributes'].apply(lambda x: x.get_variant_key())
-    data_to_check['_seller_lower'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
-    
-    # Group and detect duplicates
-    rejected_sids = set()
-    duplicate_details = {}
-    
-    grouped = data_to_check.groupby(['_seller_lower', '_base_key'])
-    
-    for (seller, base_key), group in grouped:
-        if len(group) < 2:
-            continue
-        
-        # Sub-group by variant
-        variant_groups = group.groupby('_variant_key')
-        
-        for variant_key, variant_group in variant_groups:
-            if len(variant_group) < 2:
-                continue
-            
-            products = variant_group.to_dict('records')
-            
-            # Compare within same variant
-            for i in range(len(products)):
-                current = products[i]
-                current_sid = str(current['PRODUCT_SET_SID'])
-                
-                if current_sid in rejected_sids:
-                    continue
-                
-                potential_duplicates = []
-                
-                for j in range(i + 1, len(products)):
-                    compare = products[j]
-                    compare_sid = str(compare['PRODUCT_SET_SID'])
-                    
-                    if compare_sid in rejected_sids:
-                        continue
-                    
-                    # Calculate similarity score
-                    attrs_A = current['_attributes']
-                    attrs_B = compare['_attributes']
-                    
-                    score = 0
-                    
-                    # Name similarity (70 points)
-                    tokens_A = set(attrs_A.base_name.split())
-                    tokens_B = set(attrs_B.base_name.split())
-                    if tokens_A and tokens_B:
-                        similarity = len(tokens_A & tokens_B) / len(tokens_A | tokens_B)
-                        score += similarity * 70
-                    
-                    # Same seller bonus (30 points)
-                    if current['_seller_lower'] == compare['_seller_lower']:
-                        score += 30
-                    
-                    if score >= duplicate_threshold:
-                        potential_duplicates.append({
-                            'sid': compare_sid,
-                            'score': score
-                        })
-                
-                # Flag if 2+ duplicates found
-                if len(potential_duplicates) >= 2:
-                    for dup in potential_duplicates:
-                        rejected_sids.add(dup['sid'])
-                        
-                        attrs = current['_attributes']
-                        variant_desc = []
-                        if attrs.colors:
-                            variant_desc.append(f"Color: {', '.join(attrs.colors)}")
-                        if attrs.sizes:
-                            variant_desc.append(f"Size: {', '.join(attrs.sizes)}")
-                        if attrs.storage:
-                            variant_desc.append(f"Storage: {', '.join(attrs.storage)}")
-                        
-                        duplicate_details[dup['sid']] = {
-                            'base': base_key[:40],
-                            'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
-                            'score': dup['score']
-                        }
-    
-    # Build results
-    if not rejected_sids:
-        return pd.DataFrame(columns=data.columns)
-    
-    rejected_df = data_to_check[
-        data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)
-    ].copy()
-    
-    # Add comments
-    def add_comment(row):
-        sid = str(row['PRODUCT_SET_SID'])
-        if sid in duplicate_details:
-            details = duplicate_details[sid]
-            return f"Duplicate: Base '{details['base']}', {details['variant']}, Confidence: {details['score']:.0f}%"
-        return "Duplicate detected"
-    
-    rejected_df['Comment_Detail'] = rejected_df.apply(add_comment, axis=1)
-    
-    # Clean up
-    cols_to_drop = ['_attributes', '_base_key', '_variant_key', '_seller_lower']
-    rejected_df = rejected_df.drop(columns=[c for c in cols_to_drop if c in rejected_df.columns])
-    
-    return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
-
-
-# ============================================================================
-# HELPER & LOADING FUNCTIONS (FIXED)
-# ============================================================================
+# -------------------------------------------------
+# HELPER & LOADING FUNCTIONS
+# -------------------------------------------------
 
 def load_txt_file(filename: str) -> List[str]:
-    """
-    Robust TXT loader with explicit error reporting to the UI.
-    This fixes the 'Silent Failure' issue where brands.txt seemed to be not loaded.
-    """
     try:
         full_path = os.path.abspath(filename)
         if not os.path.exists(full_path):
             st.warning(f"⚠️ File Not Found: {filename} (looked in {os.getcwd()})")
             return []
-            
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
-            
         if not data:
             st.warning(f"⚠️ File is Empty: {filename}")
-            
         return data
     except UnicodeDecodeError:
         st.error(f"❌ Encoding Error: '{filename}' is not UTF-8.")
@@ -522,9 +252,7 @@ def load_txt_file(filename: str) -> List[str]:
 @st.cache_data(ttl=3600)
 def load_excel_file(filename: str, column: Optional[str] = None):
     try:
-        if not os.path.exists(filename):
-             return [] if column else pd.DataFrame()
-             
+        if not os.path.exists(filename): return [] if column else pd.DataFrame()
         df = pd.read_excel(filename, engine='openpyxl', dtype=str)
         df.columns = df.columns.str.strip()
         if column and column in df.columns:
@@ -539,14 +267,12 @@ def load_restricted_brands_config(filename: str) -> Dict:
     config = {}
     try:
         if not os.path.exists(filename): return {}
-        
         df1 = pd.read_excel(filename, sheet_name=0, engine='openpyxl', dtype=str)
         df1.columns = df1.columns.str.strip()
         try:
             df2 = pd.read_excel(filename, sheet_name=1, engine='openpyxl', dtype=str)
             df2.columns = df2.columns.str.strip()
-        except:
-            df2 = pd.DataFrame()
+        except: df2 = pd.DataFrame()
 
         for _, row in df1.iterrows():
             brand_raw = str(row.get('Brand', '')).strip()
@@ -559,8 +285,7 @@ def load_restricted_brands_config(filename: str) -> Dict:
             for col in df1.columns:
                 if 'Unnamed' in col or col == 'Sellers':
                     val = str(row[col]).strip()
-                    if val and val.lower() != 'nan' and col != 'Brand' and col != 'check name':
-                          sellers.add(val.lower())
+                    if val and val.lower() != 'nan' and col != 'Brand' and col != 'check name': sellers.add(val.lower())
             config[brand_key] = {'sellers': sellers, 'categories': None}
 
         if not df2.empty:
@@ -577,7 +302,6 @@ def load_restricted_brands_config(filename: str) -> Dict:
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
-        # Default mapping if file missing, to prevent crashes
         default_map = {
             'Restricted brands': ('1000024 - Product does not have a license to be sold via Jumia (Not Authorized)', "This brand is restricted and can only be sold by authorized sellers."),
             'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs. Please consolidate variations into a single listing."),
@@ -588,9 +312,7 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
-    # Use helper to prevent crashes if file missing
-    def safe_load_txt(f):
-        return load_txt_file(f) if os.path.exists(f) else []
+    def safe_load_txt(f): return load_txt_file(f) if os.path.exists(f) else []
 
     files = {
         'blacklisted_words': safe_load_txt('blacklisted.txt'),
@@ -615,7 +337,7 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in safe_load_txt('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': safe_load_txt('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'known_brands': safe_load_txt('brands.txt'), # Explicit load here
+        'known_brands': safe_load_txt('brands.txt'), 
     }
     return files
 
@@ -707,71 +429,147 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame:
-    if 'MAIN_IMAGE' not in data.columns:
-        return pd.DataFrame(columns=data.columns)
-
+    if 'MAIN_IMAGE' not in data.columns: return pd.DataFrame(columns=data.columns)
     valid_data = data[data['MAIN_IMAGE'].notna() & (data['MAIN_IMAGE'].str.strip() != '')].copy()
-    if valid_data.empty:
-        return pd.DataFrame(columns=data.columns)
+    if valid_data.empty: return pd.DataFrame(columns=data.columns)
 
     def analyze_image_quality(row_data):
         sid = row_data[0]
         url = row_data[1]
-        
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             resp = requests.get(url, timeout=5, headers=headers)
-            if resp.status_code != 200:
-                return None
+            if resp.status_code != 200: return None
             
             image_array = np.asarray(bytearray(resp.content), dtype="uint8")
             img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-            
             if img is None: return None
 
             h, w, _ = img.shape
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            if h < 300 or w < 300:
-                return (sid, f"Low Resolution ({w}x{h})")
-
+            if h < 300 or w < 300: return (sid, f"Low Resolution ({w}x{h})")
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100:
-                return (sid, f"Blurry (Score: {int(blur_score)})")
-
+            if blur_score < 100: return (sid, f"Blurry (Score: {int(blur_score)})")
             avg_brightness = np.mean(gray)
-            if avg_brightness < 40:
-                return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
-
+            if avg_brightness < 40: return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
             _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
             bright_ratio = np.count_nonzero(bright_mask) / gray.size
-            if bright_ratio > 0.05: 
-                return (sid, "Flash/Glare Detected")
-
+            if bright_ratio > 0.05: return (sid, "Flash/Glare Detected")
             return None
-            
-        except Exception:
-            return None
+        except Exception: return None
 
     rejected_reasons = {}
     rows_to_process = list(zip(valid_data['PRODUCT_SET_SID'], valid_data['MAIN_IMAGE']))
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         results = executor.map(analyze_image_quality, rows_to_process)
-        
         for res in results:
             if res:
                 sid, reason = res
                 rejected_reasons[sid] = reason
 
-    if not rejected_reasons:
-        return pd.DataFrame(columns=data.columns)
-        
+    if not rejected_reasons: return pd.DataFrame(columns=data.columns)
     mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
     result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
     result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
-    
     return result_df
+
+def check_duplicate_products(
+    data: pd.DataFrame,
+    exempt_categories: List[str] = None,
+    similarity_threshold: float = 0.70,
+    known_colors: List[str] = None,
+    **kwargs
+) -> pd.DataFrame:
+    """
+    Duplicate Check (Text-Based Only)
+    Recognizes color/size/storage variants as DIFFERENT products.
+    """
+    duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
+    required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
+    if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
+    
+    data_to_check = data.copy()
+    if exempt_categories and 'CATEGORY_CODE' in data_to_check.columns:
+        data_cats = data_to_check['CATEGORY_CODE'].apply(clean_category_code)
+        exempt_set = set(clean_category_code(c) for c in exempt_categories)
+        data_to_check = data_to_check[~data_cats.isin(exempt_set)]
+    
+    if data_to_check.empty: return pd.DataFrame(columns=data.columns)
+    
+    def extract_attrs_row(row):
+        return extract_product_attributes(name=row['NAME'], explicit_color=row.get('COLOR'), brand=row.get('BRAND'))
+    
+    data_to_check['_attributes'] = data_to_check.apply(extract_attrs_row, axis=1)
+    data_to_check['_base_key'] = data_to_check['_attributes'].apply(lambda x: x.get_base_key())
+    data_to_check['_variant_key'] = data_to_check['_attributes'].apply(lambda x: x.get_variant_key())
+    data_to_check['_seller_lower'] = data_to_check['SELLER_NAME'].astype(str).str.strip().str.lower()
+    
+    rejected_sids = set()
+    duplicate_details = {}
+    grouped = data_to_check.groupby(['_seller_lower', '_base_key'])
+    
+    for (seller, base_key), group in grouped:
+        if len(group) < 2: continue
+        variant_groups = group.groupby('_variant_key')
+        
+        for variant_key, variant_group in variant_groups:
+            if len(variant_group) < 2: continue
+            products = variant_group.to_dict('records')
+            
+            for i in range(len(products)):
+                current = products[i]
+                current_sid = str(current['PRODUCT_SET_SID'])
+                if current_sid in rejected_sids: continue
+                potential_duplicates = []
+                
+                for j in range(i + 1, len(products)):
+                    compare = products[j]
+                    compare_sid = str(compare['PRODUCT_SET_SID'])
+                    if compare_sid in rejected_sids: continue
+                    
+                    attrs_A = current['_attributes']
+                    attrs_B = compare['_attributes']
+                    score = 0
+                    tokens_A = set(attrs_A.base_name.split())
+                    tokens_B = set(attrs_B.base_name.split())
+                    if tokens_A and tokens_B:
+                        similarity = len(tokens_A & tokens_B) / len(tokens_A | tokens_B)
+                        score += similarity * 70
+                    if current['_seller_lower'] == compare['_seller_lower']: score += 30
+                    
+                    if score >= duplicate_threshold:
+                        potential_duplicates.append({'sid': compare_sid, 'score': score})
+                
+                if len(potential_duplicates) >= 2:
+                    for dup in potential_duplicates:
+                        rejected_sids.add(dup['sid'])
+                        attrs = current['_attributes']
+                        variant_desc = []
+                        if attrs.colors: variant_desc.append(f"Color: {', '.join(attrs.colors)}")
+                        if attrs.sizes: variant_desc.append(f"Size: {', '.join(attrs.sizes)}")
+                        if attrs.storage: variant_desc.append(f"Storage: {', '.join(attrs.storage)}")
+                        duplicate_details[dup['sid']] = {
+                            'base': base_key[:40],
+                            'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
+                            'score': dup['score']
+                        }
+    
+    if not rejected_sids: return pd.DataFrame(columns=data.columns)
+    rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
+    
+    def add_comment(row):
+        sid = str(row['PRODUCT_SET_SID'])
+        if sid in duplicate_details:
+            details = duplicate_details[sid]
+            return f"Duplicate: Base '{details['base']}', {details['variant']}, Confidence: {details['score']:.0f}%"
+        return "Duplicate detected"
+    
+    rejected_df['Comment_Detail'] = rejected_df.apply(add_comment, axis=1)
+    cols_to_drop = ['_attributes', '_base_key', '_variant_key', '_seller_lower']
+    rejected_df = rejected_df.drop(columns=[c for c in cols_to_drop if c in rejected_df.columns])
+    return rejected_df[data.columns].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_restricted_brands(data: pd.DataFrame, restricted_config: Dict) -> pd.DataFrame:
     if not all(c in data.columns for c in ['NAME', 'BRAND', 'SELLER_NAME']) or not restricted_config:
@@ -1043,8 +841,7 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
             if name_clean.startswith(brand_clean):
                 if len(name_clean) > len(brand_clean):
                     next_char = name_clean[len(brand_clean)]
-                    if next_char.isalnum():
-                        continue 
+                    if next_char.isalnum(): continue 
                 return brand.title()
         return None
 
@@ -1059,7 +856,7 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
-def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, use_image_hash: bool = True, perform_quality_check: bool = True):
+def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, perform_quality_check: bool = True):
     # Ensure ID match compatibility
     data['PRODUCT_SET_SID'] = data['PRODUCT_SET_SID'].astype(str).str.strip()
     
@@ -1090,7 +887,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
-            'use_image_hash': use_image_hash
         }),
     ]
     
@@ -1426,287 +1222,184 @@ try:
             st.rerun()
         
         st.header("Performance Settings")
-        use_image_hash = st.checkbox("Enable Image Hashing", value=True, help="Disable for faster processing")
         check_image_quality = st.checkbox("Enable Quality Check", value=True, help="Check for blur/darkness")
         
-        if st.button("🧹 Clear Image Cache"):
-            clear_image_cache()
-            st.success("Image cache cleared!")
 except:
-    use_image_hash = True
     check_image_quality = True
 
-tab1, tab2, tab3 = st.tabs(["Daily Validation", "Weekly Analysis", "Data Lake"])
-
 # -------------------------------------------------
-# TAB 1: DAILY VALIDATION
+# DAILY VALIDATION (NOW THE MAIN VIEW)
 # -------------------------------------------------
-with tab1:
-    st.header("Daily Product Validation")
-    country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
-    country_validator = CountryValidator(country)
-    
-    uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
-    
-    if 'final_report' not in st.session_state: st.session_state.final_report = pd.DataFrame()
-    if 'all_data_map' not in st.session_state: st.session_state.all_data_map = pd.DataFrame()
-    if 'intersection_sids' not in st.session_state: st.session_state.intersection_sids = set()
+st.header("Daily Product Validation")
+country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
+country_validator = CountryValidator(country)
 
-    if uploaded_files:
-        current_file_signature = sorted([f.name + str(f.size) for f in uploaded_files])
-        if 'last_processed_files' not in st.session_state or st.session_state.last_processed_files != current_file_signature:
-            try:
-                current_date = datetime.now().strftime('%Y-%m-%d')
-                file_prefix = country_validator.code
-                all_dfs = []
-                file_sids_sets = []
-                
-                for uploaded_file in uploaded_files:
-                    uploaded_file.seek(0)
-                    try:
-                        if uploaded_file.name.endswith('.xlsx'):
-                            raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
-                        else:
-                            try:
-                                raw_data = pd.read_csv(uploaded_file, dtype=str)
-                                if len(raw_data.columns) <= 1:
-                                    uploaded_file.seek(0)
-                                    raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                            except:
-                                uploaded_file.seek(0)
-                                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
-                                
-                        std_data = standardize_input_data(raw_data)
-                        if 'PRODUCT_SET_SID' in std_data.columns:
-                            std_data['PRODUCT_SET_SID'] = std_data['PRODUCT_SET_SID'].astype(str).str.strip()
-                            file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
-                        all_dfs.append(std_data)
-                    except Exception as e:
-                        st.error(f"Failed to read file {uploaded_file.name}: {e}")
-                        st.stop()
-                
-                if not all_dfs:
-                    st.error("No valid data loaded.")
-                    st.stop()
-                
-                merged_data = pd.concat(all_dfs, ignore_index=True)
-                st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
-                
-                intersection_count = 0
-                intersection_sids = set()
-                if len(file_sids_sets) > 1:
-                    intersection_sids = set.intersection(*file_sids_sets)
-                    intersection_count = len(intersection_sids)
-                
-                st.session_state.intersection_sids = intersection_sids
-                data_prop = propagate_metadata(merged_data)
-                is_valid, errors = validate_input_schema(data_prop)
-                
-                if is_valid:
-                    data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
-                    data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
-                    data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
-                    for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
-                        if col in data.columns: data[col] = data[col].astype(str).fillna('')
-                    if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
-                    
-                    with st.spinner("Running validations..."):
-                        common_sids_to_pass = intersection_sids if intersection_count > 0 else None
-                        final_report, flag_dfs = validate_products(
-                            data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, 
-                            use_image_hash=use_image_hash, 
-                            perform_quality_check=check_image_quality
-                        )
-                        st.session_state.final_report = final_report
-                        st.session_state.all_data_map = data
-                        st.session_state.intersection_count = intersection_count
-                        st.session_state.last_processed_files = current_file_signature
-                        
-                        approved_df = final_report[final_report['Status'] == 'Approved']
-                        rejected_df = final_report[final_report['Status'] == 'Rejected']
-                        log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
-                else:
-                    for e in errors: st.error(e)
-            except Exception as e:
-                st.error(f"Error: {e}")
-                st.code(traceback.format_exc())
+uploaded_files = st.file_uploader("Upload files (CSV/XLSX)", type=['csv', 'xlsx'], accept_multiple_files=True, key="daily_files")
 
-        if not st.session_state.final_report.empty:
-            final_report = st.session_state.final_report
-            data = st.session_state.all_data_map
-            intersection_count = st.session_state.intersection_count
-            intersection_sids = st.session_state.intersection_sids
+if 'final_report' not in st.session_state: st.session_state.final_report = pd.DataFrame()
+if 'all_data_map' not in st.session_state: st.session_state.all_data_map = pd.DataFrame()
+if 'intersection_sids' not in st.session_state: st.session_state.intersection_sids = set()
+
+if uploaded_files:
+    current_file_signature = sorted([f.name + str(f.size) for f in uploaded_files])
+    if 'last_processed_files' not in st.session_state or st.session_state.last_processed_files != current_file_signature:
+        try:
             current_date = datetime.now().strftime('%Y-%m-%d')
             file_prefix = country_validator.code
-
-            approved_df = final_report[final_report['Status'] == 'Approved']
-            rejected_df = final_report[final_report['Status'] == 'Rejected']
+            all_dfs = []
+            file_sids_sets = []
             
-            st.sidebar.header("Seller Options")
-            seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
-            sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
-            
-            st.markdown("---")
-            with st.container():
-                st.header("Overall Results")
-                c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("Total", len(data))
-                c2.metric("Approved", len(approved_df))
-                c3.metric("Rejected", len(rejected_df))
-                rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
-                c4.metric("Rate", f"{rt:.1f}%")
-                c5.metric("SKUs in Both Files", intersection_count)
-            
-            if intersection_count > 0:
-                common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
-                csv_buffer = BytesIO()
-                common_skus_df.to_csv(csv_buffer, index=False)
-                st.download_button(label=f"📥 Download Common SKUs ({intersection_count})", data=csv_buffer.getvalue(), file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv", mime="text/csv")
-            
-            st.subheader("Validation Results by Flag")
-            if not rejected_df.empty:
-                active_flags = rejected_df['FLAG'].unique()
-                display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
-                
-                for title in active_flags:
-                    df_flagged_report = rejected_df[rejected_df['FLAG'] == title]
-                    df_display = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
-                    df_display = df_display[[c for c in display_cols if c in df_display.columns]]
-
-                    with st.expander(f"{title} ({len(df_display)})"):
-                        col1, col2 = st.columns([1, 1])
-                        with col1: search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
-                        with col2:
-                            all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
-                            seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
-                        
-                        if search_term:
-                            mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
-                            df_display = df_display[mask]
-                        if seller_filter: df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
-                        if len(df_display) != len(df_flagged_report): st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
-
-                        select_all_mode = st.checkbox("Select All", key=f"sa_{title}")
-                        df_display.insert(0, "Select", select_all_mode)
-                        
-                        edited_df = st.data_editor(df_display, hide_index=True, use_container_width=True, column_config={"Select": st.column_config.CheckboxColumn(required=True)}, disabled=[c for c in df_display.columns if c != "Select"], key=f"editor_{title}_{select_all_mode}")
-                        
-                        to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
-                        if to_approve:
-                            if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
-                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(to_approve), ['Status', 'Reason', 'Comment', 'FLAG']] = ['Approved', '', '', 'Approved by User']
-                                st.success("Updated! Rerunning to refresh...")
-                                st.rerun()
-
-                        flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
-                        st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
-            else:
-                st.success("No rejections found! All products approved.")
-
-            st.markdown("---")
-            st.header("Overall Exports")
-            full_data_merged = prepare_full_data_merged(data, final_report)
-            final_rep_data, final_rep_name, final_rep_mime = generate_smart_export(final_report, f"{file_prefix}_Final_Report_{current_date}", 'simple', support_files['reasons'])
-            rej_data, rej_name, rej_mime = generate_smart_export(rejected_df, f"{file_prefix}_Rejected_{current_date}", 'simple', support_files['reasons'])
-            app_data, app_name, app_mime = generate_smart_export(approved_df, f"{file_prefix}_Approved_{current_date}", 'simple', support_files['reasons'])
-            full_data, full_name, full_mime = generate_smart_export(full_data_merged, f"{file_prefix}_Full_Data_{current_date}", 'full')
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.download_button("Final Report", final_rep_data, final_rep_name, mime=final_rep_mime)
-            c2.download_button("Rejected", rej_data, rej_name, mime=rej_mime)
-            c3.download_button("Approved", app_data, app_name, mime=app_mime)
-            c4.download_button("Full Data", full_data, full_name, mime=full_mime)
-
-# -------------------------------------------------
-# TAB 2: WEEKLY ANALYSIS
-# -------------------------------------------------
-with tab2:
-    st.header("Weekly Analysis Dashboard")
-    st.info("Upload multiple 'Full Data' files exported from the Daily tab to see aggregated trends.")
-    weekly_files = st.file_uploader("Upload Full Data Files (XLSX/CSV)", accept_multiple_files=True, type=['xlsx', 'csv'], key="weekly_files", label_visibility="collapsed")
-    if weekly_files:
-        combined_df = pd.DataFrame()
-        with st.spinner("Aggregating files..."):
-            for f in weekly_files:
+            for uploaded_file in uploaded_files:
+                uploaded_file.seek(0)
                 try:
-                    if f.name.endswith('.xlsx'):
-                        try: df = pd.read_excel(f, sheet_name='ProductSets', engine='openpyxl', dtype=str)
-                        except: f.seek(0); df = pd.read_excel(f, engine='openpyxl', dtype=str)
-                    else: df = pd.read_csv(f, dtype=str)
-                    df.columns = df.columns.str.strip()
-                    df = standardize_input_data(df)
-                    for col in ['Status', 'Reason', 'FLAG', 'SELLER_NAME', 'CATEGORY', 'PRODUCT_SET_SID']:
-                        if col not in df.columns: df[col] = pd.NA
-                    combined_df = pd.concat([combined_df, df], ignore_index=True)
-                except Exception as e: st.error(f"Error reading {f.name}: {e}")
-        
-        if not combined_df.empty:
-            combined_df = combined_df.drop_duplicates(subset=['PRODUCT_SET_SID'])
-            rejected = combined_df[combined_df['Status'] == 'Rejected'].copy()
-            st.markdown("### Key Metrics")
-            with st.container():
-                m1, m2, m3, m4 = st.columns(4)
-                total = len(combined_df); rej_count = len(rejected); rej_rate = (rej_count/total * 100) if total else 0
-                m1.metric("Total Products Checked", f"{total:,}"); m2.metric("Total Rejected", f"{rej_count:,}"); m3.metric("Rejection Rate", f"{rej_rate:.1f}%"); m4.metric("Unique Sellers", f"{combined_df['SELLER_NAME'].nunique():,}")
-            st.markdown("---")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("Top Rejection Reasons (Flags)")
-                if not rejected.empty and 'FLAG' in rejected.columns:
-                    reason_counts = rejected['FLAG'].value_counts().reset_index(); reason_counts.columns = ['Flag', 'Count']
-                    chart = alt.Chart(reason_counts.head(10)).mark_bar().encode(x=alt.X('Count'), y=alt.Y('Flag', sort='-x'), color=alt.value('#FF6B6B'), tooltip=['Flag', 'Count']).interactive()
-                    st.altair_chart(chart, use_container_width=True)
-            with c2:
-                st.subheader("Top Rejected Categories")
-                if not rejected.empty and 'CATEGORY' in rejected.columns:
-                    cat_counts = rejected['CATEGORY'].value_counts().reset_index(); cat_counts.columns = ['Category', 'Count']
-                    chart = alt.Chart(cat_counts.head(10)).mark_bar().encode(x=alt.X('Count'), y=alt.Y('Category', sort='-x'), color=alt.value('#4ECDC4'), tooltip=['Category', 'Count']).interactive()
-                    st.altair_chart(chart, use_container_width=True)
-            c3, c4 = st.columns(2)
-            with c3:
-                st.subheader("Seller Trust Score (Top 10)")
-                if not combined_df.empty and 'SELLER_NAME' in combined_df.columns:
-                    seller_stats = combined_df.groupby('SELLER_NAME').agg(Total=('PRODUCT_SET_SID', 'count'), Rejected=('Status', lambda x: (x == 'Rejected').sum()))
-                    seller_stats['Trust Score'] = 100 - (seller_stats['Rejected'] / seller_stats['Total'] * 100)
-                    seller_stats = seller_stats.sort_values('Rejected', ascending=False).head(10).reset_index()
-                    chart = alt.Chart(seller_stats).mark_bar().encode(x=alt.X('SELLER_NAME', sort='-y'), y=alt.Y('Trust Score', scale=alt.Scale(domain=[0, 100])), color=alt.Color('Trust Score', scale=alt.Scale(scheme='redyellowgreen')), tooltip=['SELLER_NAME', 'Total', 'Rejected', 'Trust Score']).interactive()
-                    st.altair_chart(chart, use_container_width=True)
-            with c4:
-                st.subheader("Seller vs. Reason Breakdown (Top 5)")
-                if not rejected.empty and 'SELLER_NAME' in rejected.columns and 'Reason' in rejected.columns:
-                    top_sellers = rejected['SELLER_NAME'].value_counts().head(5).index.tolist()
-                    filtered_rej = rejected[rejected['SELLER_NAME'].isin(top_sellers)]
-                    if not filtered_rej.empty:
-                        breakdown = filtered_rej.groupby(['SELLER_NAME', 'Reason']).size().reset_index(name='Count')
-                        chart = alt.Chart(breakdown).mark_bar().encode(x=alt.X('SELLER_NAME'), y=alt.Y('Count'), color=alt.Color('Reason'), tooltip=['SELLER_NAME', 'Reason', 'Count']).interactive()
-                        st.altair_chart(chart, use_container_width=True)
-            st.markdown("---")
-            st.subheader("Top 5 Summaries")
-            if not rejected.empty:
-                top_reasons = rejected['FLAG'].value_counts().head(5).reset_index(); top_reasons.columns = ['Flag', 'Count']
-                top_sellers = rejected['SELLER_NAME'].value_counts().head(5).reset_index(); top_sellers.columns = ['Seller', 'Rejection Count']
-                top_cats = rejected['CATEGORY'].value_counts().head(5).reset_index(); top_cats.columns = ['Category', 'Rejection Count']
-                c1, c2, c3 = st.columns(3)
-                with c1: st.markdown("**Top 5 Reasons**"); st.dataframe(top_reasons, hide_index=True, use_container_width=True)
-                with c2: st.markdown("**Top 5 Sellers**"); st.dataframe(top_sellers, hide_index=True, use_container_width=True)
-                with c3: st.markdown("**Top 5 Categories**"); st.dataframe(top_cats, hide_index=True, use_container_width=True)
-                summary_excel = BytesIO()
-                with pd.ExcelWriter(summary_excel, engine='xlsxwriter') as writer:
-                    pd.DataFrame([{'Metric': 'Total Rejected', 'Value': len(rejected)}, {'Metric': 'Total Checked', 'Value': len(combined_df)}, {'Metric': 'Rejection Rate (%)', 'Value': (len(rejected)/len(combined_df)*100)}]).to_excel(writer, sheet_name='Summary', index=False)
-                    top_reasons.to_excel(writer, sheet_name='Top 5 Reasons', index=False)
-                    top_sellers.to_excel(writer, sheet_name='Top 5 Sellers', index=False)
-                    top_cats.to_excel(writer, sheet_name='Top 5 Categories', index=False)
-                summary_excel.seek(0)
-                st.download_button(label="📥 Download Summary Excel", data=summary_excel, file_name=f"Weekly_Analysis_Summary_{datetime.now().strftime('%Y-%m-%d')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    if uploaded_file.name.endswith('.xlsx'):
+                        raw_data = pd.read_excel(uploaded_file, engine='openpyxl', dtype=str)
+                    else:
+                        try:
+                            raw_data = pd.read_csv(uploaded_file, dtype=str)
+                            if len(raw_data.columns) <= 1:
+                                uploaded_file.seek(0)
+                                raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                        except:
+                            uploaded_file.seek(0)
+                            raw_data = pd.read_csv(uploaded_file, sep=';', encoding='ISO-8859-1', dtype=str)
+                            
+                    std_data = standardize_input_data(raw_data)
+                    if 'PRODUCT_SET_SID' in std_data.columns:
+                        std_data['PRODUCT_SET_SID'] = std_data['PRODUCT_SET_SID'].astype(str).str.strip()
+                        file_sids_sets.append(set(std_data['PRODUCT_SET_SID'].unique()))
+                    all_dfs.append(std_data)
+                except Exception as e:
+                    st.error(f"Failed to read file {uploaded_file.name}: {e}")
+                    st.stop()
+            
+            if not all_dfs:
+                st.error("No valid data loaded.")
+                st.stop()
+            
+            merged_data = pd.concat(all_dfs, ignore_index=True)
+            st.success(f"Loaded total {len(merged_data)} rows from {len(uploaded_files)} files.")
+            
+            intersection_count = 0
+            intersection_sids = set()
+            if len(file_sids_sets) > 1:
+                intersection_sids = set.intersection(*file_sids_sets)
+                intersection_count = len(intersection_sids)
+            
+            st.session_state.intersection_sids = intersection_sids
+            data_prop = propagate_metadata(merged_data)
+            is_valid, errors = validate_input_schema(data_prop)
+            
+            if is_valid:
+                data_filtered = filter_by_country(data_prop, country_validator, "Uploaded Files")
+                data = data_filtered.drop_duplicates(subset=['PRODUCT_SET_SID'], keep='first')
+                data_has_warranty_cols = all(col in data.columns for col in ['PRODUCT_WARRANTY', 'WARRANTY_DURATION'])
+                for col in ['NAME', 'BRAND', 'COLOR', 'SELLER_NAME', 'CATEGORY_CODE']:
+                    if col in data.columns: data[col] = data[col].astype(str).fillna('')
+                if 'COLOR_FAMILY' not in data.columns: data['COLOR_FAMILY'] = ""
+                
+                with st.spinner("Running validations..."):
+                    common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                    final_report, flag_dfs = validate_products(
+                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, 
+                        perform_quality_check=check_image_quality
+                    )
+                    st.session_state.final_report = final_report
+                    st.session_state.all_data_map = data
+                    st.session_state.intersection_count = intersection_count
+                    st.session_state.last_processed_files = current_file_signature
+                    
+                    approved_df = final_report[final_report['Status'] == 'Approved']
+                    rejected_df = final_report[final_report['Status'] == 'Rejected']
+                    log_validation_run(country, "Multi-Upload", len(data), len(approved_df), len(rejected_df))
+            else:
+                for e in errors: st.error(e)
+        except Exception as e:
+            st.error(f"Error: {e}")
+            st.code(traceback.format_exc())
 
-with tab3:
-    st.header("Data Lake Audit")
-    file = st.file_uploader("Upload audit file", type=['jsonl','csv','xlsx'], key="audit_file")
-    if file:
-        if file.name.endswith('.jsonl'): df = pd.read_json(file, lines=True)
-        elif file.name.endswith('.csv'): df = pd.read_csv(file)
-        else: df = pd.read_excel(file)
-        st.dataframe(df.head(50), use_container_width=True)
-    else:
-        try: st.dataframe(pd.read_json('validation_audit.jsonl', lines=True).tail(50), use_container_width=True)
-        except: st.info("No audit log found.")
+    if not st.session_state.final_report.empty:
+        final_report = st.session_state.final_report
+        data = st.session_state.all_data_map
+        intersection_count = st.session_state.intersection_count
+        intersection_sids = st.session_state.intersection_sids
+        current_date = datetime.now().strftime('%Y-%m-%d')
+        file_prefix = country_validator.code
+
+        approved_df = final_report[final_report['Status'] == 'Approved']
+        rejected_df = final_report[final_report['Status'] == 'Rejected']
+        
+        st.sidebar.header("Seller Options")
+        seller_opts = ['All Sellers'] + (data['SELLER_NAME'].dropna().unique().tolist() if 'SELLER_NAME' in data.columns else [])
+        sel_sellers = st.sidebar.multiselect("Select Sellers", seller_opts, default=['All Sellers'])
+        
+        st.markdown("---")
+        with st.container():
+            st.header("Overall Results")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Total", len(data))
+            c2.metric("Approved", len(approved_df))
+            c3.metric("Rejected", len(rejected_df))
+            rt = (len(rejected_df)/len(data)*100) if len(data)>0 else 0
+            c4.metric("Rate", f"{rt:.1f}%")
+            c5.metric("SKUs in Both Files", intersection_count)
+        
+        if intersection_count > 0:
+            common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
+            csv_buffer = BytesIO()
+            common_skus_df.to_csv(csv_buffer, index=False)
+            st.download_button(label=f"📥 Download Common SKUs ({intersection_count})", data=csv_buffer.getvalue(), file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv", mime="text/csv")
+        
+        st.subheader("Validation Results by Flag")
+        if not rejected_df.empty:
+            active_flags = rejected_df['FLAG'].unique()
+            display_cols = ['PRODUCT_SET_SID', 'NAME', 'BRAND', 'CATEGORY', 'COLOR', 'PARENTSKU', 'SELLER_NAME']
+            
+            for title in active_flags:
+                df_flagged_report = rejected_df[rejected_df['FLAG'] == title]
+                df_display = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
+                df_display = df_display[[c for c in display_cols if c in df_display.columns]]
+
+                with st.expander(f"{title} ({len(df_display)})"):
+                    col1, col2 = st.columns([1, 1])
+                    with col1: search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
+                    with col2:
+                        all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
+                        seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
+                    
+                    if search_term:
+                        mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
+                        df_display = df_display[mask]
+                    if seller_filter: df_display = df_display[df_display['SELLER_NAME'].isin(seller_filter)]
+                    if len(df_display) != len(df_flagged_report): st.caption(f"Showing {len(df_display)} of {len(df_flagged_report)} rows")
+
+                    select_all_mode = st.checkbox("Select All", key=f"sa_{title}")
+                    df_display.insert(0, "Select", select_all_mode)
+                    
+                    edited_df = st.data_editor(df_display, hide_index=True, use_container_width=True, column_config={"Select": st.column_config.CheckboxColumn(required=True)}, disabled=[c for c in df_display.columns if c != "Select"], key=f"editor_{title}_{select_all_mode}")
+                    
+                    to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
+                    if to_approve:
+                        if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
+                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(to_approve), ['Status', 'Reason', 'Comment', 'FLAG']] = ['Approved', '', '', 'Approved by User']
+                            st.success("Updated! Rerunning to refresh...")
+                            st.rerun()
+
+                    flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
+                    st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
+        else:
+            st.success("No rejections found! All products approved.")
+
+        st.markdown("---")
+        st.header("Overall Exports")
+        full_data_merged = prepare_full_data_merged(data, final_report)
+        final_rep_data, final_rep_name, final_rep_mime = generate_smart_export(final_report, f"{file_prefix}_Final_Report_{current_date}", 'simple', support_files['reasons'])
+        rej_data, rej_name, rej_mime = generate_smart_export(rejected_df, f"{file_prefix}_Rejected_{current_date}", 'simple', support_files['reasons'])
+        app_data, app_name, app_mime = generate_smart_export(approved_df, f"{file_prefix}_Approved_{current_date}", 'simple', support_files['reasons'])
+        full_data, full_name, full_mime = generate_smart_export(full_data_merged, f"{file_prefix}_Full_Data_{current_date}", 'full')
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.download_button("Final Report", final_rep_data, final_rep_name, mime=final_rep_mime)
+        c2.download_button("Rejected", rej_data, rej_name, mime=rej_mime)
+        c3.download_button("Approved", app_data, app_name, mime=app_mime)
+        c4.download_button("Full Data", full_data, full_name, mime=full_mime)
