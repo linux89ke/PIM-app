@@ -9,20 +9,7 @@ import traceback
 import json
 import xlsxwriter
 import zipfile
-import concurrent.futures
 import os
-import requests
-import numpy as np
-
-# -------------------------------------------------
-# 0. IMAGE PROCESSING IMPORTS
-# -------------------------------------------------
-try:
-    from PIL import Image
-    import cv2
-except ImportError:
-    st.error("Missing libraries! Please run: pip install Pillow requests opencv-python-headless numpy")
-    st.stop()
 
 # -------------------------------------------------
 # CONSTANTS & MAPPING
@@ -297,14 +284,83 @@ def load_restricted_brands_config(filename: str) -> Dict:
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
+    """
+    Returns the mapping of Flag Name -> (Reason Code, Rejection Comment).
+    Updated with specific business rules for Restricted Brands, Fakes, Refurbs, etc.
+    """
     try:
-        default_map = {
-            'Restricted brands': ('1000024 - Product does not have a license to be sold via Jumia (Not Authorized)', "This brand is restricted and can only be sold by authorized sellers."),
-            'Duplicate product': ('1000007 - Other Reason', "Kindly avoid creating duplicate SKUs. Please consolidate variations into a single listing."),
-             'Poor Images': ('1000017 - Low Quality Image', "Image rejected: Blurry, too dark, has glare, or low resolution (<300px)."),
+        return {
+            'Restricted brands': (
+                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
+                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
+            ),
+            'Suspected Fake product': (
+                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
+                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
+            ),
+            'Seller Not approved to sell Refurb': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this refurbished product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Product Warranty': (
+                '1000013 - Kindly Provide Product Warranty Details',
+                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."
+            ),
+            'Seller Approve to sell books': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this book is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Seller Approved to Sell Perfume': (
+                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
+                "Please contact Jumia Seller Support and raise a claim to confirm whether this perfume is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
+            ),
+            'Counterfeit Sneakers': (
+                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
+                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
+            ),
+            'Suspected counterfeit Jerseys': (
+                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
+                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
+            ),
+            'Prohibited products': (
+                '1000007 - Other Reason',
+                "Please note listing of this product is prohibited … Please contact Jumia Seller Support and raise a claim"
+            ),
+            'Unnecessary words in NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.avoid unnecesary words"
+            ),
+            'Single-word NAME': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
+            ),
+            'Generic BRAND Issues': (
+                '1000007 - Other Reason',
+                "Please use the correct brand for Fashion items or use Fashion ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"
+            ),
+            'Fashion brand issues': (
+                '1000007 - Other Reason',
+                "Please use the correct brand for this item instead of Fashion use Generic ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"
+            ),
+            'BRAND name repeated in NAME': (
+                '1000007 - Other Reason',
+                "Please note that brand name should not be repeated in product name"
+            ),
+            'Generic branded products with genuine brands': (
+                '1000007 - Other Reason',
+                "Kindly use the displayed brand on the product instead of Generic"
+            ),
+            'Missing COLOR': (
+                '1000005 - Kindly confirm the actual product colour',
+                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
+            ),
+            'Duplicate product': (
+                '1000007 - Other Reason',
+                "Please note this product is a duplicate"
+            ),
         }
-        return default_map
-    except Exception: return {}
+    except Exception:
+        return {}
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
@@ -424,67 +480,6 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
-def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame:
-    """
-    Checks images with relaxed thresholds:
-    - Resolution: < 100x100
-    - Brightness: < 15 (Very dark)
-    - Glare: > 5% white pixels
-    """
-    if 'MAIN_IMAGE' not in data.columns: return pd.DataFrame(columns=data.columns)
-    valid_data = data[data['MAIN_IMAGE'].notna() & (data['MAIN_IMAGE'].str.strip() != '')].copy()
-    if valid_data.empty: return pd.DataFrame(columns=data.columns)
-
-    def analyze_image_quality(row_data):
-        sid = row_data[0]
-        url = row_data[1]
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            resp = requests.get(url, timeout=5, headers=headers)
-            if resp.status_code != 200: return None
-            
-            image_array = np.asarray(bytearray(resp.content), dtype="uint8")
-            img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-            if img is None: return None
-
-            h, w, _ = img.shape
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # --- RELAXED THRESHOLDS ---
-            if h < 100 or w < 100: return (sid, f"Low Resolution ({w}x{h})")
-            
-            # Keeping blur check standard
-            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100: return (sid, f"Blurry (Score: {int(blur_score)})")
-            
-            # Relaxed brightness
-            avg_brightness = np.mean(gray)
-            if avg_brightness < 15: return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
-            
-            # Glare check
-            _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
-            bright_ratio = np.count_nonzero(bright_mask) / gray.size
-            if bright_ratio > 0.05: return (sid, "Flash/Glare Detected")
-            
-            return None
-        except Exception: return None
-
-    rejected_reasons = {}
-    rows_to_process = list(zip(valid_data['PRODUCT_SET_SID'], valid_data['MAIN_IMAGE']))
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        results = executor.map(analyze_image_quality, rows_to_process)
-        for res in results:
-            if res:
-                sid, reason = res
-                rejected_reasons[sid] = reason
-
-    if not rejected_reasons: return pd.DataFrame(columns=data.columns)
-    mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
-    result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
-    result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
-    return result_df
-
 def check_duplicate_products(
     data: pd.DataFrame,
     exempt_categories: List[str] = None,
@@ -492,6 +487,10 @@ def check_duplicate_products(
     known_colors: List[str] = None,
     **kwargs
 ) -> pd.DataFrame:
+    """
+    Duplicate Check (Text-Based Only)
+    Recognizes color/size/storage variants as DIFFERENT products.
+    """
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
@@ -862,14 +861,12 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
-def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, perform_quality_check: bool = True):
+def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None):
     # Ensure ID match compatibility
     data['PRODUCT_SET_SID'] = data['PRODUCT_SET_SID'].astype(str).str.strip()
     
     flags_mapping = support_files['flags_mapping']
     
-    # 1. DEFINE TEXT-BASED VALIDATIONS FIRST
-    # (Poor Images is removed from this initial list)
     validations = [
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
@@ -916,7 +913,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     restricted_issue_keys = {}
 
-    # 2. RUN TEXT-BASED VALIDATIONS
     for i, (name, func, kwargs) in enumerate(validations):
         if name == "Restricted brands" and country_validator.code != 'KE': continue
 
@@ -979,7 +975,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             logger.error(f"Error in {name}: {e}\n{traceback.format_exc()}")
             results[name] = pd.DataFrame(columns=data.columns)
         
-        progress_bar.progress((i + 1) / (len(validations) + 1))
+        progress_bar.progress((i + 1) / len(validations))
     
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
@@ -992,26 +988,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             else:
                 results[flag_name] = extra_rows
 
-    # 3. IDENTIFY SURVIVORS & RUN IMAGE CHECK
-    # Calculate all SIDs rejected so far
-    all_rejected_sids = set()
-    for k, v in results.items():
-        if not v.empty:
-            all_rejected_sids.update(v['PRODUCT_SET_SID'].astype(str).tolist())
-    
-    # Filter for products that passed all text checks
-    survivors = data[~data['PRODUCT_SET_SID'].astype(str).isin(all_rejected_sids)].copy()
-    
-    if perform_quality_check and not survivors.empty:
-        status_text.text(f"Running: Poor Images (Optimized - Scanning {len(survivors)} approved items)")
-        img_res = check_poor_images(survivors, max_workers=10)
-        
-        if not img_res.empty:
-            results["Poor Images"] = img_res
-            # Add to validations list so final report loop processes it
-            validations.append(("Poor Images", None, None))
-    
-    progress_bar.progress(1.0)
     status_text.text("Finalizing...")
     rows = []
     processed = set()
@@ -1023,10 +999,13 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         if 'PRODUCT_SET_SID' not in res.columns:
             continue
         
-        if name == "Seller Not approved to sell Refurb":
-            reason_info = flags_mapping.get(name, ("1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim", f"Flagged by {name}"))
+        # --- MAPPING UPDATE ---
+        # Instead of using a default tuple, we fetch from the loaded mapping
+        if name in flags_mapping:
+            reason_info = flags_mapping[name]
         else:
-            reason_info = flags_mapping.get(name, ("1000007 - Other Reason", f"Flagged by {name}"))
+            # Fallback for unknown flags
+            reason_info = ("1000007 - Other Reason", f"Flagged by {name}")
         
         res['PRODUCT_SET_SID'] = res['PRODUCT_SET_SID'].astype(str).str.strip()
         
@@ -1254,9 +1233,6 @@ with st.sidebar:
     if new_mode != st.session_state.layout_mode:
         st.session_state.layout_mode = new_mode
         st.rerun()
-    
-    st.header("Performance Settings")
-    check_image_quality = st.checkbox("Enable Quality Check", value=True, help="Check for blur/darkness")
 
 # -------------------------------------------------
 # DAILY VALIDATION (NOW THE MAIN VIEW)
@@ -1331,9 +1307,9 @@ if uploaded_files:
                 
                 with st.spinner("Running validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                    # REMOVED IMAGE PARAMETER HERE
                     final_report, flag_dfs = validate_products(
-                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass, 
-                        perform_quality_check=check_image_quality
+                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
                     )
                     st.session_state.final_report = final_report
                     st.session_state.all_data_map = data
