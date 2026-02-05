@@ -15,7 +15,7 @@ import requests
 import numpy as np
 
 # -------------------------------------------------
-# 0. IMAGE PROCESSING IMPORTS (For Poor Images Only)
+# 0. IMAGE PROCESSING IMPORTS
 # -------------------------------------------------
 try:
     from PIL import Image
@@ -92,7 +92,7 @@ def create_match_key(row: pd.Series) -> str:
     return f"{brand}|{name}|{color}"
 
 # -------------------------------------------------
-# ATTRIBUTE EXTRACTION (Needed for Text Duplicate Check)
+# ATTRIBUTE EXTRACTION
 # -------------------------------------------------
 from dataclasses import dataclass
 
@@ -118,7 +118,6 @@ for base_color, variants in COLOR_PATTERNS.items():
 
 @dataclass
 class ProductAttributes:
-    """Product attribute container"""
     base_name: str
     colors: Set[str]
     sizes: Set[str]
@@ -143,12 +142,10 @@ def extract_colors(text: str, explicit_color: Optional[str] = None) -> Set[str]:
     colors = set()
     if not text: text = ""
     text_lower = str(text).lower()
-    
     if explicit_color and pd.notna(explicit_color):
         color_lower = str(explicit_color).lower().strip()
         for variant, base in COLOR_VARIANT_TO_BASE.items():
             if variant in color_lower: colors.add(base)
-    
     for variant, base in COLOR_VARIANT_TO_BASE.items():
         if re.search(r'\b' + re.escape(variant) + r'\b', text_lower):
             colors.add(base)
@@ -217,7 +214,6 @@ def extract_product_attributes(name: str, explicit_color: Optional[str] = None, 
     storage = extract_storage(name_str)
     memory = extract_memory(name_str)
     quantities = extract_quantities(name_str)
-    
     attrs = ProductAttributes(base_name="", colors=colors, sizes=sizes, storage=storage, memory=memory, quantities=quantities, raw_name=name_str)
     base_name = remove_attributes(name_str)
     if brand and pd.notna(brand):
@@ -429,6 +425,12 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame:
+    """
+    Checks images with relaxed thresholds:
+    - Resolution: < 100x100
+    - Brightness: < 15 (Very dark)
+    - Glare: > 5% white pixels
+    """
     if 'MAIN_IMAGE' not in data.columns: return pd.DataFrame(columns=data.columns)
     valid_data = data[data['MAIN_IMAGE'].notna() & (data['MAIN_IMAGE'].str.strip() != '')].copy()
     if valid_data.empty: return pd.DataFrame(columns=data.columns)
@@ -448,29 +450,22 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
             h, w, _ = img.shape
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # --- UPDATED THRESHOLDS HERE ---
+            # --- RELAXED THRESHOLDS ---
+            if h < 100 or w < 100: return (sid, f"Low Resolution ({w}x{h})")
             
-            # 1. Resolution Check (Now 100x100)
-            if h < 100 or w < 100: 
-                return (sid, f"Low Resolution ({w}x{h})")
-
-            # 2. Blurriness Check (Laplacian Variance < 100)
-            # Keeping this standard as requested, only checking RES and DARK changes
+            # Keeping blur check standard
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100: 
-                return (sid, f"Blurry (Score: {int(blur_score)})")
-
-            # 3. Darkness Check (Now < 15)
+            if blur_score < 100: return (sid, f"Blurry (Score: {int(blur_score)})")
+            
+            # Relaxed brightness
             avg_brightness = np.mean(gray)
-            if avg_brightness < 15: 
-                return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
-
-            # 4. Glare Check (> 5% pure white pixels)
+            if avg_brightness < 15: return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
+            
+            # Glare check
             _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
             bright_ratio = np.count_nonzero(bright_mask) / gray.size
-            if bright_ratio > 0.05: 
-                return (sid, "Flash/Glare Detected")
-                
+            if bright_ratio > 0.05: return (sid, "Flash/Glare Detected")
+            
             return None
         except Exception: return None
 
@@ -489,11 +484,6 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
     result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
     result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
     return result_df
-    if not rejected_reasons: return pd.DataFrame(columns=data.columns)
-    mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
-    result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
-    result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
-    return result_df
 
 def check_duplicate_products(
     data: pd.DataFrame,
@@ -502,10 +492,6 @@ def check_duplicate_products(
     known_colors: List[str] = None,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    Duplicate Check (Text-Based Only)
-    Recognizes color/size/storage variants as DIFFERENT products.
-    """
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
@@ -882,9 +868,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     flags_mapping = support_files['flags_mapping']
     
+    # 1. DEFINE TEXT-BASED VALIDATIONS FIRST
+    # (Poor Images is removed from this initial list)
     validations = [
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
-        ("Poor Images", check_poor_images, {'max_workers': 10}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
             'approved_sellers_ke': support_files['approved_refurb_sellers_ke'],
@@ -929,12 +916,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     restricted_issue_keys = {}
 
+    # 2. RUN TEXT-BASED VALIDATIONS
     for i, (name, func, kwargs) in enumerate(validations):
         if name == "Restricted brands" and country_validator.code != 'KE': continue
-
-        # CHECKBOX LOGIC: Skip Poor Images if perform_quality_check is False
-        if name == "Poor Images" and not perform_quality_check:
-            continue
 
         if name != "Seller Not approved to sell Refurb" and country_validator.should_skip_validation(name):
             if name == "Sensitive words": continue
@@ -995,7 +979,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             logger.error(f"Error in {name}: {e}\n{traceback.format_exc()}")
             results[name] = pd.DataFrame(columns=data.columns)
         
-        progress_bar.progress((i + 1) / len(validations))
+        progress_bar.progress((i + 1) / (len(validations) + 1))
     
     if restricted_issue_keys:
         data['match_key'] = data.apply(create_match_key, axis=1)
@@ -1008,6 +992,26 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             else:
                 results[flag_name] = extra_rows
 
+    # 3. IDENTIFY SURVIVORS & RUN IMAGE CHECK
+    # Calculate all SIDs rejected so far
+    all_rejected_sids = set()
+    for k, v in results.items():
+        if not v.empty:
+            all_rejected_sids.update(v['PRODUCT_SET_SID'].astype(str).tolist())
+    
+    # Filter for products that passed all text checks
+    survivors = data[~data['PRODUCT_SET_SID'].astype(str).isin(all_rejected_sids)].copy()
+    
+    if perform_quality_check and not survivors.empty:
+        status_text.text(f"Running: Poor Images (Optimized - Scanning {len(survivors)} approved items)")
+        img_res = check_poor_images(survivors, max_workers=10)
+        
+        if not img_res.empty:
+            results["Poor Images"] = img_res
+            # Add to validations list so final report loop processes it
+            validations.append(("Poor Images", None, None))
+    
+    progress_bar.progress(1.0)
     status_text.text("Finalizing...")
     rows = []
     processed = set()
