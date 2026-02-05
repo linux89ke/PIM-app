@@ -622,6 +622,14 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
+    import os
+    
+    # Helper to check file existence
+    def safe_load_txt(file):
+        if os.path.exists(file):
+            return [line.strip().lower() for line in load_txt_file(file) if line.strip()]
+        return []
+
     files = {
         'blacklisted_words': load_txt_file('blacklisted.txt'),
         'book_category_codes': load_excel_file('Books_cat.xlsx', 'CategoryCode'),
@@ -645,10 +653,10 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in load_txt_file('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': load_txt_file('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'known_brands': [line.strip().lower() for line in load_txt_file('brands.txt') if line.strip()],
+        'known_brands': safe_load_txt('brands.txt'), # Using the safe loader here
     }
     return files
-
+    
 @st.cache_data(ttl=3600)
 def load_support_files_lazy():
     """Lazy load support files only when needed."""
@@ -1510,16 +1518,31 @@ try:
 
         st.markdown("---")
         st.header("Debug Info")
-        # Check if files loaded
-        # We access support_files safely here
-        try:
-             # Lazy load happens in main body, but we can check if it exists in memory yet
-             # If not, it will load when main body runs.
-             pass
-        except: pass
-except:
-    use_image_hash = True
-    check_image_quality = True
+        
+        import os
+        # Path Debug
+        st.write(f"Current Folder: `{os.getcwd()}`")
+        
+        # Physical File Check
+        if os.path.exists('brands.txt'):
+            st.success("✅ 'brands.txt' found on disk.")
+        else:
+            st.error("❌ 'brands.txt' NOT found on disk.")
+        
+        # Dictionary Check
+        if 'known_brands' in support_files:
+            count = len(support_files['known_brands'])
+            if count > 0:
+                st.write(f"Brands in Memory: **{count}**")
+            else:
+                st.warning("⚠️ 'known_brands' is EMPTY in memory.")
+        else:
+            st.error("❌ 'known_brands' key missing from support_files.")
+
+        # THE FIX: Cache clearing
+        if st.button("♻️ Clear Cache & Reload Files"):
+            st.cache_data.clear()
+            st.rerun()
 
 # Load Configuration Files
 try:
