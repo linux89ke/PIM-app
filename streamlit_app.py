@@ -448,14 +448,29 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
             h, w, _ = img.shape
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            if h < 300 or w < 300: return (sid, f"Low Resolution ({w}x{h})")
+            # --- UPDATED THRESHOLDS HERE ---
+            
+            # 1. Resolution Check (Now 100x100)
+            if h < 100 or w < 100: 
+                return (sid, f"Low Resolution ({w}x{h})")
+
+            # 2. Blurriness Check (Laplacian Variance < 100)
+            # Keeping this standard as requested, only checking RES and DARK changes
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100: return (sid, f"Blurry (Score: {int(blur_score)})")
+            if blur_score < 100: 
+                return (sid, f"Blurry (Score: {int(blur_score)})")
+
+            # 3. Darkness Check (Now < 15)
             avg_brightness = np.mean(gray)
-            if avg_brightness < 40: return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
+            if avg_brightness < 15: 
+                return (sid, f"Too Dark (Brightness: {int(avg_brightness)})")
+
+            # 4. Glare Check (> 5% pure white pixels)
             _, bright_mask = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY)
             bright_ratio = np.count_nonzero(bright_mask) / gray.size
-            if bright_ratio > 0.05: return (sid, "Flash/Glare Detected")
+            if bright_ratio > 0.05: 
+                return (sid, "Flash/Glare Detected")
+                
             return None
         except Exception: return None
 
@@ -469,6 +484,11 @@ def check_poor_images(data: pd.DataFrame, max_workers: int = 10) -> pd.DataFrame
                 sid, reason = res
                 rejected_reasons[sid] = reason
 
+    if not rejected_reasons: return pd.DataFrame(columns=data.columns)
+    mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
+    result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].map(rejected_reasons)
+    return result_df
     if not rejected_reasons: return pd.DataFrame(columns=data.columns)
     mask = data['PRODUCT_SET_SID'].isin(rejected_reasons.keys())
     result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
