@@ -1211,21 +1211,28 @@ except Exception as e:
     st.error(f"Failed to load configuration files: {e}")
     st.stop()
 
-# --- REST OF SIDEBAR ---
-try:
-    with st.sidebar:
-        st.header("Display Settings")
-        layout_choice = st.radio("Layout Mode", ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"])
-        new_mode = "wide" if "Wide" in layout_choice else "centered"
-        if new_mode != st.session_state.layout_mode:
-            st.session_state.layout_mode = new_mode
-            st.rerun()
-        
-        st.header("Performance Settings")
-        check_image_quality = st.checkbox("Enable Quality Check", value=True, help="Check for blur/darkness")
-        
-except:
-    check_image_quality = True
+# --- REST OF SIDEBAR (FIXED: NO TRY/EXCEPT BLOCK) ---
+with st.sidebar:
+    st.header("Display Settings")
+    
+    # Logic to ensure the radio button matches the current session state
+    index = 1 if st.session_state.layout_mode == "wide" else 0
+    
+    layout_choice = st.radio(
+        "Layout Mode", 
+        ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"],
+        index=index,
+        key="layout_selector"
+    )
+    
+    new_mode = "wide" if "Wide" in layout_choice else "centered"
+    
+    if new_mode != st.session_state.layout_mode:
+        st.session_state.layout_mode = new_mode
+        st.rerun()
+    
+    st.header("Performance Settings")
+    check_image_quality = st.checkbox("Enable Quality Check", value=True, help="Check for blur/darkness")
 
 # -------------------------------------------------
 # DAILY VALIDATION (NOW THE MAIN VIEW)
