@@ -1,17 +1,8 @@
-151
-21 G
-212
-24 7 FASHION
-321
 3Q beauty
-4K
 4th Street
 4you
-5 Second Nail Products
 5 Star
 55H+
-777
-A Design
 A One
 AB
 ABB
@@ -24,7 +15,6 @@ AIKE
 AILIPU
 AIMIL
 AKKO
-AKKO STAR
 AL RAYHAN
 ALUMINAID
 AMALICO
@@ -34,16 +24,12 @@ ARABIYAT PRESTIGE
 ARDEN
 ARO ORGANICS
 ASANTE
-AXIS - Y
 AXIS-Y
 Abje
 Absolute
 AceCamp
 Acer
 Acnesol
-Acrylic mink
-Activated
-Active
 Activilong
 Addis
 Adegso
@@ -52,7 +38,6 @@ Adiddas Terex
 Adix
 Advance
 Advanced Clinical
-Advanced clinicals
 Aerbes
 Aerobics & Beauty Spa
 Afnan
@@ -60,16 +45,10 @@ Afox
 Afri Berry
 Africa's Best
 African
-African Fabrics
-African Pride
 Afro
-Afro Foods
 Ahuja
 Aichun
-Aichun Beauty
 Air
-Air Force
-Air Scents
 AirPods
 Ajab
 Ajmal
@@ -99,7 +78,6 @@ Amrutanjan
 Amtec
 Anastasia Beverly Hills
 Anc
-Android
 Angel
 Angelique
 Animate
@@ -107,7 +85,6 @@ Anker
 Ankle
 Aomei
 Apple
-Apple Airpods
 Applied Nutrition
 Aptamil
 Aqua
@@ -120,7 +97,6 @@ Ard Al Zaafaran
 Ard Alzaafran
 Arduino
 Argan
-Argan Oil
 Ariel
 Arimis
 Ariston
@@ -128,7 +104,6 @@ Arm
 Armaf
 Armco
 Aromatherapy
-Art
 Arya
 Aryuv
 Asantee
@@ -164,7 +139,6 @@ BELGIAN
 BILEF
 BINBOND
 BIYODE
-BJ's
 BJS
 BLUEQUE
 BMW
@@ -176,9 +150,6 @@ BSG Organics
 BVOT
 BW
 Baby
-Baby & Mommy
-Baby Banda
-Baby Delight
 Bag Lady
 Bag Paradise
 Bahco
@@ -198,7 +169,6 @@ Baoke
 Baraka
 Bat
 Bata
-Bata Industrials
 Bath & Body Works
 Bath Accessories Company
 Bath And Body Works
@@ -210,7 +180,6 @@ Beads Treats
 Beats
 Beauteous
 Beauty
-Beauty Formulas
 Bebe
 Beckon
 Belkin
@@ -228,13 +197,8 @@ Bgm
 Bhawsar
 Bidco
 Big Boss
-Bike
 Binnys
 Bio
-Bio Aqua
-Bio Balance
-Bio Claire
-Bio Luxe
 Bioderma
 Bioland
 Bioleaf
@@ -245,7 +209,6 @@ Black & Decker
 Black Chic
 Black Mamba
 Blackview
-Blanket
 Blooming
 Blue Band
 Blue Magic
@@ -256,16 +219,12 @@ Bluelounge
 Blumarine
 Blundstone
 Blur
-Blush
 Bnk
 Boafeng
-Bob Bi
-Bob Martin
 Bobbi Brown
 Bobby
 Bobo
 Boboli
-Bobs
 Boc
 Boca
 Boccadamo
@@ -307,14 +266,11 @@ Bombay Sapphire
 Bomberg
 Bomd
 Bon
-Bon Appetit
 Bonacure
 Bonanza
 Bonavita
 Bond
-Bond No. 9
 Bondi
-Bonds
 Bone
 Boneco
 Bongo
@@ -332,16 +288,12 @@ Boob
 Boogeyman
 Boohoo
 Booja-Booja
-Book
-Books
 Boom
 BoomBest
 Boomerang
 Boompods
 Boone
 Boost
-Boot
-Boots
 Booze
 Bopai
 Bora
@@ -358,7 +310,6 @@ Borotalco
 Borsec
 Bosal
 Bosch
-Bosch Power Tools
 Boschmann
 Bosco
 Bose
@@ -366,17 +317,12 @@ Bosh
 Bosideng
 Boski
 Boss
-Boss Orange
 Boston
-Boston Acoustics
 Bostonian
 Botanic
 Botanical
-Botanics
 Botany
 Bottega Veneta
-Bottle
-Bottles
 Botts
 Boucheron
 Boujois
@@ -393,15 +339,11 @@ Bow
 Bowen
 Bowers & Wilkins
 Bowflex
-Bowl Set
 Bowmore
-Boxer
 Boy
-Boy London
 Boya
 Boyd
 Boyle
-Boys
 Boz
 Brabantia
 Braccialini
@@ -419,7 +361,6 @@ Bramley
 Brandini
 Brandy Melville
 Branston
-Bras
 Brasso
 Braumeister
 Braun
@@ -428,7 +369,6 @@ Brave
 Bravo
 Brax
 Bray
-Brazil
 Breaker
 Breakfree
 Breath
@@ -452,11 +392,9 @@ Breville
 Brew
 BrewDog
 Brewer
-Brewers
 Bri
 Brian
 Brick
-Bricks
 Bridal
 Bride
 Bridge
@@ -467,7 +405,6 @@ Brief
 Briers
 Briggs & Stratton
 Bright
-Bright Starts
 Brighton
 Brilliant
 Brillo
@@ -504,15 +441,10 @@ Bronze
 Brook
 Brooke Bond
 Brooklyn
-Brooks
-Brooks Brothers
 Brookside
 Bros
 Brother
-Brother Max
-Brothers
 Brough
-Brown
 Brown Orchid
 Browne
 Browning
@@ -528,11 +460,8 @@ Brune
 Brunello Cucinelli
 Bruni
 Bruno
-Bruno Banani
-Bruno Magli
 Brunswick
 Brunton
-Brush
 Brut
 Brutus
 Brux
@@ -543,8 +472,6 @@ Brylcreem
 Bt
 Bubba
 Bubble
-Bubble Gum
-Bubbles
 Bubchen
 Bubi
 Bubly
@@ -560,7 +487,6 @@ Buddhism
 Buddy
 Budget
 Budi
-Buds
 Budweiser
 Buffalo
 Buffet
@@ -571,7 +497,6 @@ Buick
 Build
 Builders
 Built
-Built NY
 Buitoni
 Buki
 Bulb
@@ -584,7 +509,6 @@ Bully
 Bulova
 Bum
 Bumble
-Bumble and bumble
 Bumbo
 Bump
 Bunch
@@ -602,7 +526,6 @@ Burly
 Burmax
 Burn
 Burner
-Burns
 Burris
 Burt's Bees
 Burton
@@ -613,7 +536,6 @@ Bushbaby
 Bushnell
 Business
 Buster
-Buster Brown
 Busy
 Butcher
 Butler
@@ -622,10 +544,7 @@ Buttercup
 Butterfly
 Butterick
 Buttermilk
-Butters
 Button
-Buttons
-Buy
 Buzz
 Bvlgari
 Bware
@@ -635,15 +554,10 @@ Byredo
 Byte
 C&A
 C-Thru
-C.K
-C.K Tools
-C15
 C2C
 CALUS
 CB
-CBS
 CC
-CC Lamp
 CCM
 CD
 CDK
@@ -651,7 +565,6 @@ CE
 CEO
 CF
 CG
-CGS
 CH
 COFE
 COOFIX
@@ -670,8 +583,6 @@ Cabbage Patch Kids
 Cabelas
 Caberg
 Cabin
-Cable
-Cables
 Cabot
 Cabrini
 Cacharel
@@ -686,17 +597,12 @@ Cadisen
 Caeden
 Caesar
 Cafe
-Cafe Noir
-Cafe de Colombia
 Caffe
-Caffe Nero
 Caffitaly
-Cage
 Cai
 Caillou
 Cain
 Cake
-Cake Boss
 Cal
 Cala
 Calabash
@@ -705,9 +611,7 @@ Calibra
 Calibre
 Calico
 California
-California Scents
 Call
-Call It Spring
 Callaway
 Calligaris
 Calliope
@@ -717,33 +621,24 @@ Calvin Klein
 Calypso
 Calzedonia
 Cam
-Cam Sport
 Camaro
 Cambio
 Cambridge
-Cambridge Audio
-Cambridge Satchel Company
 Camel
-Camel Active
 Camelbak
 Cameleo
 Camellia
 Camelot
 Cameo
-Camera
-Camera Ip H 264
 Cameron
 Camilla
 Camille
 Camin
 Camp
-Camp Chef
 Campagnolo
 Campari
 Campbell
-Campbell's
 Camper
-Camping
 Campingaz
 Campion
 Campo
@@ -761,18 +656,11 @@ Canderel
 Candi
 Candice
 Candide
-Candie's
 Candies
-Candle
-Candle Lite
 Candy
-Candy Girl
-Candy Hoover
-Candy King
 Canes
 Canesten
 Canine
-Canine Choice
 Canis
 Canna
 Cannabis
@@ -786,7 +674,6 @@ Cantu
 Canvas
 Canye
 Canyon
-Cap
 Cap d'Agde
 Capacity
 Cape
@@ -796,16 +683,12 @@ Capitol
 Capo
 Capon
 Capri
-Capri Sun
 Caprice
 Capricorn
 Captain
-Captain America
-Captain Morgan
 Captive
 Capture
 Capucines
-Car
 Car-Freshner
 Cara
 Carambola
@@ -816,14 +699,12 @@ Caravelle
 Carb
 Carbrini
 Carbtrol
-Card
 Cardhu
 Cardi
 Cardinal
 Cardini
 Cardio
 Care
-Care Plus
 Carefree
 Careline
 Careplan
@@ -834,13 +715,9 @@ Caribbean
 Caribou
 Carisma
 Carl
-Carl Zeiss
 Carla
 Carling
 Carlo
-Carlo Colucci
-Carlo Pazolini
-Carlos
 Carlsberg
 Carlsson
 Carlton
@@ -857,11 +734,8 @@ Carnegie
 Carnival
 Carnivore
 Caro
-Caro White
-Caro light
 Carol
 Carolina
-Carolina Herrera
 Caroline
 Caroll
 Caron
@@ -870,31 +744,24 @@ Carpe Diem
 Carpenter
 Carpet
 Carr
-Carr & Day & Martin
 Carrera
 Carriage
 Carrier
 Carriwell
 Carrot
-Carrot Glow
 Carroten
 Carrying
-Cars
 Carson
 Cart
 Carte D'Or
 Carte Noire
 Carter
-Carter's
 Cartier
 Cartoon
-Cartoon Network
 Carvela
 Carven
 Carver
-Cas
 Casa
-Casa Bugatti
 Casablanca
 Casadei
 Casall
@@ -903,19 +770,15 @@ Cascade
 Casco
 Case Logic
 Case Mate
-Case-Mate
 Casecom
 Casein
 Caseme
-Cases
 Casey
 Cash
 Cashew
 Cashmere
 Casino
 Casio
-Casio Digital
-Casio General
 Cask
 Casper
 Cass
@@ -934,26 +797,18 @@ Castle
 Caston
 Castor
 Castrol
-Casual
-Casual Collection
-Cat
-Cat & Jack
 Catalina
 Catania
 Catapult
 Catch
 Caterpillar
-Caterpillar (CAT)
 Cathedral
 Catherine
-Catherine Lansfield
 Cathode
 Catholic
 Cathy
-Cathy Doll
 Cation
 Catrice
-Cats
 Catta
 Cattle
 Catwalk
@@ -977,7 +832,6 @@ Cece
 Cecil
 Cecilia
 Cedar
-Cedar Wood
 Ceek
 Cef
 Ceiling
@@ -997,7 +851,6 @@ Cello
 Cellu
 Cellucor
 Cellular
-Cellular Line
 Celtic
 Cement
 Cemex
@@ -1017,10 +870,7 @@ Cer
 Cera
 Cera-care
 Ceramic
-Ceramic Knife
-Ceramic Non Stick
 Ceramica
-Ceramics
 Cerave
 Cereal
 Cerebos
@@ -1029,11 +879,9 @@ Ceres
 Ceriotti
 Cerise
 Cerruti
-Cerruti 1881
 Certina
 Cervelo
 Cesare
-Cesare Paciotti
 Cessna
 Cetaphil
 Cev
@@ -1059,7 +907,6 @@ Chambre
 Champ
 Champagne
 Champion
-Champs
 Chan
 Chance
 Chandelier
@@ -1074,47 +921,32 @@ Chant
 Chantal
 Chantelle
 Chao
-Chaos
 Chap
 ChapStick
 Chapeau
 Chapel
 Chapman
-Chaps
 Char
 Character
 Charcoal
 Charge
-Charger
 Charging
 Chariot
 Charisma
 Charles
-Charles & Keith
-Charles Jourdan
-Charles Tyrwhitt
-Charles Vögele
-Charles Walters Bespoke
-Charles Worthington
 Charleston
 Charley
 Charlie
-Charlie Banana
 Charlotte
-Charlotte Olympia
-Charlotte Tilbury
 Charm
 Charmed
 Charmin
 Charming
-Charms
 Chart
 Charter
-Charter Club
 Chase
 Chaser
 Chateau
-Chateau d'Ax
 Chatham
 Chatters
 Chaumet
@@ -1125,21 +957,16 @@ Chaxigo
 Cheap Monday
 Check
 Checker
-Checkers
 Cheddar
 Cheek
 Cheeky
 Cheer
 Cheerios
-Cheers
 Cheese
 Cheetah
 Chef
-Chef Works
 Chef's Choice
-Chefs
 Cheki
-Chelsea
 Chem
 Chemical
 Chemis
@@ -1156,9 +983,7 @@ Cherie
 Cherish
 Cherokee
 Cherry
-Cherry Blossom
 Ches
-Chess
 Chester
 Chesterfield
 Chestnut
@@ -1172,15 +997,12 @@ Chewits
 Chewy
 Chez
 Chi
-Chi Chi
-Chi Chi London
 Chia
 Chic
 Chicco
 Chick
 Chicken
 Chico
-Chico's
 Chicwe
 Chief
 Chien
@@ -1197,26 +1019,19 @@ Chilly
 Chim
 Chimay
 Chin
-Chin Hua
-China
 China Factory Made
 China Glaze
 China Image
 Chinese
-Chinese Laundry
 Chino
-Chinos
 Chip
 Chipie
 Chipotle
-Chips
-Chips Ahoy
 Chiquita
 Chir
 Chisel
 Chita
 Chivas
-Chivas Regal
 Chiyu
 Chloe
 Chlor
@@ -1239,25 +1054,15 @@ Chord
 Chorus
 Chow
 Chris
-Chris Adams
-Chris Benz
-Chris Christensen
 Christian
-Christian Audigier
-Christian Breton
-Christian Dior
-Christian Lacroix
-Christian Louboutin
 Christie
 Christina
-Christina Aguilera
 Christine
 Christmas
 Christofle
 Christopher
 Christy
 Chrome
-Chrome Hearts
 Chromium
 Chron
 Chronic
@@ -1266,14 +1071,12 @@ Chrysler
 Chu
 Chubby
 Chuck
-Chuck Taylor
 Chug
 Chui
 Chuka
 Chums
 Chunky
 Church
-Church's
 Chute
 Chutney
 Ci
@@ -1310,7 +1113,6 @@ Cinto
 Cinzia Rocca
 Cio
 Cione
-Cios
 Cip
 Ciph
 Cipo & Baxx
@@ -1322,30 +1124,20 @@ Circus
 Cirque
 Cirrus
 Cisco
-Cisco Systems
 Citizen
-Citizen Quartz
 Citroen
 Citron
 Citrus
 City
-City Chic
-City Color
-City Goddess
-City Life
-City Lights
-City Sneakers
 Civ
 Civic
 Civil
-Civil Regime
 Cj
 Ck
 Cl
 Cla
 Clai
 Claire
-Claire's
 Clairol
 Clam
 Clamp
@@ -1360,16 +1152,12 @@ Clarisonic
 Clarity
 Clark
 Clarke
-Clarke & Clarke
-Clarks
 Class
 Classe
-Classic
 Classics
 Classique
 Classy
 Claude
-Claude Bernard
 Claudia
 Claudie Pierlot
 Claudio
@@ -1378,12 +1166,8 @@ Claw
 Clay
 Clayton
 Clean
-Clean & Clear
-Clean Haven
-Clean Paws
 Cleanox
 Cleanscents
-Clear Blue
 Clear Essence
 Clearasil
 Cleo
@@ -1407,18 +1191,12 @@ Clinic
 Clinical
 Clinique
 Clip
-Clipper
-Clips
 Cliptec
 Cliq
 Clive
-Clive Christian
 Clo
-Clock
 Clorox
-Clos
 Close
-Close Up
 Close-Up
 Closed
 Closet
@@ -1427,13 +1205,10 @@ Cloth
 Clothes
 Clothing
 Cloud
-Cloud 9
 Clove
 Clover
-Clovers
 Clovis
 Clown
-Club
 Club L
 Club Monaco
 Club Room
@@ -1449,7 +1224,6 @@ Cmd
 Cmg
 Cmk
 Cmp
-Cms
 Cmt
 Cnc
 Cnd
@@ -1463,35 +1237,27 @@ Coal
 Coast
 Coastal
 Coaster
-Coat
-Coats
 Cob
 Cobalt
 Cobb
 Cobra
 Cobson
 Coca
-Coca Cola
 Coca-Cola
 Cock
 Cockpit
 Cockrid
 Cocktail
 Coco
-Coco Chanel
-Coco Pops
 Cocoa
-Cocoa Butter
 Cocoderm
 Coconut
-Coconut Oil
 Cocoon
 Cocopulp
 Code
 Codeello
 Codi
 Coffee
-Coffee Mate
 Coffin
 Cog
 Cognac
@@ -1505,12 +1271,9 @@ Cola
 Colab
 Colcci
 Cold
-Cold Steel
 Coldwater Creek
 Cole
-Cole Haan
 Coleman
-Coles
 Colette
 Colgate
 Colib
@@ -1519,9 +1282,7 @@ Colin
 Coll
 Colla
 Collagen Peptide
-Collar
 Collect
-Collection
 Collective
 Collector
 College
@@ -1529,7 +1290,6 @@ Collegiate
 Collette
 Collier
 Collin
-Collins
 Collonil
 Colmar
 Cologne
@@ -1538,38 +1298,27 @@ Colon
 Colonel
 Colonial
 Color
-Color Club
-Color Kids
-Color Me
-Color Workshop
 Colorado
 Colorbar
 Colorful
-Colors
-Colors Of California
 Colossal
 Colossus
 Colour
-Colours
 Colt
 Columbia
-Columbia Sportswear
 Columbus
 Colv
 Com
 Comb
 Combi
 Combo
-Combs
 Comby
 Comco
 Comet
 Comfort
-Comfort Zone
 Comfrey
 Comfy
 Comic
-Comics
 Command
 Commander
 Commando
@@ -1578,8 +1327,6 @@ Comment
 Commerce
 Commercial
 Common
-Common Projects
-Commons
 Commonwealth
 Communication
 Communist
@@ -1596,24 +1343,20 @@ Complete
 Complex
 Complexion
 Component
-Components
 Compress
 Compressor
 Comptoir des Cotonniers
 Compton
-Computer
 Computing
 Comrys
 Con
 Conair
 Concept
-Concepts
 Concert
 Concord
 Concorde
 Concrete
 Condor
-Condor Outdoor
 Cone
 Conex
 Confection
@@ -1630,9 +1373,7 @@ Conk
 Connect
 Connected
 Connection
-Connections
 Connector
-Connectors
 Connemara
 Conner
 Connie
@@ -1653,7 +1394,6 @@ Constitution
 Construction
 Consul
 Contact
-Container
 Conte
 Contem
 Contemporary
@@ -1665,29 +1405,19 @@ Contour
 Contract
 Control
 Controllers
-Controls
 Converse
-Converse All Star
 Convert
 Converter
 Conway
 Cook
-Cook's
 Cooke
 Cookie
-Cookies
 Cooking
-Cooks
 Cooktek
-Cookware
 Cool
-Cool Water
 Cooler
-Cooler Master
 Coolpad
 Cooper
-Cooper Tires
-Coopers
 Coopertires
 Cop
 Copa
@@ -1695,7 +1425,6 @@ Copco
 Cope
 Copenhagen
 Copier
-Copper
 Coppertone
 Copy
 Coq
@@ -1706,7 +1435,6 @@ Corbet
 Corby
 Cord
 Cordless
-Cords
 Core
 Corel
 Corelle
@@ -1724,13 +1452,11 @@ Corniche
 Corning
 CorningWare
 Cornish
-Corns
 Coro
 Corona
 Coronet
 Corp
 Corporate
-Corps
 Corpus
 Corral
 Correct
@@ -1748,7 +1474,6 @@ Cortina
 Corum
 Corvette
 Cory
-Cos
 Cosabella
 Cosatto
 Cosco
@@ -1756,14 +1481,10 @@ Cosmic
 Cosmo
 Cosmolive
 Cosmopolitan
-Cosmos
 Cost
 Costa
-Costa Del Mar
 Costco
 Costume
-Costume National
-Costumes
 Cosy
 Cot
 Cote d'Or
@@ -1772,7 +1493,6 @@ Coto
 Coton
 Cottage
 Cotter
-Cotton Club
 Cotton On
 Cotton Traders
 Cotton Tree
@@ -1788,9 +1508,6 @@ Count
 Counter
 Countess
 Country
-Country Club
-Country Life
-Country Road
 County
 Coup
 Couple
@@ -1801,23 +1518,15 @@ Course
 Court
 Courtenay
 Courtesy
-Courts
 Courtyard
 Cousin
 Couture
 Coventry
-Cover Girl
-Cover Shop
 Cover Your Gray
 Covered
 Covergirl
-Covers
 Cow
-Cow & Gate
-Cow And Gate
 Cowboy
-Cowboy Magic
-Cowboys
 Cowgirl
 Cowon
 Cox
@@ -1826,15 +1535,12 @@ Coyle
 Coyote
 Cozy
 Cp
-Cp Company
 Cr
 Cr7
 Crab
 Crabtree
-Crabtree & Evelyn
 Crack
 Cracker
-Crackers
 Cradle
 Craft
 Craftsman
@@ -1843,11 +1549,9 @@ Craig
 Cram
 Cramer
 Crane
-Cranes
 Crank
 Crash
 Crate
-Crate & Barrel
 Crave
 Craven
 Crawford
@@ -1855,11 +1559,6 @@ Cray
 Craylor Vans
 Crayola
 Crazy
-Crazy 8
-Crazy Aaron's
-Crazy Color
-Cream
-Cream 2
 Cream Of Rice
 Cream Of Wheat
 Cream Silk
@@ -1867,24 +1566,16 @@ Creams
 Creamy
 Create
 Creation
-Creative
-Creative Co-Op
-Creative Labs
-Creative Recreation
 Creature
-Creatures
 Creda
 Credit
 Cree
 Creed
 Creek
 Creighton
-Creightons
 Crem
 Crema
 Creme
-Creme 21
-Creme of Nature
 Cremieux
 Cremona
 Creole
@@ -1896,22 +1587,15 @@ Crest
 Crete
 Cretschmar
 Crew
-Crew Clothing
-Crews
 Cricket
-Crickets
 Crime
 Criminal
-Criminal Damage
 Crimson
 Crisco
 Crisp
 Crispi
-Crisps
 Cristal
-Cristal d'Arques
 Cristiano
-Cristiano Ronaldo
 Cristina
 Critical
 Cro
@@ -1919,10 +1603,7 @@ Crochet
 Crock-Pot
 Crockett & Jones
 Crocodile
-Crocs
-Crocs Kids
 Croft
-Croft & Barrow
 Crois
 Croissant
 Crom
@@ -1934,10 +1615,8 @@ Crook
 Crooks & Castles
 Crop
 Cropp
-Cros
 Crosby
 Cross
-Cross Colours
 Crossbody
 Crossbow
 Crossfire
@@ -1948,20 +1627,15 @@ Crossword
 Crow
 Crowd
 Crown
-Crown Brand
-Crown Royal
 Crowne
-Crowne Plaza
 Crrju
 Cru
 Crucial
 Crucio
 Cruiser
-Crumbs
 Crumpler
 Crunch
 Crunchie
-Crunchies
 Crunchy
 Crusader
 Crush
@@ -1971,14 +1645,9 @@ Cry
 Cryo
 Crypto
 Crystal
-Crystal Geyser
-Crystal Light
-Crystals
 Cst
-Ct+
 Ctorch
 Cube
-Cubes
 Cubic
 Cubot
 Cucina
@@ -1986,12 +1655,10 @@ Cuckoo
 Cucumber
 Cuddl Duds
 Cuddle
-Cuddles
 Cuddy
 Cue
 Cuervo
 Cuff
-Cuffs
 Cuisinart
 Cuisine
 Cuisipro
@@ -2000,32 +1667,26 @@ Cullen
 Cullmann
 Cult
 Culture
-Culture Club
 Culver
 Cum
 Cummins
 Cun
 Cuna
 Cunningham
-Cup
 Cup & Kettle
 Cupcake
-Cupcakes
 Cupid
 Cuprinol
-Cups
 Cur
 Cura
 Curaprox
 Curash
 Cure
-Cure Pure
 Curie
 Curio
 Curl
 Curler
 Curling
-Curls
 Curly
 Currant
 Curren
@@ -2034,29 +1695,18 @@ Current
 Current/Elliott
 Currie
 Curry
-Curs
-Curtain
-Curtains
 Curtis
 Curve
-Curves
 Curvy
-Curvy Kate
 Cushion
-Cushions
 Cussons baby
-Custom
-Custom Accessories
 Cut
 Cute
 Cutex
 Cutie
-Cuties
 Cutler
 Cutlery
-Cutlery Set
 Cutter
-Cutter & Buck
 Cutting
 Cutty Sark
 Cvg
@@ -2069,15 +1719,12 @@ CyberpowerPC
 Cybershot
 Cybex
 Cycle
-Cycles
-Cycling
 Cyclone
 Cyclops
 Cygnett
 Cylinder
 Cymbal
 Cynthia
-Cynthia Rowley
 Cypress
 Cyprus
 Cyril
@@ -2088,39 +1735,27 @@ Cyto
 Cytosport
 Czech
 Czone
-D-Link
-D.D.
 D.R. Harris
 DABO
-DANNY HOME
 DB
 DBX
 DC
-DC Comics
-DC Shoes
 DCC
 DCI
 DCM
-DCS
 DD
 DDR
 DECAKILA
 DECHO
 DF
-DFS
 DG
-DGS
 DH
 DHC
 DHL
-DHS
 DJ
-DJ Hero
 DJI
 DK
-DK Publishing
 DKNY
-DKNY Jeans
 DL
 DL1961
 DLink
@@ -2130,11 +1765,8 @@ DMR
 DMT
 DNA
 DNC
-DOUBLE DOSE
 DP
 DPI
-DPS
-DR MEINAIER
 DR.DAVEY
 DR.Rashel
 DS
@@ -2143,19 +1775,16 @@ DSG
 DST
 DT
 DTC
-DTS
 DUNSPIN
 DV
 DVC
 DVD
 DVF
 DW
-DW Daniel Wellington
 DX
 DXG
 DXRacer
 DY
-Da Vinci
 Daawat
 Dab
 Dabur
@@ -2174,31 +1803,20 @@ Dahle
 Dahon
 Dahua
 Daihatsu
-Daily
-Daily Mail
-Daily Mirror
-Daily Telegraph
 Daim
 Daimler
 Dairy
-Dairy Milk
-Dairy Queen
 Dairyland
 Daisy
-Daisy Fuentes
 Dakar
 Dakine
 Dakota
 Daks
 Dalan d'Olive
 Dale
-Dale Of Norway
 Daler Rowney
 Daling
 Dallas
-Dallas Cowboys
-Dallas Mavericks
-Dallas Stars
 Daltile
 Dalton
 Dam
@@ -2211,30 +1829,21 @@ Damiani
 Damien
 Damon
 Dan
-Dan Post
 Dana
-Dana Buchman
 Danby
 Dance
 Dancer
 Dancing
-Dancing Queen
 Dandy
 Dane
 Danfoss
 Dang
 Danger
 Daniel
-Daniel Cremieux
-Daniel Hechter
-Daniel Klein
-Daniel Ray
-Daniel Wellington
 Daniela
 Daniele
 Daniella
 Danielle
-Daniels
 Danish
 Dann
 Danner
@@ -2255,12 +1864,10 @@ Darby
 Darc
 Darcy
 Dare
-Dare 2B
 Dari
 Daria
 Darin
 Dario
-Dark
 Dark Horse
 Dark Knight
 Dark Side
@@ -2269,14 +1876,12 @@ Darkness
 Darla
 Darley
 Darling
-Darlings
 Darlington
 Darphin
 Darrell
 Darren
 Darryl
 Dart
-Darts
 Darwin
 Daryl
 Das
@@ -2284,7 +1889,6 @@ Dasani
 Dash
 Dashboard
 Dashing
-Dass
 Dassault
 Dat
 Data
@@ -2301,21 +1905,8 @@ Dauphin
 Dave
 Davey
 David
-David Barry
-David Beckham
-David Bowie
-David Brown
-David Charles
-David Clark
-David Gilmour
-David Jones
-David Lawrence
-David Moore
-David Tate
-David Yurman
 Davida
 Davidoff
-Davids
 Davidson
 Davies
 Davinci
@@ -2327,44 +1918,22 @@ Dawn
 Dawson
 Dax
 Day
-Day & Night
-Day Birger Et Mikkelsen
 Daydream
 Dayliff
 Daylight
 Dayna
 Daynee
-Days
 Dayton
 Daytona
 Daz
 Dazzle
 Dca
 De
-De Beers
-De Buyer
-De Dietrich
-De La Mer
-De La Rue
-De Longhi
-De Niro
-De Palma
-De Rosa
-De Ville
-De Walt
 Dead
-Dead Sea
 Deadpool
-Deal
 Dealer
-Deals
 Dean
-Dean & DeLuca
-Dean Guitars
-Dean Markley
-Deans
 Dear
-Dear Body
 Dearborn
 Dearfoams
 Death
@@ -2373,49 +1942,32 @@ Debby
 Deben
 Debenhams
 Deborah
-Deborah Lippmann
-Deborah Milano
 Debra
 Debris
 Debt
 Dec
 Deca
 Decade
-Decades
 Decal
 Decathlon
 Deceuninck
 Dechra
 Deck
 Decker
-Deckers
 Decleor
 Deco
-Deco Art
-Deco Breeze
 Decoder
-Decor
 Decorators
 Decose
 Deda
 Dedra
 Dee
-Dee Zee
 Deep
-Deep Bass
-Deep Blue
-Deep Heat
-Deep Purple
-Deep River
-Deep Sea
-Deep Silver
 Deepcool
 Deer
-Deer Stags
 Deere
 Deeri
 Def
-Def Leppard
 Defa
 Defeet
 Defender
@@ -2432,8 +1984,6 @@ Deirdre
 Dejur
 Deka
 Del
-Del Monte
-Del Sol
 Dela
 Delaine
 Delaney
@@ -2443,8 +1993,6 @@ Dele
 Delfin
 Deli
 Delia
-Delia Cosmetics
-Delias
 Delicious
 Delight
 Delilah
@@ -2453,10 +2001,6 @@ Dell
 Della
 Delsey
 Delta
-Delta Airlines
-Delta Children
-Delta Faucet
-Delta Plus
 Deltaco
 Deltrol
 Deluxe
@@ -2466,11 +2010,9 @@ Demarini
 Demdaco
 Demeter
 Demi
-Demi Loon
 Demo
 Demon
 Demonia
-Demos
 Dempsey
 Den
 Dena
@@ -2486,9 +2028,7 @@ Denmark
 Denn
 Denner
 Dennis
-Dennis Basso
 Denny
-Denny Rose
 Denon
 Denri
 Denso
@@ -2498,16 +2038,11 @@ Dental Source
 Dental White
 Dentek
 Dentist
-Dentists
 Denton
 Denver
-Denver Broncos
-Denver Nuggets
 Deny
-Deny Designs
 Denzel
 Deo
-Deodorant
 Deon
 Depeche Mode
 Depesche
@@ -2520,16 +2055,10 @@ Depth
 Der
 Dera
 Derby
-Derby County
 Dercos
 Derek
-Derek Heart
-Derek Lam
-Derek Rose
 Derm
 Derma
-Derma E
-Derma Wand
 Dermablend
 Dermacare
 Dermacol
@@ -2541,23 +2070,12 @@ Dermo
 Dermovate
 Derrick
 Derry
-Des
 Desa
 Descendants
 Descente
 Desert
-Desert Essence
 Desi
-Design
-Design Essentials
-Design Go
-Design House
-Design Ideas
-Design Toscano
 Designer
-Designers
-Designers Collection
-Designs
 Desigual
 Desire
 Desiree
@@ -2574,27 +2092,18 @@ Destin
 Destiny
 Destroy
 Detail
-Details
 Detect
 Detective
 Detector
 Detention
-Detergent
 Detox
 Detroit
-Detroit Lions
-Detroit Pistons
-Detroit Red Wings
-Detroit Tigers
 Dettol
 Deuce
 Deus
-Deus Ex Machina
 Deuter
 Deutsch
 Deutsche
-Deutsche Bank
-Deutsche Grammophon
 Deux
 Dev
 Deva
@@ -2603,13 +2112,11 @@ Development
 Devi
 Devia
 Devialet
-Device
 Devil
 Devilbiss
 Devin
 Devine
 Devon
-Devon & Jones
 Devotion
 Dew
 Dewalt
@@ -2635,21 +2142,10 @@ Diall
 Dialog
 Dialogue
 Diamond
-Diamond Back
-Diamond Beauty
-Diamond Multimedia
-Diamond Select
-Diamond Supply Co
-Diamonds
 Diana
-Diana Ferrari
 Diane
-Diane Von Furstenberg
 Diaper
-Diaper Genie
 Diary
-Diary Best
-Diary of a Wimpy Kid
 Diba
 Dibu
 Dice
@@ -2664,7 +2160,6 @@ Did
 Diddl
 Dido
 Die
-Die Hard
 Diecast
 Diego
 Diehard
@@ -2672,8 +2167,6 @@ Diel
 Diem
 Diesel
 Diet
-Diet Coke
-Diet Pepsi
 Dietary
 Dietz
 Diff
@@ -2697,13 +2190,11 @@ Digiwave
 Dignity
 Diki
 Dil
-Dillard's
 Dillards
 Dillon
 Dim
 Dima
 Dimension
-Dimensions
 Dimplex
 Din
 Dina
@@ -2713,13 +2204,11 @@ Dini
 Dining
 Dino
 Dinosaur
-Dinosaurs
 Dio
 Diodes
 Dion
 Diono
 Dior
-Dior Homme
 Dip
 Diplomat
 Diptyque
@@ -2728,37 +2217,19 @@ Director
 Directv
 Dirk
 Dirt
-Dirt Devil
 Dirty
-Dirty Dog
-Dirty Laundry
-Dis
 Disaar
 Disc
 Discipline
-Disco
 Discoteca
-Discount
 Discover
 Discovery
-Discovery Channel
-Discovery Kids
 Discreet
 Disguise
 Dish
-Dish Network
 Dishwasher
 Disk
 Disney
-Disney Baby
-Disney Channel
-Disney Couture
-Disney Cuties
-Disney Frozen
-Disney Infinity
-Disney Junior
-Disney Pixar
-Disney Princess
 Disneyland
 Dispenser
 Display
@@ -2773,7 +2244,6 @@ Distribution
 District
 Diva
 Diver
-Divers
 Diversey
 Diversity
 Divide
@@ -2787,77 +2257,49 @@ Diwa
 Diwali
 Dix
 Dixie
-Dixie Cups
 Dixon
 Diy
-Diy Wig
 Dizao
 Dizzy
 Django
-Dls
 Do
-Do It Best
-Do-nut
 Doan
 Dob
 Dobb
-Dobbs
 Dobby
 Dobe
 Doberman
 Dobson
 Doc
-Doc Johnson
-Doc Martens
-Doc McStuffins
 Dock
 Dockers
-Docks
 Doctor
-Doctor White
-Doctor Who
-Doctors
 Document
 Dodge
 Dodo
 Dodocool
 Doe
-Dog
-Dog Chow
 Doggy
-Dogs
 Dogwood
 Doh
-Doh Vinci
 Doj
 Dol
 Dola
 Dolby
-Dolby Digital
 Dolce
-Dolce & Gabbana
-Dolce Gusto
-Dolce Vita
 Dolcebon
 Dolcis
 Dole
-Doll
 Dollar
-Dollar General
-Dollar Tree
-Dolls
 Dolly
-Dolly Parton
 Dolo
 Dolores
 Dolphin
 Dom
-Dom Perignon
 Domain
 Domaine
 Doman
 Dome
-Domes
 Domestic
 Domestos
 Dometic
@@ -2870,24 +2312,12 @@ Dominican
 Dominion
 Dominique
 Domino
-Domino's
-Domino's Pizza
-Dominos
 Domke
 Domus
 Domyos
 Don
-Don Algodon
-Don Cherry
-Don Ed Hardy
-Don Joy
-Don Juan
-Don Julio
-Don Q
 Dona
 Donald
-Donald J Pliner
-Donald Trump
 Donatella
 Donatello
 Donati
@@ -2896,13 +2326,7 @@ Donau
 Done
 Donjoy
 Donkey
-Donkey Kong
 Donna
-Donna Bella
-Donna Carolina
-Donna Karan
-Donna Morgan
-Donna Ricco
 Donnell
 Donnelly
 Donner
@@ -2910,21 +2334,17 @@ Donnie
 Donny
 Donovan
 Donut
-Donuts
 Doo
 Doodle
 Doodlebug
 Doom
 Dooney
-Dooney & Bourke
 Door
 Doorbell
-Doors
 Doose
 Dop
 Dope
 Dora
-Dora The Explorer
 Dorado
 Doram
 Doran
@@ -2942,29 +2362,19 @@ Doric
 Doris
 Doritos
 Dorman
-Dormans
 Dormeuil
 Dormi
 Dorn
 Doro
 Dorothy
-Dorothy Perkins
 Dorr
 Dorset
 Dorthy
-Dos
-Dos Equis
 Dose
 Dot
 Dotcom
-Dots
 Double
-Double A
-Double Coin
-Double Diamond
-Double H
 Doublemint
-Doubles
 Doublestar
 Doucal's
 Douceur
@@ -2974,83 +2384,34 @@ Doulton
 Douwe Egberts
 Dove
 Dover
-Doves
 Dow
-Dow AgroSciences
-Dow Chemical
-Dow Corning
 Down
-Down Earth
-Down To Earth
 Downy
 Dox
 Doyle
 Dozen
-Dp Light
 Dr
-Dr Beckmann
-Dr Davey
-Dr Marcus
-Dr Meinaire
-Dr Rashel
-Dr Skin
-Dr Teal'S
-Dr.
-Dr. AirWair
-Dr. Beckmann
-Dr. Best
-Dr. Brandt
-Dr. Brown's
-Dr. Davey
-Dr. Dennis Gross
-Dr. Dre
-Dr. DuDu
-Dr. Fresh
-Dr. Hauschka
-Dr. Jart+
-Dr. Marcus
-Dr. Martens
-Dr. Meinaier
-Dr. Miracle's
-Dr. Oetker
-Dr. Organic
-Dr. Pepper
-Dr. Rashel
-Dr. Scholl's
-Dr. Seuss
-Dr. Teal's
-Dr. Weil
 Draco
 Draft
 Drag
 Dragon
-Dragon Alliance
-Dragon Ball
-Dragon Ball Z
 Dragonfly
-Dragons
 Drake
-Drakes
 Drakon
 Dram
 Drama
 Draper
-Draper Tools
 DrayTek
 Draz
 Dream
-Dream Girl
-Dream Works
 Dreambaby
 Dreamcast
 Dreamgirl
-Dreams
 Dreamworks
 Dreamworld
 Dremel
 Dren
 Dressbarn
-Dresses
 Dressing
 Drew
 Drexel
@@ -3059,45 +2420,35 @@ Dri
 Dri-Fit
 Dried
 Drift
-Drill
-Drink
 Drinkwell
 Drip
-Drive
 Driven
 Driver
-Drivers
 Driving
 Droid
 Droll
 Drop
 Dropcam
-Drops
 Drum
 Drummer
-Drums
 Drunk Elephant
 Dry
-Dry Idea
 Dryad
 Drybar
 Dryden
 Dryer
-Dryers
 Drymax
 Drynites
 Drypers
 Dsp
 Dsquared
 Dsquared2
-Dss
 Dstv
 Dsy
 Dth
 Dual
 Dualit
 Duane
-Dubai
 Dubarry
 Dubbin
 Dublin
@@ -3107,16 +2458,11 @@ Duc
 Ducati
 Duchess
 Duck
-Duck Brand
-Duck Commander
-Duck Head
-Ducks
 Duco
 Ducray
 Duct
 Dudley
 Dudu Osun
-Dudu-Osun
 Due
 Duel
 Duff
@@ -3127,10 +2473,7 @@ Dugan
 Dugena
 Dui
 Duke
-Duke Nukem
-Dukes
 Dulce
-Dulce De Leche
 Dulcet
 Dulcolax
 Dull
@@ -3148,7 +2491,6 @@ Dunbar
 Duncan
 Dundee
 Dune
-Dune London
 Dunhill
 Dunlop
 Dunlopillo
@@ -3183,7 +2525,6 @@ Durance
 Durand
 Durango
 Durant
-Duras
 Durasoft
 Durastall
 Durastill
@@ -3207,19 +2548,14 @@ Dusen
 Dusenbery
 Dusk
 Dust
-Dust Off
 Dustbane
 Duster
 Dustin
 Dusty
 Dutch
-Dutch Boy
-Dutch Harbor
-Dutch Masters
 Dutton
 Duty
 Duval
-Duvet
 Dux
 Duzzit
 Dvi
@@ -3252,54 +2588,22 @@ Dynomec
 Dyson
 Dz
 Dzg
-E&J
 E-Blue
 E-Cig
 E-Flite
 E-Lektron
-E-Mu
-E-Z
-E-Z UP
-E.L.F. Cosmetics
-E.S.P.
-E45
-EA (Electronic Arts)
-EA Sports
 EAGEAT
 EC
 EDENBERG
-EGYPTIAN PURE WHITE
 EOCO
-EZ Flow
 Ea
 Eagle
-Eagle Creek
-Eagle Eyes
-Eagle One
-Eagles
 Ear
-Ear Force
-Earbuds
 Earl
-Earl Grey
-Earl Jean
 Early
-Early Learning Centre
 Earnest
-Earnest Sewn
 Earnshaw
-Earphones
 Earth
-Earth Best
-Earth Brite
-Earth Choice
-Earth Friendly
-Earth Mama Angel Baby
-Earth Origins
-Earth Science
-Earth Shoe
-Earth Spirit
-Earth Therapeutics
 Earth's Best
 Earthborn
 Earthbound
@@ -3307,40 +2611,22 @@ Earthen
 Earthquake
 Earthwise
 Earwax
-Eas
 Easel
 Easeus
 East
-East 5th
-East Coast
-East End
-East India
-East West
 Easter
 Eastern
-Eastern Mountain Sports
 Eastland
 Eastman
 Easton
 Eastpak
 Eastwood
 Easy
-Easy Bake
-Easy Camp
-Easy Home
-Easy Life
-Easy Off
-Easy Spirit
-Easy Street
-Easy Touch
-Easy Walk
 Easycap
 Easycook
 Easylife
 Easywalker
 Eat
-Eat Natural
-Eat Smart
 Eaton
 Eau
 Eaude
@@ -3358,16 +2644,10 @@ Ece
 Ecg
 Eche
 Echo
-Echo Design
-Echo Park
 Ecko
-Ecko Red
-Ecko Unltd
 Eclause Organics
 Eclipse
 Eco
-Eco Friendly
-Eco Tools
 Eco-Drive
 Ecobee
 Ecoco
@@ -3375,24 +2655,18 @@ Economic
 Economy
 Ecovacs
 Ecover
-Ecs
 Ecstacy
 Ecstasy
 Ecu
 Ed
-Ed Hardy
 Eda
 Eddie
-Eddie Bauer
 Eddy
 Edel
 Edelbrock
 Edelrid
 Edelweiss
 Eden
-Eden Life
-Eden Park
-Eden Tea
 Edgar
 Edge
 Edi
@@ -3402,26 +2676,19 @@ Edimax
 Edison
 Edit
 Edith
-Edition
 Editions
 Editor
 Edm
 Edma
 Edmond
-Edmonds
 Edmund
-Edmunds
 Edna
 Edo
 Edon
 Edox
 Edp
-Eds
 Edward
-Edward Green
-Edwards
 Edwin
-Edwin Jagger
 Eee
 Eel
 Eem
@@ -3431,7 +2698,6 @@ Efc
 Efe
 Effect
 Effective
-Effects
 Effie
 Efi
 Efl
@@ -3444,8 +2710,6 @@ Ego
 Egoiste
 Egp
 Egr
-Egs
-Egypt
 Egyptian
 Eh
 Eheim
@@ -3460,7 +2724,6 @@ Ein
 Einhell
 Einstein
 Eio
-Eis
 Eisbar
 Eisen
 Eisenberg
@@ -3468,17 +2731,10 @@ Eizo
 Ej
 Eject
 Ek
-Ek Success
 Eka
 Eko
 Ekornes
 El
-El Casco
-El Chimico
-El Corte Ingles
-El Dorado
-El Naturalista
-El Paso
 Ela
 Elan
 Elancyl
@@ -3499,16 +2755,11 @@ Elect
 Electra
 Electric California
 Electro
-Electro Harmonix
-Electro Voice
 ElectroMate
 Electrolux
 Electronic Arts (EA)
 Elegant
-Elegant Baby
-Elegant Touch
 Element
-Elements
 Elemis
 Elena
 Elephant
@@ -3516,7 +2767,6 @@ Elevate
 Elevation
 Elevator
 Eleven
-Eleven Paris
 Elf
 Elgato
 Elgydium
@@ -3525,14 +2775,11 @@ Elian
 Elias
 Elica
 Elie
-Elie Saab
-Elie Tahari
 Eliminator
 Elinchrom
 Elio
 Eliot
 Elipson
-Elis
 Elisa
 Elisabeth
 Elisabetta Franchi
@@ -3541,33 +2788,24 @@ Elisha
 Elite Bakeware
 Elixir
 Eliza
-Eliza J
 Elizabeth
-Elizabeth Arden
-Elizabeth Taylor
 Elk
 Elkay
 Ell
 Ella
-Ella Baché
-Ella Moss
 Elle
-Elle Macpherson
 Ellen
-Ellen Tracy
 Ellesse
 Ellie
 Ellington
 Elliot
 Elliott
-Elliott Lucca
 Ellis
 Ellison
 Ellroy
 Elm
 Elma
 Elmer
-Elmer's
 Elmo
 Elna
 Elnett
@@ -3579,7 +2817,6 @@ Elra
 Elring
 Elro
 Elroy
-Els
 Elsa
 Else
 Elseve
@@ -3595,20 +2832,16 @@ Elva
 Elvex
 Elvi
 Elvira
-Elvis
-Elvis Presley
 Elvive
 Ely
 Elysee
 Elysia
 Elysium
-Elysium Spa
 Em
 Ema
 Emachines
 Email
 Emanuel
-Emanuel Ungaro
 Emba
 Embe
 Ember
@@ -3631,11 +2864,8 @@ Emg
 Emi
 Emil
 Emile
-Emile Henry
 Emilio
-Emilio Pucci
 Emily
-Emily The Strange
 Eminem
 Eminence
 Eminent
@@ -3643,9 +2873,6 @@ Emir
 Emirates
 Emit
 Emma
-Emma Bridgewater
-Emma Fox
-Emma Hardie
 Emmanuel
 Emmet
 Emmi
@@ -3657,19 +2884,15 @@ Emoji
 Emoly
 Emori
 Emotion
-Emotions
 Emotiva
 Emp
 Emper
 Emperor
 Empire
-Empire State
 Emporio
-Emporio Armani
 Emporium
 Empress
 Empty
-Ems
 Emsa
 Emtec
 Emu
@@ -3701,7 +2924,6 @@ Energen
 Energetics
 Energizer
 Energy
-Energy Sistem
 Enermax
 Enfagrow
 Enfamil
@@ -3709,13 +2931,9 @@ Enfield
 Eng
 Engage
 Engel
-Engine
 Engineer
 England
 English
-English Laundry
-English Leather
-English Tea Shop
 Enhanced
 Eni
 Enid Blyton
@@ -3728,7 +2946,6 @@ Enna
 Ennis
 Eno
 Enrico
-Enrico Coveri
 Enrique
 Ensign
 Enso
@@ -3750,7 +2967,6 @@ Enya
 Enyce
 Enz
 Enzo
-Enzo Angiolini
 Enzymatic Therapy
 Eon
 Eos
@@ -3790,15 +3006,11 @@ Erdi
 Ere
 Erect
 Ergo
-Ergo Baby
 Ergobaby
 Ergodyne
 Ergon
 Ergotron
 Eric
-Eric Clapton
-Eric Javits
-Eric Michael
 Erica
 Erich
 Erick
@@ -3807,7 +3019,6 @@ Erie
 Erik
 Erika
 Erin
-Erin Fetherston
 Eris
 Erka
 Erke
@@ -3815,14 +3026,11 @@ Erl
 Erma
 Ermenegildo Zegna
 Ernest
-Ernest Borel
-Ernest Jones
 Ernesto
 Ernie Ball
 Erno Laszlo
 Ernst
 Ero
-Eros
 Erotic
 Erp
 Ersa
@@ -3857,21 +3065,16 @@ Espiro
 Espresso
 Esprit
 Esquire
-Ess
 Essa
 Essager
 Esschert Design
 Esse
 Esselte
 Essence
-Essence of Australia
 Essential
-Essential Garden
-Essentials
 Essentiel
 Essenza
 Essex
-Essex Technology
 Essie
 Esso
 Est
@@ -3903,7 +3106,6 @@ Eterna
 Eternal
 Eternity
 Ethan
-Ethan Allen
 Ethel
 Ethernet
 Ethical
@@ -3919,7 +3121,6 @@ Etoile
 Eton
 Etonic
 Etrusco
-Ets
 Ett
 Etude House
 Ety
@@ -3939,9 +3140,6 @@ Euphoria
 Eur
 Eureka
 Euro
-Euro Pro
-Euro Shopper
-Euro graphics
 Euro-Pro
 Eurochef
 Eurocom
@@ -3956,35 +3154,22 @@ European
 Eurostil
 Eurotech
 Eva
-Eva Franco
-Eva Lendel
-Eva Longoria
-Eva Mendes
-Eva Solo
 Evab
 Evado
 Evakool
 Eval
 Evan
-Evan Picone
 Evangelion
-Evans
-Evans Lichfield
 Evap
 Eve
-Eve Lom
 Evelin
 Eveline
 Evelyn
 Even
-Even & Odd
 Evenflo
 Evening
 Event
-Events
 Ever
-Ever After High
-Ever Beauty
 Everbuild
 Evercool
 Everest
@@ -3996,7 +3181,6 @@ Everlast
 Everlight
 Everly
 Everpure
-Evers
 Everstart
 Every
 Everybody
@@ -4004,7 +3188,6 @@ Everyday
 Everything
 Everyuth
 Everywhere
-Eves
 Evga
 Evi
 Evian
@@ -4029,7 +3212,6 @@ Ewbank
 Ewel
 Ewing
 Ex
-Ex-Cell
 Ex-Libris
 ExOfficio
 Exacompta
@@ -4045,13 +3227,10 @@ Excellent
 Excelsior
 Excess
 Exchange
-Exclusive
 Exco
 Exe
-Exe.
 Executive
 Exel
-Exercise
 Exfoliating
 Exhibit
 Exide
@@ -4061,7 +3240,6 @@ Exist
 Exit
 Exlax
 Exo
-Exo Terra
 Exocet
 Exogear
 Exotic
@@ -4086,25 +3264,20 @@ Exposed
 Exposure
 Express
 Expression
-Expressions
 Exquis
 Exquisite
 Exspec
 Extech
 Extend
 Extension
-Extensions
 Exterior
 Extra
 Extract
 Extreme
-Extreme Fair
-Extreme Networks
 Extremis
 Exustar
 Exuviance
 Eye
-Eye Fi
 Eye-Fi
 EyeQ
 Eyeball
@@ -4113,16 +3286,12 @@ Eyegar
 Eyelash
 Eyelashes
 Eyelid
-Eyeliner
-Eyes
 Eylure
 Eyman
 Eymann
 Eynes
 Eyre
 Ez
-Ez Up
-Ez-Go
 Ezcap
 Eze
 Ezee
@@ -4134,20 +3303,12 @@ Ezk Perfumes
 Ezra
 Ezviz
 Ezy
-F fork
-F&F
 F&W
-F.R.I.E.N.D.S
-Fashion
-
 FADED TOPICALS
 FAMRICO
-FAO Schwarz
 FASCIAL GUN
-
 FC Barcelona
 FC Bayern
-FC Bayern Munich
 FC Chelsea
 FC Inter
 FC Juventus
@@ -4159,7 +3320,6 @@ FC UK
 FF
 FFP2
 FL
-FLOATING ARK
 FLOYDEEZ
 FM
 FNC
@@ -4168,7 +3328,6 @@ FP
 FPC
 FPG
 FR
-FRENCH AVENUE
 FX
 Fa
 Fab
@@ -4183,7 +3342,6 @@ Fabric
 Fabrizio
 Fabulous
 Face
-Face Stockholm
 Facebook
 Facom
 Faconnable
@@ -4211,7 +3369,6 @@ Fairview
 Fairway
 Fairy
 Faith
-Faith Connexion
 Faithfull
 Faiza
 Fajita
@@ -4224,37 +3381,28 @@ Falcon
 Falke
 Falken
 Fall
-Fall Out Boy
 Fallen
 Falling In Reverse
 Fallows
 Fam
 Fama
-Famas
 Fame
 Family
-Family Guy
 Famous
-Famous Amos
-Famous Stars And Straps
 Fanatic
-Fanatics
 Fancy
-Fancy Feast
 Fandango
 Fane
 Fanfare
 Fang
 Fantasie
 Fantastic
-Fantastic Four
 Fantasy
 Fantech
 Fantic
 Fantom
 Fao
 Far
-Far East
 Farah
 Farberware
 Fare
@@ -4263,7 +3411,6 @@ Faria
 Farina
 Faris
 Farm
-Farm House
 Farmer
 Farmhouse
 Farnam
@@ -4272,24 +3419,18 @@ Farrell
 Farris
 Farrow & Ball
 Faruk
-Fas
 Fascinating
 Fascination
 Fascinator
 Fashiin Secret
-Fashion & Style
-Fashion 21
 Fashion And Style
 Fashion Beautiful Girls
 Fashion Beyond
-Fashion Beyond Expectation
 Fashion Boutique
 Fashion Bug
 Fashion Cabinet
 Fashion Choice
 Fashion Clasic
-Fashion Classic
-Fashion Collection
 Fashion Collections
 Fashion Company
 Fashion Ella
@@ -4297,20 +3438,13 @@ Fashion Fair
 Fashion Fish
 Fashion For Life
 Fashion Forms
-Fashion Notebook
-Fashion Style
 Fashion Union
 Fashionable
 Fashionista
 Fast
-Fast & Furious
-Fast Track
 Fastrack
 Fat
-Fat Boy
-Fat Face
 Fatboy
-Fatboy Slim
 Fate
 Father
 Fathom
@@ -4322,7 +3456,6 @@ Faucet
 Faulkner
 Faultless
 Fauna
-Faus
 Faust
 Faux
 Fav
@@ -4336,27 +3469,22 @@ Fayreform
 Fbk
 Fealty
 Fear
-Fear Of God
 Fearless
 Feast
 Feather
-Feathers
 Feature
 Febreze
 Fec
 Fed
 FedEx
 Federal
-Federal Signal
 Federation
 Federico
-Federico Mahora
 Fedor
 Fedora
 Fee
 Feed
 Feel
-Feel Good
 Feeling
 Fei
 Feit
@@ -4370,22 +3498,18 @@ Felice
 Felicia
 Felipe
 Felix
-Felix The Cat
 Fell
 Fellini
 Fellow
 Fellowes
 Felt
-Felt Bicycles
 Felton
 Fem
-Fem Fresh
 Female
 Femfresh
 Femi
 Feminine
 Femme
-Femme Fatale
 Femo
 Femu
 Fen
@@ -4423,13 +3547,10 @@ Ferragamo
 Ferrara
 Ferrari
 Ferre
-Ferre Milano
 Ferreira
 Ferrero
-Ferrero Rocher
 Ferretti
 Ferri
-Ferris
 Ferro
 Ferroli
 Ferry
@@ -4451,10 +3572,8 @@ Fh
 Fi
 Fiat
 Fiber
-Fiber One
 Fiberglass
 Fibre
-Fibre Star
 Fibre-Metal
 Fibro
 Fichtel & Sachs
@@ -4466,38 +3585,28 @@ Fidel
 Fidelio
 Fidelity
 Fido
-Fido Dido
 Field
-Field & Stream
 Fieldcrest
-Fields
 Fiesta
 Fife
 Fifi
 Fifteen
 Fifth
-Fifth Avenue
-Fifth Sun
 Fifty
-Fifty Five
-Fifty Shades
 Fig
 Figaro
 Figleaves
 Figure
-Figures
 Fiji
 Fila
 Filament
 File
 Filemaker
-Files
 Filfax
 Fili
 Filip
 Filippa K
 Filippo
-Filippo Loreti
 Filite
 Fill
 Filler
@@ -4508,7 +3617,6 @@ Filofax
 Filon
 Filorga
 Filter
-Filters
 Filto
 Filtra
 Filtration
@@ -4519,30 +3627,24 @@ Fima
 Fin
 Fina
 Final
-Final Fantasy
-Final Touch
 Finance
 Financial
 Finch
 Find
 Finder
 Fine
-Fine Art
 Finepix
 Finer
 Finesse
 Finest
 Finger
-Fingers
 Fini
 Finish
-Finish Line
 Finishing Touch
 Finland
 Finlandia
 Finlay
 Finn
-Finn Comfort
 Finnegan
 Fino
 Finolex
@@ -4555,8 +3657,6 @@ Fiorentini + Baker
 Fiori
 Fiorucci
 Fire
-Fire & Ice
-Fire Trap
 Firebird
 Firebolt
 Firefly
@@ -4568,30 +3668,18 @@ Firestone
 Firetrap
 Firewire
 Firework
-Fireworks
 Firm
 First
-First Act
-First Alert
-First Choice
-First Class
-First Class Lady
-First Gear
-First Response
-First Years
 Firth
-Fis
 Fisba
 Fisch
 Fische
 Fischer
-Fischer Price
 Fischer-Price
 Fisco
 Fish
 Fishbone
 Fisher
-Fisher & Paykel
 Fisher-Price
 Fisherman
 Fishman
@@ -4599,22 +3687,13 @@ Fiskars
 Fissler
 Fist
 Fit
-Fit Bit
-Fit Flop
 Fitbit
 Fitflop
 Fitifito
-Fitness
-Fits
 Fitting
 Fitz
 Five
-Five Finger Death Punch
-Five Nights At Freddy's
-Five Star
-Five Ten
 Fix
-Fix It
 Fix-A-Flat
 Fix-It
 Fixodent
@@ -4635,12 +3714,9 @@ Flanders
 Flannel
 Flap
 Flare
-Flash
-Flash Furniture
 Flashlight
 Flask
 Flat
-Flat Tummy Tea
 Flatout
 Flavor
 Flavour
@@ -4652,7 +3728,6 @@ Fleet
 Fleetwood
 Fleming
 Fleur
-Fleur De Lis
 Flex
 Flex-A-Lite
 Flexfit
@@ -4666,8 +3741,6 @@ Flight
 Flightcom
 Flint
 Flip
-Flip Flop
-Flip Video
 Flipboard
 Flipkart
 Flippers
@@ -4680,19 +3753,15 @@ Flom
 Floor
 Flooring
 Flora
-Flora Nikrooz
 Floral
 Florame
-Floras
 Florence
-Florence & Fred
 Florent
 Florentine
 Flores
 Flori
 Florida
 Florigo
-Floris
 Flormar
 Florsheim
 Floshyne
@@ -4700,10 +3769,6 @@ Floss
 Flotec
 Floureon
 Flow
-Flower
-Flower Girl
-Flower Power Raw Honey
-Flowers
 Flowserve
 Floyd
 Flu
@@ -4719,23 +3784,14 @@ Flushrenic
 Flute
 Flux
 Fly
-Fly Flot
-Fly London
-Fly Racing
 Fly53
 Flyer
 Flying
-Flying Fisherman
-Flying Pigeon
-Flying Tiger
 Flymo
 Flynn
 Flysky
 Flyte
 Flyton
-Fm Acoustics
-Fm Transmitter
-Fms
 Foam
 Focal
 Focus
@@ -4746,7 +3802,6 @@ Fogarty
 Fogg
 Fogo
 Foil
-Foils
 Fold
 Folder
 Folding
@@ -4765,32 +3820,19 @@ Fondue
 Font
 Fontana
 Fontignac
-Food
 Food Network
-Food Saver
 FoodSaver
 Foot
-Foot Joy
-Foot Locker
-Foot Petals
-Football
 Foote
 Footjoy
 Footmates
 Footprint
-Footprints
 Footwear
 For
-For Her
-For Him
-For Life
-For Men
-For You
 Foray
 Forbes
 Force
 Ford
-Ford Mustang
 Fore
 Forearem
 Forecast
@@ -4800,24 +3842,15 @@ Foreo
 Forest
 Forester
 Forever
-Forever 21
-Forever Friends
-Forever Living
-Forever New
-Forever Unique
 Forge
 Forget
 Forgiato
 Form
 Forma
-Formal
 Format
 Formation
 Forme
-Forms
 Formula
-Formula 1
-Formula One
 Forney
 Forrest
 Forst
@@ -4836,7 +3869,6 @@ Foscarini
 Fosgate
 Fossil
 Foster
-Foster Grant
 Foto
 Fotodiox
 Fotomate
@@ -4844,19 +3876,12 @@ Foton
 Fotopro
 Fou
 Found
-Foundation
 Foundations
 Foundry
 Fountain
 Four
-Four Seasons
-Four Star
 Foursquare
 Fox
-Fox Conn
-Fox Racing
-Fox River
-Fox Run
 Foxconn
 Foxcroft
 Foxes
@@ -4864,16 +3889,11 @@ Foxtel
 Foxy
 Fra
 Fractal
-Fractal Design
 Fragile
-Fragrance
-Fragrance World
 Fragrances
 Fraink
-Frame
 Framus
 Franc
-France
 Frances
 Francesca
 Francesco
@@ -4881,47 +3901,26 @@ Franchi
 Francis
 Francisco
 Franck
-Franck Muller
-Franck Olivier
-Franck Provost
 Franco
-Franco Sarto
 Francois
-Francs
 Frank
-Frank Dandy
-Frank Lyman
-Frank Wright
 Franke
 Frankenstein
 Frankie
-Frankie Morello
 Franklin
-Franklin & Marshall
-Franklin Covey
-Franklin Mint
 Franko
-Franks
 Franz
 Franzis
 Fratelli
-Fratelli Rossetti
 Fred
-Fred Perry
 Freda
 Freddie
 Freddy
 Frederic
-Frederic Fekkai
-Frederic Malle
 Frederique
-Frederique Constant
 Fredo
 Fredrick
 Free
-Free People
-Free Spirit
-Free Tech
 Freecom
 Freedom
 Freegun
@@ -4936,18 +3935,10 @@ Freezer
 Freight
 Freixenet
 French
-French Connection
-French Dressing
-French Toast
 Frenche
 Frenzy
 Frequency
 Fresh
-Fresh & Easy
-Fresh Look
-Fresh Produce
-Fresh Step
-Fresh Water
 Freshela
 Freshman
 Freud
@@ -4960,7 +3951,6 @@ Fridgemaster
 Frieda
 Friend
 Friendly
-Friends
 Fries
 Frigidaire
 Fringes
@@ -4984,9 +3974,6 @@ Frost
 Frosty
 Frozen
 Fruit
-Fruit Of The Earth
-Fruit Of The Loom
-Fruit Of The Wokali
 Fruity
 Fry
 Frye
@@ -4996,27 +3983,18 @@ Fubu
 Fuchsia
 Fudge
 Fuji
-Fuji Xerox
 Fujifilm
 Fujikura
 Fujimi
 Fujitsu
-Fujitsu Siemens
 Fuk
 Ful
 Full
-Full Circle
-Full HD
-Full Moon
-Full Speed
-Full Tilt
 Fuller
 Fulltone
 Fully
 Fulton
 Fun
-Fun Factory
-Fun World
 Funai
 Funck
 Function
@@ -5028,11 +4006,7 @@ Fundy
 Funeral
 Funko
 Funky
-Funky Buddha
-Funky Diva
-Funky Trunks
 Funny
-Funny Face
 Funtasma
 Fur
 Furby
@@ -5042,7 +4016,6 @@ Furman
 Furn
 Furnace
 Furnishing
-Furniture
 Furry
 Furstein
 Furu
@@ -5057,31 +4030,22 @@ Futsal
 Futu
 Futura
 Future
-Futures
 Futurmat
 Fuzz
 Fuzzy
 Fwd
 Fy
 Fyberspates
-G&G
-G&L
 G-Code
 G-Form
 G-Shock
-G-Shock (Casio)
 G-Star
-G-Star Raw
 G-Technology
 G-Unit
 G.E.
 G.H. Bass
 G.I. Joe
 G.Skill
-G2
-G3
-G4
-G5
 GB
 GBC
 GBG
@@ -5097,10 +4061,7 @@ GI
 GREY JASON WU
 GS
 GSI
-GSI Outdoors
 GSM
-GT Bicycles
-GT Radial
 GUEETON
 Gabby
 Gabc
@@ -5113,8 +4074,6 @@ Gabriel
 Gabriella
 Gabrielle
 Gaby
-Gadget
-Gadgets
 Gae
 Gaerne
 Gafa
@@ -5138,7 +4097,6 @@ Galant
 Galante
 Galanti
 Galaxy
-Galaxy Gadgets
 Gale
 Galen
 Galeri
@@ -5166,17 +4124,12 @@ Gama
 Gamakatsu
 Gambit
 Gamble
-Game
-Game Boy
-Game Of Thrones
 Gamebird
 Gamecube
 Gamegear
 Gameloft
 Gamemaster
-Games
 Gamestop
-Gaming
 Gamma
 Gamucci
 Gan
@@ -5187,12 +4140,9 @@ Ganesh
 Gang
 Gant
 Gap
-Gap Kids
 Garage
 Garbage
 Garcia
-Garden
-Garden Of Life
 Gardena
 Gardener
 Gardenia
@@ -5203,12 +4153,10 @@ Garibaldi
 Garland
 Garlic
 Garment
-Garments
 Garmin
 Garmont
 Garnet
 Garnier
-Garnier Fructis
 Garnish
 Garon
 Garrard
@@ -5221,9 +4169,7 @@ Garten
 Garth
 Garvalin
 Gary
-Gary Fisher
 Gas
-Gas Monkey Garage
 Gasoline
 Gasp
 Gaspard
@@ -5256,12 +4202,8 @@ Gaz
 Gaza
 Gazelle
 Gear
-Gear 4
-Gear Best
-Gear For Sports
 Gear4Music
 Gearbox
-Gears
 Gearwrench
 Geb
 Gebo
@@ -5271,7 +4213,6 @@ Geco
 Gedore
 Gee
 Geek
-Geek Squad
 Geelli
 Geemy
 Geepas
@@ -5292,7 +4233,6 @@ Gemalto
 Gemini
 Gemma
 Gemmy
-Gems
 Gemstone
 Gen
 Gena
@@ -5300,13 +4240,7 @@ Genebre
 Genelec
 Genera
 General
-General Electric
-General Mills
-General Mobile
-General Motors
-General Tire
 Generation
-Generations
 Generator
 Generic Surplus
 Generic Xim
@@ -5326,14 +4260,10 @@ Genova
 Gent
 Gente
 Gentle
-Gentle Monster
-Gentle Souls
 Gentleman
 Gentry
-Gents
 Genuine
 Geo
-Geo F Trumper
 Geoc
 Geoffrey Beene
 Geographic
@@ -5341,37 +4271,24 @@ Geography
 Geomag
 Geometrix
 George
-George Foreman
-George Gina & Lucy
-George Gina Lucy
-George J. Love
-George Nelson
-George Strait
-Georges
-Georges Rech
 Georgetown
 Georgia
 Georgie
 Georgio
 Geox
 Gerard
-Gerard Darel
 Gerber
 Gerble
 Geric
 Germaine
 German
 Germania
-Germany
 Gerry
-Gerry Weber
 Gerson
 Gert
 Gervais
 Ges
-Gess
 Gestetner
-Get
 Geta
 Getac
 Getty
@@ -5384,11 +4301,9 @@ Gg
 Ggenerici
 Ggh
 Ghost
-Ghost Bond
 Ghostbusters
 Ghs
 Ghst
-Gi Joe
 Gia
 Giacomo
 Giada
@@ -5396,17 +4311,11 @@ Giallo
 Gian
 Giancarlo
 Gianfranco
-Gianfranco Ferre
 Giani
-Giani Bernini
 Gianluca
 Gianna
 Gianni
-Gianni Bini
-Gianni Versace
 Giant
-Giant Loop
-Giants
 Gib
 Gibbon
 Gibbs
@@ -5420,7 +4329,6 @@ Giese
 Giff
 Gifford
 Gift Of Zanzibar
-Gifts
 Gig
 Giga
 Gigabyte
@@ -5449,7 +4357,6 @@ Gimbel
 Gimi
 Gin
 Gina
-Gina Bacconi
 Ginch Gonch
 Ginger
 Gingerbread
@@ -5457,31 +4364,21 @@ Gingersnaps
 Gingham
 Ginko
 Gino
-Gino Franco
-Gins
 Ginseng
 Gio
-Gio Goi
 Giordani
 Giordano
 Giorgia
 Giorgio
-Giorgio Armani
-Giorgio Beverly Hills
-Giorgio Brutini
 Giotto
 Giovani
 Giovanni
 Gipsy
 Girard
-Girard Perregaux
 Girl
-Girl Connection
 Girlfriend
-Girls
 Girly
 Giro
-Gis
 Gisele
 Giselle
 Gish
@@ -5495,7 +4392,6 @@ Giuliana
 Giuliano
 Giulio
 Giuseppe
-Giuseppe Zanotti
 Givenchy
 Givi
 Gizmo
@@ -5508,16 +4404,11 @@ Glade
 Gladiator
 Glady
 Glam
-Glam Rock
 Glamorous
 Glamour
 Glan
 Glanz
-Glas
 Glasgow
-Glass
-Glass collection
-Glasses
 Glassy
 Glastonbury
 Glaze
@@ -5537,40 +4428,25 @@ Glitter
 Glitz
 Glo
 Global
-Global Beauty Care
-Global Knives
-Global Star
-Global Vision
 Globalstar
 Globe
-Globe Electric
 Globetrotter
 Globo
 Glock
 Glog
 Gloria
-Gloria Jeans
-Gloria Vanderbilt
 Glory
 Glosheen
 Gloss
 Glossier
-Glossy
 Glostora
 Glove
-Gloves
 Glow
 Glp
 Glucose
-Glue
 Glumax
 Glut
 Gluta
-Gluta Berry
-Gluta C & E
-Gluta Glow
-Gluta Master
-Gluta White
 Gluten
 Gly
 Glycine
@@ -5579,18 +4455,12 @@ Gmc
 Gmd
 Gmg
 Gmp
-Gms
 Gmt
 Gn
 Gnc
-Gns
 Gnu
 Go
-Go Cat
-Go Pro
-Go Walk
 Goal
-Goal Zero
 Goat
 Gob
 Gobi
@@ -5605,34 +4475,21 @@ Godin
 Godiva
 Godox
 Godrej
-Gods
 Godzilla
 Goebel
 Goga
 Gogo
-Gogos
 Gogroove
 Gojo
 Gok
 Gold Coast
 Gold Medal
 Gold Pfeil
-Gold Star
 Gold Toe
 Gold's Gym
 Golda
 Goldberg
 Golden
-Golden Bear
-Golden Cup
-Golden Eagle
-Golden Goose
-Golden Lady
-Golden Pearl
-Golden Rose
-Golden State
-Golden State Warriors
-Golden Wonder
 Goldi
 Goldie
 Goldline
@@ -5645,8 +4502,6 @@ Goldstar
 Goldwell
 Goldwin
 Golem
-Golf
-Golf Pride
 Goliath
 Golla
 Golly
@@ -5659,34 +4514,19 @@ Gondola
 Gong
 Gonzo
 Goo
-Goo Gone
 Good
-Good Baby
-Good Boy
-Good Girl
-Good Grips
-Good Home
-Good Housekeeping
-Good Luck
-Good Morning
-Good News
-Good Vibes
-Good Year
 Goodbye
 Goodmans
 Goodness
 Goodnight
 Goodrich
-Goods
 Goodwill
 Goody
 Goodyear
 Goof
 Google
-Google Pixel
 Goorin Bros
 Goose
-Goose Creek
 Gooseberry
 Goosebumps
 Gopher
@@ -5696,23 +4536,17 @@ Gora
 Gord
 Gordini
 Gordon
-Gordon Jack
-Gordon Rush
 Gore
 Gore-Tex
 Gorge
 Gorgeous
 Gorham
 Gorilla
-Gorilla Glass
-Gorilla Glue
 Gorm
 Gorman
 Gorton
-Gos
 Gosh
 Gosha
-Gosha Rubchinskiy
 Gospel
 Goss
 Gossard
@@ -5732,22 +4566,17 @@ Gould
 Goulet
 Gourmand
 Gourmet
-Gourmet Home
 Gourmia
 Gov
 Govee
 Goya
 Goyard
 Gp
-Gp Batteries
 Gpd
-Gps
 Gpx
 Gr
 Gra
 Grace
-Grace Cole
-Grace Karin
 Graco
 Grad
 Grade
@@ -5761,39 +4590,27 @@ Grafix
 Grafton
 Graham
 Grain
-Grains
 Gram
 Gramicci
 Grammy
 Gramophone
 Gran
-Gran Sasso
 Granada
 Grand
-Grand Canyon
-Grand Cru
-Grand Marnier
-Grand Prix
-Grand Seiko
-Grand Slam
-Grand Theft Auto
 Grande
 Grandeur
 Grandi
 Grandma
-Grandma's
 Grandpa
 Grandstream
 Grange
 Granger
 Granite
-Granite Gear
 Granny
 Grant
 Granville
 Grape
 Grapefruit
-Grapes
 Graph
 Graphic
 Graphite
@@ -5807,19 +4624,9 @@ Gravel
 Graves
 Gravity
 Gravy
-Gray
 Gray Nicolls
 Grays
 Great
-Great American
-Great Day
-Great Eastern
-Great Lakes
-Great Northern
-Great Plains
-Great Value
-Great Wall
-Great White
 Greater
 Greatest
 Greatland
@@ -5831,28 +4638,19 @@ Greece
 Greek
 Green Bay Packers
 Green Day
-Green Gate
 Green Giant
-Green House
-Green Label
 Green Lantern
-Green Leaf
-Green Light
 Green Line
 Green Lion
 Green Mountain
-Green Pan
 Green Peace
 Green People
-Green Power
 Green River
 Green Sprouts
 Green Star
 Green Tea
-Green Toys
 Green Tree
 Green Valley
-Green Works
 Green World
 Green Zone
 Greenbrier
@@ -5868,13 +4666,11 @@ Greenleaf
 Greenlee
 Greenlife
 Greenlight
-Greenlight Collectibles
 Greenpan
 Greens
 Greenworks
 Greeting
 Greg
-Greg Norman
 Gregg
 Gregoire
 Gregory
@@ -5891,17 +4687,13 @@ Greta
 Gretchen
 Gretel
 Gretsch
-Grey
 Grey Goose
 Greyhound
 Greys
 Griffin
-Griffin Technology
 Griffith
 Grifone
 Grill
-Grill Master
-Grill Mate
 Grilling
 Grim
 Grime
@@ -5913,7 +4705,6 @@ Grip
 Grip-On
 Gripper
 Gripping
-Grips
 Gris
 Grisport
 Grit
@@ -5929,7 +4720,6 @@ Groovy
 Gross
 Grosvenor
 Ground
-Ground Zero
 Group
 Grove
 Grover
@@ -5937,7 +4727,6 @@ Grow
 Growers
 Growing
 Grown
-Grown Alchemist
 Groz
 Grub
 Gruen
@@ -5966,7 +4755,6 @@ Guanjing
 Guard
 Guardian
 Guardians of the Galaxy
-Guards
 Gucci
 Gud
 Gude
@@ -5975,9 +4763,6 @@ Guerlain
 Guernsey
 Guerrilla
 Guess
-Guess Jeans
-Guess Who
-Guess by Marciano
 Guest
 Guevara
 Guggenheim
@@ -5987,7 +4772,6 @@ Guidance
 Guide
 Guidecraft
 Guild
-Guild Wars
 Guilford
 Guillaume
 Guille
@@ -5999,11 +4783,8 @@ Guinness
 Guinot
 Guiot
 Guitar
-Guitar Hero
 Guitarras
-Guitars
 Gulf
-Gulf Oil
 Gull
 Gulliver
 Gum
@@ -6018,46 +4799,34 @@ Gundam
 Gunne Sax
 Gunner
 Gunning
-Guns
-Guns N Roses
 Gunter
 Gunther
 Guo
 Guppy
 Guru
 Gurunanda
-Gus
 Gust
 Gusta
 Gustav
-Gustav Klimt
 Gustavsberg
 Gusto
 Gut
 Gutenberg
 Gutermann
 Guy
-Guy Degrenne
-Guy Laroche
-Guy Tang
 Guzzini
 Gw
 Gwx
 Gx
-Gym
-Gym Master
 Gymboree
 Gymnast
 Gymnic
 Gymshark
 Gypsy
-Gypsy 05
 Gyrl
 Gyro
-Gyros
 Gys
 H&Co
-H&M
 H&R Block
 H&R Springs
 H-E-B
@@ -6071,11 +4840,8 @@ HANMAC
 HB
 HBO
 HDC
-HEALTHY SHOP
 HIAKAN
-HIGH ASTRA
 HIGHPOWER
-HIK Vision
 HIRAMANI
 HUILE
 Haagen Dazs
@@ -6088,7 +4854,6 @@ Hachette
 Hachi
 Hacker
 Hackett
-Hackett London
 Haco
 Had
 Hada Labo
@@ -6106,9 +4871,7 @@ Haig
 Haiku
 Hailo
 Haino Teko
-Hair
 Hair Accessory
-Hair Club
 Hair Do
 Hair Wonder
 Hairfinity
@@ -6120,21 +4883,13 @@ Hake
 Hal
 Halcyon
 Hale
-Hale Bob
 Half
-Half Cast
-Half Life
-Half Moon
 Halford
-Halfords
 Hall
 Hallmark
-Halls
 Halo
-Halo Reach
 Halogen
 Halston
-Halston Heritage
 Halter
 Hama
 Hamax
@@ -6146,19 +4901,13 @@ Hamelin
 Hamer
 Hamil
 Hamilton
-Hamilton Beach
 Hamlet
 Hamley
-Hamleys
 Hamlin
 Hamm
-Hammer
 Hammerite
 Hammond
-Hammond's
 Hampton
-Hampton Bay
-Hamptons
 Hamster
 Han
 Hana
@@ -6166,31 +4915,21 @@ Hanayama
 Hancock
 Hand
 Handboss
-Handmade
 Handy
-Handy Manny
 Hane
-Hanes
 Hanford
 Hang
-Hang Ten
-Hanger
-Hangers
 Hank
 Hankook
 Hanky Panky
 Hanley
 Hanna
-Hanna Andersson
 Hannah
-Hannah Martin
-Hannah Montana
 Hannibal
 Hannon
 Hannspree
 Hanoi
 Hanover
-Hans
 Hansa
 Hansgrohe
 Hanson
@@ -6202,44 +4941,22 @@ Happ
 Happi
 Happiness
 Happy
-Happy Baby
-Happy Days
-Happy Feet
-Happy Home
-Happy Horse
-Happy House
-Happy Kid
-Happy Meal
-Happy Pet
-Happy Plugs
-Happy Socks
-Happy Tree Friends
 Har
 Harajuku
-Harajuku Lovers
 Harbinger
 Harbor
-Harbor Breeze
 Harbour
 Hard
-Hard Candy
-Hard Rock
-Hard Rock Cafe
-Hard Tail
-Hard Wax Beans
 Hardcore
 Harden
 Hardy
-Hardy Amies
 Hare
 Harken
 Harlekin
 Harlequin
 Harley
-Harley Benton
 Harley-Davidson
 Harman
-Harman Kardon
 Harmon
 Harmonica
 Harmonie
@@ -6249,22 +4966,16 @@ Harness
 Harold
 Harp
 Harper
-Harper Collins
 Harper's Bazaar
 Harpoon
 Harraz
 Harrier
 Harriet
 Harris
-Harris Tweed
 Harrison
 Harrods
 Harrow
 Harry
-Harry Hall
-Harry Potter
-Harry Winston
-Harry's
 Hart
 Hartford
 Hartke
@@ -6275,21 +4986,16 @@ Harum
 Harv
 Harvard
 Harvest
-Harvest Moon
 Harvey
-Harvey Davidson
-Harvey Nichols
 Has
 Hasbro
 Hash
 Hashtag
 Hask
 Hasselblad
-Hat
 Hatch
 Hatchimals
 Hatley
-Hats
 Hatsune Miku
 Hatter
 Hauck
@@ -6297,7 +5003,6 @@ Hauppauge
 Haus
 Haut
 Haute
-Haute Hippie
 Havaianas
 Havana
 Have
@@ -6310,7 +5015,6 @@ Havoc
 Havoline
 Hawaii
 Hawaiian
-Hawaiian Tropic
 Hawk
 Hawke
 Hawkers
@@ -6328,7 +5032,6 @@ Haydn
 Hayes
 Hayley
 Haynes
-Hays
 Hayward
 Hayworth
 Haz
@@ -6337,48 +5040,28 @@ Hazelnut
 Hazen
 Hazet
 Head
-Head & Shoulders
-Head Case
-Head Porter
 Headband
 Headline
-Headphone
-Heads
 Headset
-Health
-Health Aid
-Health Mark
-Health O Meter
-Health Plus
-Health Stream
 Healthcare
 Healthy
-Healthy Choice
-Healthy Origins
 Hear
 Hearing
 Heart
-Heart & Soul
-Heart Soul
 Hearth
 Heartland
-Hearts
 Heat
-Heat Holders
 Heath
 Heathrow
 Heating
 Heaven
 Heavenly
-Heavy
 Heavy Duty
-Heavy Metal
 Hebe
 Hebrew
 Hec
 Heck
 Heckler
-Heckler & Koch
 Hector
 Hed
 Hedge
@@ -6386,7 +5069,6 @@ Hedgehog
 Hedgren
 Hedstrom
 Heel
-Heels
 Heelys
 Hefty
 Heg
@@ -6394,10 +5076,8 @@ Hegel
 Heid
 Heide
 Heidi
-Heidi Klum
 Heidsieck
 Height
-Heights
 Heil
 Heim
 Hein
@@ -6412,27 +5092,19 @@ Hel
 Hela
 Held
 Helen
-Helen Kaminski
-Helen Rochas
 Helena
-Helena Rubinstein
 Helene
-Helene Fischer
 Helix
 Hell
 Hella
-Hellas
 Heller
 Hellmann's
 Hello
-Hello Kitty
-Hells
 Hellvape
 Helly Hansen
 Helm
 Helmet
 Helmut
-Helmut Lang
 Help
 Helper
 Helzberg
@@ -6445,7 +5117,6 @@ Hemma
 Hempel
 Hempz
 Hen
-Hen & Rooster
 Henckels
 Henderson
 Hendrick's
@@ -6454,19 +5125,13 @@ Henes
 Heng
 Henkel
 Henley
-Henleys
 Henna
 Hennes
 Hennessy
 Hennig
 Henri
-Henri Lloyd
 Henrietta
 Henry
-Henry Cottons
-Henry Holland
-Henry London
-Henry Squire
 Hensel
 Henson
 Hep
@@ -6478,12 +5143,9 @@ Hera
 Herald
 Herb
 Herbal
-Herbal Essences
 Herbalife
-Herbals
 Herbatint
 Herbie
-Herbs
 Herbst
 Hercules
 Herd
@@ -6492,7 +5154,6 @@ Here
 Heritage
 Herlitz
 Herman
-Herman Miller
 Hermann
 Hermes
 Hermle
@@ -6500,7 +5161,6 @@ Hermon Design
 Hero
 Heroes
 Heron
-Heron Preston
 Herr
 Herra
 Herrera
@@ -6508,9 +5168,7 @@ Herring
 Herringbone
 Hers
 Herschel
-Herschel Supply Co
 Hershey
-Hershey's
 Hert
 Hertie
 Hertz
@@ -6518,7 +5176,6 @@ Herve Leger
 Herz
 Herzog
 Hes
-Hess
 Hesse
 Hestra
 Het
@@ -6530,11 +5187,9 @@ Heunec
 Hevea
 Hew
 Hewlett
-Hewlett Packard (HP)
 Hex
 Hexbug
 Hey
-Hey Dude
 Heye
 Heyner
 Hf
@@ -6543,25 +5198,17 @@ Hg
 Hgt
 Hi Seas
 Hi Standard
-Hi Tech
 Hi Tek
 Hi Tie
 Hi-Lift
-Hi-Standard
-Hi-Tec
-Hi-Tech
 Hib
 Hibermate
 Hibiscus
 Hickey Freeman
 Hickies
 Hickory
-Hickory Farms
 Hicks
 High
-High Power
-High Pure Hyaluronic Acid
-Hiking
 Hikvision
 Hil
 Hila
@@ -6570,7 +5217,6 @@ Hilda
 Hill
 Hillbilly
 Hillman
-Hills
 Hillside
 Hillsong
 Hilltop
@@ -6581,7 +5227,6 @@ Hilti
 Hilton
 Him
 Himalaya
-Himalaya Herbals
 Himalayan
 Himmel
 Hin
@@ -6592,17 +5237,11 @@ Hinge
 Hino
 Hint
 Hip
-Hip Hop
-Hip Hop Abs
-Hip Street
 Hipa
 Hipp
-Hipp Organic
 Hippie
 Hippo
-Hipps
 Hippy
-Hips
 Hipshot
 Hipster
 Hir
@@ -6613,10 +5252,8 @@ Hirose
 Hiroshima
 Hirsch
 Hisense
-Hisense Original
 Hispano
 History
-History Channel
 Hit
 Hitachi
 Hite
@@ -6625,13 +5262,10 @@ Hitech
 Hitman
 Hitomi
 Hitoral
-Hits
 Hive
 Hix
 Hiy
 Hk
-Hk Army
-Hks
 Hla
 Hm
 Hma
@@ -6640,20 +5274,13 @@ Hmd
 Hmi
 Hmv
 Ho
-Ho Scale
 Hob
 Hobart
 Hobbes
 Hobbit
 Hobbs
-Hobby
-Hobby Boss
-Hobby Lobby
-Hobby Master
 Hobbycraft
 Hobo
-Hobo International
-Hobs
 Hobson
 Hoc
 Hoch
@@ -6672,18 +5299,15 @@ Hof
 Hoff
 Hoffman
 Hoffmann
-Hoffmans
 Hofmann
 Hofner
 Hog
 Hogan
-Hogs
 Hogwarts
 Hoh
 Hohner
 Hoj
 Hoka
-Hoka One One
 Hokkaido
 Hol
 Hola
@@ -6692,14 +5316,10 @@ Holden
 Holder
 Holding
 Hole
-Holes
 Holiday
-Holiday Inn
-Holidays
 Holl
 Holla
 Holland
-Holland & Barrett
 Hollander
 Holley
 Holli
@@ -6708,63 +5328,22 @@ Hollister
 Hollow
 Holloway
 Holly
-Holly Hobbie
-Holly Webb
 Hollywood
 Holmes
 Holocaust
 Hologram
 Holosun
-Hols
 Holst
 Holster
 Holt
 Holton
-Holts
 Holy
-Holy Bible
 Holz
 Hom
 Homa
 Homage
 Homak
 Homburg
-Home
-Home & Garden
-Home Alone
-Home Base
-Home Basic
-Home Basics
-Home Brand
-Home Care
-Home Center
-Home Chef
-Home Collection
-Home Comfort
-Home Decor
-Home Depot
-Home Design
-Home Essentials
-Home Garden
-Home Gear
-Home Goods
-Home Gym
-Home Improvement
-Home Kitchen
-Home Living
-Home Made
-Home Office
-Home Plus
-Home Products
-Home Security
-Home Shopping Network
-Home Solutions
-Home Source
-Home Store
-Home Style
-Home Sweet Home
-Home Tech
-Home Trends
 Homebase
 Homeboy
 Homecare
@@ -6783,7 +5362,6 @@ Homemaker
 Homemaster
 Homemate
 Homer
-Homer Simpson
 Homes
 Homescapes
 Homeschool
@@ -6793,7 +5371,6 @@ Homestead
 Homestyle
 Hometown
 Homeware
-Homewares
 Homewell
 Homewood
 Homi
@@ -6805,25 +5382,13 @@ Hon
 Honda
 Hondo
 Hone
-Hones
 Honest
-Honest Company
-Honest Kitchen
-Honest Tea
 Honey
-Honey Bee
-Honey Bunches Of Oats
-Honey Can Do
-Honey Collection
-Honey Maid
-Honey Monster
-Honey Vital
 HoneyMoon
 Honeycomb
 Honeydew
 Honeywell
 Hong
-Hong Kong
 Honk
 Honma
 Honor
@@ -6831,14 +5396,10 @@ Honora
 Hoo
 Hood
 Hoof
-Hook
-Hook & Albert
 Hooker
-Hooks
 Hooligan
 Hoop
 Hoopa
-Hoops
 Hoosier
 Hoot
 Hooters
@@ -6847,14 +5408,11 @@ Hop
 Hope
 Hopp
 Hopper
-Hops
 Hor
 Hora
 Horchow
 Horde
 Horizon
-Horizon Fitness
-Horizons
 Hormel
 Horn
 Hornady
@@ -6865,15 +5423,12 @@ Horoscope
 Horrible Histories
 Horror
 Horse
-Horse Power
 Horsefeathers
-Horses
 Horseshoe
 Horst
 Hort
 Horton
 Horus
-Hos
 Hosa
 Hose
 Hosiery
@@ -6882,37 +5437,7 @@ Hospital
 Host
 Hostess
 Hot
-Hot Air
-Hot Bodies
-Hot Chillys
-Hot Chocolate
-Hot Dog
-Hot Dogs
-Hot Gear
-Hot Head
-Hot Lips
-Hot Mama
-Hot Pepper
-Hot Pink
-Hot Pot
-Hot Rod
-Hot Rods
-Hot Sauce
-Hot Sex
-Hot Shot
-Hot Sox
-Hot Spot
-Hot Springs
-Hot Stuff
-Hot Topic
-Hot Toys
-Hot Tuna
-Hot Water
-Hot Wheels
-Hot Wires
 Hotel
-Hotel Chocolat
-Hotel Collection
 Hotplet
 Hotpoint
 Hotter
@@ -6920,36 +5445,19 @@ Hotties
 Hou
 Houdini
 Houghton
-Houghton Mifflin
 Houl
 Hound
 Hour
 Hourglass
 House
-House 38
-House Beautiful
-House Doctor
-House Martin
-House Of Cards
-House Of Fraser
-House Of Harlow
-House Of Holland
-House Of Marley
-House Of Mouse
 Housewares
 Houston
-Houston Astros
-Houston Rockets
-Houston Texans
 Hov
 Hove
 Hover
 Hoverboard
 How
-How To Train Your Dragon
 Howard
-Howard Leight
-Howard Miller
 Howe
 Howell
 Howies
@@ -6960,10 +5468,8 @@ Hoyan
 Hoyle
 Hozelock
 Hp
-Hp Power
 Hpe
 Hpi
-Hpi Racing
 Hr
 Hre
 Hs
@@ -6990,9 +5496,6 @@ Huda Beauty
 Huddle
 Hudora
 Hudson
-Hudson Baby
-Hudson Jeans
-Hudson Valley
 Hue
 Huff
 Huffy
@@ -7003,20 +5506,13 @@ Huggies
 Hugh
 Hughes
 Hugo
-Hugo Boss
 Hugon
-Hugs
 Hui
 Huion
 Huk
 Hulk
 Hull
 Human
-Human Cherish
-Human Hair
-Human Race
-Human Rights
-Human Scale
 Humangear
 Humanscale
 Humber
@@ -7030,7 +5526,6 @@ Humor
 Humour
 Hump
 Humphrey
-Humphreys
 Humus
 Humvee
 Hun
@@ -7038,16 +5533,10 @@ Hunch
 Hundred
 Hung
 Hungry
-Hungry Hippo
-Hungry Jack
 Hunt
 Hunter
-Hunter Douglas
-Hunters
-Hunting
 Huntington
 Huntley
-Hunts
 Huntsman
 Hur
 Hurd
@@ -7077,7 +5566,6 @@ Hy-Ko
 Hyatt
 Hybrid
 Hyde
-Hyde Park
 Hydra
 Hydraflow
 Hydrapak
@@ -7085,14 +5573,11 @@ Hydrate
 Hydration
 Hydraulic
 Hydro
-Hydro Flask
-Hydro Logic
 Hydrocal
 Hydroderm
 Hydrogen
 Hydrologic
 Hydroponic
-Hydros
 Hydrox
 Hydroxycut
 Hyflex
@@ -7101,7 +5586,6 @@ Hygge
 Hygiene
 Hygienic
 Hyland
-Hyland's
 Hylton
 Hyman
 Hymn
@@ -7156,7 +5640,6 @@ Ignite
 Ihome
 Ikea
 Illy
-Illy Caffe
 Image
 Imagine
 Imak
@@ -7165,7 +5648,6 @@ Imax
 Imetec
 Imou
 Imperial
-Imperial Leather
 Impulse
 Incase
 Incipio
@@ -7185,7 +5667,6 @@ Infocus
 Infrared
 Ingco
 Ingersoll
-Ingersoll Rand
 Inglot
 Ingrams
 Inika
@@ -7220,7 +5701,6 @@ Irobot
 Iron Fist
 Iron Gym
 Ironman
-Irwin Tools
 Isomars
 Issey Miyake
 It Cosmetics
@@ -7231,7 +5711,6 @@ Itiwit
 Its A Wig
 Ivory
 Izod
-J Brand
 J.Crew
 J.Lo
 JB
@@ -7245,15 +5724,12 @@ JHS
 JIBAO
 JIELIYA PROFESSIONAL
 JK
-JK Tyre
 JP
-JP Jamesport
 JRC
 JS
 JSOT
 JUPAI
 JVC
-JVC Kenwood
 JW Anderson
 Jabra
 Jack & Jones
@@ -7282,7 +5758,6 @@ Jansport
 Japanese
 Jarrow Formulas
 Jason
-Jason Markk
 Java House
 Jawbone
 Jay-Z
@@ -7292,7 +5767,6 @@ Jean Paul Gaultier
 Jeans Denim
 Jeep
 Jeffree Star
-Jell-O
 Jello
 Jelly Belly
 Jellycat
@@ -7305,7 +5779,6 @@ Jessica Simpson
 Jet
 Jet7
 Jetboil
-Jewelry
 Jeyes
 Jfenzi
 Jif
@@ -7325,18 +5798,9 @@ Joe Boxer
 Joe Browns
 Jogoo
 John
-John Deere
-John Foster
-John Frieda
-John Galliano
-John Lewis
-John Richmond
-John Smith
-John Varvatos
 Johnnie Walker
 Johnson & Johnson
 Johnson's
-Johnson's Baby
 Joico
 Joie
 Jolen
@@ -7346,7 +5810,6 @@ Jomu
 Jones New York
 Joop!
 Jordan
-Jordans
 Jose Cuervo
 Joseph Joseph
 Joules
@@ -7368,7 +5831,6 @@ Jump
 Jumper
 Jumpsuit Empire
 Jungle
-Jungle Formula
 Junior
 Junk Food
 Jura
@@ -7379,14 +5841,10 @@ Justfog
 Justin
 Jx
 Jziki
-K-Max
 K-Swiss
 K-Way
-K. Brothers
 K.BROTHERS
 K.Nail
-K2
-K9
 KC
 KEZURI
 KFC
@@ -7464,11 +5922,9 @@ Kensie
 Kensington
 Kenstar
 Kent
-Kent Boringer
 Kentaste
 Kentucky Fried Chicken (KFC)
 Kenwood
-Kenya
 Kenya Airways
 Kenya Cane
 Kenya Highland
@@ -7497,7 +5953,6 @@ Kik
 Kikkoman
 Kiko Milano
 Kilian
-Kilian Paris
 Killer
 Kilner
 Kimberly-Clark
@@ -7505,15 +5960,10 @@ Kimono
 Kinbar
 Kincrome
 Kinder
-Kinder Bueno
-Kinder Joy
 Kindle (Amazon)
 Kine
 Kinetic
 King
-King C. Gillette
-King Koil
-King Oscar
 Kingdom
 Kingmas
 Kings Collection
@@ -7526,12 +5976,7 @@ Kirkland Signature
 Kiski
 Kisonli
 Kiss
-Kiss Beauty
 Kit Kat
-Kitchen
-Kitchen Collection
-Kitchen Cook
-Kitchen Craft Mugs
 KitchenAid
 Kitchencentre
 Kitchenware Set
@@ -7559,9 +6004,6 @@ Kohl's
 Kohler
 Koi
 Kojic
-Kojic Acid
-Kojic Acid Soap
-Kojic White
 Kojie San
 Kojivit
 Koko
@@ -7574,7 +6016,6 @@ Koocu
 Kookaburra
 Kookai
 Kool-Aid
-Korea
 Korean
 Kores
 Korg
@@ -7582,11 +6023,9 @@ Korres
 Kors
 Koss
 Kotex
-Kotex Good Feel
 Koton
 Kouvolsen
 Kraft
-Kraft Heinz
 Kramer
 Kraus
 Kreg
@@ -7616,19 +6055,15 @@ Kyocera
 Kyosho
 L'Artisan Parfumeur
 L'Occitane
-L'Oreal
 L'Oréal
-L.A. Girl
 L.L. Bean
 LA Girl
 LADDERS
 LAIOU YAN BEAUTY
 LE FALCONE
 LG
-LG Electronics
 LIGE
 LING-JUN
-LOreal Paris
 LUKOIL
 LUODAIS
 La Fresh
@@ -7636,8 +6071,6 @@ La Mer
 La Perla
 La Prairie
 La Roche Posay
-La Roche-Posay
-La Roche-Posay laboratoires
 La Senza
 La Sportiva
 Labello
@@ -7681,17 +6114,12 @@ Lanthome
 Lanvin
 Lanza
 Laphroaig
-Laptop
 Las Vegas
 Lascal
 Laser
-Laser Tools
 Last
 Latafa
-Latest
 Lattafa
-Lattafa Pride
-Lattafa and Yara
 Laundry
 Laura Ashley
 Laura Biagiotti
@@ -7717,24 +6145,16 @@ Leader
 Leaderhub
 LeapFrog
 Learning Resources
-Leather Case
-Leather Shoes
 Leatherite
 Leatherman
 Leaves
 Lebel
 Led Lenser
 Lee
-Lee Cooper
-Lee Stafford
 Leeco
 Legacy
-Legacy Secret
 Legano
 Lego
-Lego Duplo
-Lego Star Wars
-Lego Technic
 Legrand
 Legs
 Leica
@@ -7745,7 +6165,6 @@ Lemon
 Lena
 Lenor
 Lenovo
-Lenovo Thinkpad
 Lenox
 LensBaby
 Leo
@@ -7782,36 +6201,26 @@ Libresse
 Lidl
 Liebherr
 Life
-Life Fitness
-Life Stride
 Lifebuoy
 Lifecell
 Lifeproof
 Lifestyle
-Lifestyles
 Lifetime
 Lift
-Light
 Lighter
 Lighthouse
 Lighting
 Lightning
-Lights
 Lila
 Lilac
 Lilaka
 Lili
 Lilly
-Lilly Pulitzer
 Lily
-Lily Of The Valley
 Lim
 Lima
 Lime
-Lime Crime
 Limit
-Limited
-Limited Too
 Lin
 Lincoln
 Linda
@@ -7819,10 +6228,8 @@ Lindberg
 Lindt
 Lindy
 Line
-Line 6
 Linea
 Linen
-Linens
 Linex
 Linier
 Link
@@ -7831,16 +6238,12 @@ Linn
 Lino
 Linux
 Lion
-Lion Brand
 Lionel
-Lions
 Lip
-Lip Smacker
 Lipault
 Lipice
 Lipikar
 Lipp
-Lips
 Lipton
 Liqui Moly
 Liquid
@@ -7850,37 +6253,17 @@ Listerine
 Lite
 Lite-On
 Little
-Little Big
-Little Bird
-Little Debbie
-Little Live Pets
-Little Marc Jacobs
-Little Me
-Little Mistress
-Little Mommy
-Little People
-Little Tikes
-Little Trees
 Littlest Pet Shop
 Live
-Live Clean
-Live Life Well
-Live Nation
-Liverpool FC
 Living
-Living Proof
-Living World
 Liz Claiborne
 Liz Earle
 Lizard
-Lizard Skins
 Lloyd
-Lloyds
 Loake
 Lobo
 Loc
 Lock
-Lock & Lock
 Lockheed
 Locks & Switches
 Loctite
@@ -7897,11 +6280,9 @@ Lois
 Lola
 Lole
 Lolita
-Lolita Lempicka
 Lollia
 Lollipop
 Lomography
-London
 London Fog
 Longchamp
 Longines
@@ -7914,9 +6295,7 @@ Lopez
 Lor
 Lorac
 Lord
-Lord & Taylor
 Loreal
-Loreal Professionnel
 Loren
 Lorena
 Lorenti
@@ -7929,9 +6308,7 @@ Los Angeles Lakers
 Lost
 Lotto
 Lotus
-Lotus Herbals
 Lou
-Lou Lou
 Loud
 Loudmouth
 Louis Garneau
@@ -7953,7 +6330,6 @@ Ltd
 Lube
 Lubriderm
 Lucas
-Lucas Oil
 Lucasfilm
 Lucca
 Lucent
@@ -7961,9 +6337,6 @@ Luciano
 Lucid
 Luck
 Lucky
-Lucky Brand
-Lucky Charms
-Lucky Strike
 Lucozade
 Lucy
 Ludwig
@@ -7985,7 +6358,6 @@ Luminarc
 Luminox
 Lumix
 Luna
-Luna Porcelain
 Lunch
 Lund
 Lunn
@@ -7994,16 +6366,12 @@ LurnaoQueen
 Luron
 Lush
 Luster
-Luster's
 Lutron
 Luv
 Luvable Friends
-Luvs
 Lux
-Lux Premium
 Luxardo
 Luxe
-Luxe Cosmetic
 Luxman
 Luxor
 Luz
@@ -8013,26 +6381,19 @@ Lycra
 Lyle & Scott
 Lynx
 Lyon
-Lyons
-Lyons Maid
 Lyra
 M Horse
 M&M's
 M&S (Marks & Spencer)
 M-Audio
-M-HORSE
-M1
-M3
 M4 Plus Connected
 MAC
-MAC Cosmetics
 MAX MEN
 MBQuart
 MCM
 MG
 MINI FOCUS
 MK
-MK Electric
 MODI
 MOOYAM
 MOUSUF
@@ -8042,7 +6403,6 @@ MZ Wallace
 Ma Cuisine
 Maaji
 Mabox
-Mac Carpet
 Macadamia
 Macallan
 Macally
@@ -8055,7 +6415,6 @@ Mackie
 Macmillan
 Macro
 Macron
-Macun King
 Macy's
 Mad Catz
 Mad Dog
@@ -8066,14 +6425,9 @@ Madonna
 Madurasa
 Maestro
 Mag
-Mag-Lite
 Magbak For Iphone
 Maggi
 Magic
-Magic Bullet
-Magic Chef
-Magic Hose
-Magic Month
 Magimix
 Maglite
 Magnanni
@@ -8099,12 +6453,10 @@ Maison Kitsune
 Maison Margiela
 Maison Scotch
 Majestic
-Majestic Athletic
 Majorette
 Makari
 Make Up
 Makita
-Makita Accessories
 Malabrigo
 Malaika
 Malibu
@@ -8112,29 +6464,23 @@ Malin+Goetz
 Mallory
 Maltesers
 Mam
-Mama Earth
 Mama Mio
 Mamaearth
 Mamas & Papas
 Mambo
 Mammut
 Man
-Manchester City
-Manchester United
 Mandarina Duck
 Manduka
 Mangalam
 Mango
 Manhattan
-Manhattan Portage
 Manic Panic
-Manicure Set
 Manitou
 Manji
 Manolo Blahnik
 Mansfield
 Mantis
-Manual
 Manuka Doctor
 Manuka Health
 Maped
@@ -8145,12 +6491,10 @@ Marado
 Marantz
 Marathon
 Marble
-Marble Berry
 Marc Anthony
 Marc Ecko
 Marc Fisher
 Marc Jacobs
-Marc O'Polo
 Marchesa
 Marco Polo
 Marco Tozzi
@@ -8180,20 +6524,15 @@ Marni
 Mars
 Marshal
 Marshall
-Marshall Headphones
 Martell
 Martha Stewart
 Martin
-Martin Audio
-Martin Lion
-Martin Logan
 Martini
 Marula
 Marvel
 Marvis
 Marwa
 Mary Kay
-Mary Kay Timewise
 Maserati
 Mash
 Mason Cash
@@ -8202,7 +6541,6 @@ Mason Pearson
 Masport
 Massimo Dutti
 Master
-Master Lock
 Mastercard
 Masterchef
 Mastercraft
@@ -8216,7 +6554,6 @@ Maui Jim
 Mauviel
 Mavala
 Mavic
-Max
 Max & More Cosmetic Sponge
 Max Factor
 Max Man
@@ -8224,7 +6561,6 @@ Max Mara
 Max Studio
 Maxell
 Maxi
-Maxi Cosi
 Maxim
 Maxmech
 Maxwell & Williams
@@ -8259,11 +6595,9 @@ Media
 Mediacom
 Medicare
 Medicated
-Medicine
 Medicube
 Medimix
 Medion
-Medix 5.5
 Medix5 5
 Medline
 Mega Bloks
@@ -8277,13 +6611,11 @@ Meinl
 Meister
 Mekis
 Melamine
-Melamine Ware
 Melano
 Melbourne
 Meliconi
 Melii
 Melissa
-Melissa & Doug
 Melitta
 Mellow Yellow
 Melody
@@ -8308,12 +6640,10 @@ Mepra
 Meraki
 Merc
 Mercedes Benz
-Mercedes-Benz
 Mercer
 Mercier
 Merck
 Mercury
-Mercury Elite
 Merida
 Meridian
 Merino
@@ -8350,7 +6680,6 @@ Michael Kors
 Michael Stars
 Michelin
 Mickey
-Mickey Mouse
 Micolor
 Micro
 Microban
@@ -8371,8 +6700,6 @@ Miele
 Mielle
 Mighty Mule
 Mika
-Mika Lee
-Mika Series
 Mikalla
 Mikasa
 Miki House
@@ -8386,13 +6713,10 @@ Milky Way
 Mill Creek
 Millefiori
 Miller
-Miller Harris
 Millet
 Milly
 Milo
 Milton
-Milton Bradley
-Milton Lloyd
 Milwaukee
 Mimaki
 Mimi
@@ -8412,7 +6736,6 @@ Mini Rodini
 Minichamps
 Minions
 Miniso
-Mink
 Minnie Mouse
 Mino
 Minolta
@@ -8429,15 +6752,6 @@ Mirrycle
 Misaki
 Misfit
 Miss
-Miss Beauty
-Miss Fiori
-Miss Laureta
-Miss Look
-Miss Me
-Miss Melody
-Miss Selfridge
-Miss Sixty
-Miss Sporty
 Missoni
 Mistral
 Mita
@@ -8449,17 +6763,13 @@ Miu Miu
 Mixa
 Miyabi
 Mizuno
-Mk Massage Oil
 Mny
 Mobil 1
-Mobile
 Mobvoi
 Moby
 Moccona
 Moda
 Models Own
-Modern
-Modern Scale
 Moderna
 Modigliani
 Modio
@@ -8475,7 +6785,6 @@ Molly Bracken
 Molo
 Molten
 Molton Brown
-Mom Easy
 Moma
 Momeasy
 Moment
@@ -8495,8 +6804,6 @@ Monet
 Mongoose
 Monica Vinader
 Monin
-Monitor
-Monitor Audio
 Monkey 47
 Monki
 Monnalisa
@@ -8507,12 +6814,6 @@ Monoprice
 Monroe
 Monsoon
 Monster
-Monster Cable
-Monster Energy
-Monster High
-Monster Jam
-Monster Synthetic Formula
-Mont Blanc
 Mont Marte
 Montague
 Montagut
@@ -8549,7 +6850,6 @@ Morinaga
 Morning Harvest
 Morning Star
 Moroccan Argan Oil
-Moroccan Oil
 Moroccanoil
 Morphy Richards
 Morris
@@ -8560,7 +6860,6 @@ Moscot
 Moser
 Moses
 Moshi
-Moshi Monsters
 Mossimo
 Mossy Oak
 Motel
@@ -8600,8 +6899,6 @@ Mr Coffee
 Mr Men
 Mr Muscle
 Mr Sheen
-Mr. Clean
-Mr. Coffee
 Mrs
 Msr
 Mtd
@@ -8635,7 +6932,6 @@ Murad
 Murano
 Murine
 Murray
-Murray's
 Muscle Milk
 Muscle Tech
 Musclemeds
@@ -8679,29 +6975,23 @@ NCAA
 NEWVEW
 NFL
 NIPNAP
-NWS
 NYDJ
 NZXT
 Na
 Naf Naf
-Nail Pro
 Nailene
 Nails Inc
 Nair
-Nairobi
 Nakamura
 Nakd
 Naked
-Naked Wolfe
 Namaste
 Namco
-Namco Bandai
 Name It
 Nanette Lepore
 Nankang
 Nannini
 Nano
-Nano Bakeware
 Nanoblock
 Nanoleaf
 Naomi Campbell
@@ -8716,21 +7006,13 @@ Nashi Spread
 Natasha Denona
 Nathan
 Native
-Native Shoes
-Native Union
 Natori
 Natracare
 Natrol
-Natural
-Natural Balance
-Natural Factors
 Naturalizer
 Naturalli
 Naturals
 Nature
-Nature Made
-Nature Own
-Nature Valley
 Naturehike
 Natures Aid
 Natures Bounty
@@ -8748,11 +7030,9 @@ Nazava
 Nearly Natural
 Neat Foods
 Neato
-Neato Robotics
 Nebo
 Nec
 Neca
-Necklace
 Nedis
 Neelux
 Neewer
@@ -8761,7 +7041,6 @@ Neil Barrett
 Neilmed
 Neiman Marcus
 Nelson
-Nelson Rigg
 Nemesis
 Nemo
 Neo
@@ -8772,15 +7051,12 @@ Neosporin
 Neostrata
 Neptune
 Nerf
-Nerf Dog
 Nescafe
 Nesco
 Nespresso
 Nesquik
 Nest
-Nest Fragrances
 Nestle
-Nestle Pure Life
 Netatmo
 Netgear
 Netis
@@ -8800,18 +7076,14 @@ New Bella
 New Bling
 New Body Line
 New Bone China
-New Brand
 New Bright
 New Chapter
 New Era
 New Look
 New Nordic
 New Ray
-New Sport
 New Star
 New York
-New York Knicks
-New York Yankees
 Newbodystyle
 Newcastle
 Newell
@@ -8819,9 +7091,7 @@ Newfeel
 Newline
 Newport
 Newton
-Newton Running
 Next
-Next Level
 Nextbase
 Nextbook
 Nexus
@@ -8841,9 +7111,6 @@ Nicorette
 Nido
 Nifty
 Nike
-Nike Air
-Nike Golf
-Nike SB
 Nikeshoe
 Nikko
 Nikon
@@ -8859,11 +7126,7 @@ Nine West
 Ninebot
 Nineless
 Ninja
-Ninja Turtles
 Nintendo
-Nintendo 3DS
-Nintendo DS
-Nintendo Switch
 Nioxin
 Nippon Kodo
 Nippon Paint
@@ -8880,12 +7143,10 @@ Nitrile
 Nitro
 Nitto
 Nivea
-Nivea Men
 Nixon
 No Boundaries
 No Fear
 No Longer
-No Longer Not Yet
 No Name
 No Nonsense
 Noah
@@ -8895,7 +7156,6 @@ Nocona
 Noctua
 Noisy May
 Nokia
-Nokia Imported
 Nolan
 Noma
 Nomad
@@ -8903,9 +7163,6 @@ Noon
 Noor Gold
 Nora
 Nordic
-Nordic Naturals
-Nordic Track
-Nordic Ware
 Nordlux
 Nordstrom
 Norev
@@ -8921,13 +7178,11 @@ North Sails
 North Star
 North States
 Northern
-Northern Lights
 Northland
 Northside
 Northwave
 Norton
 Nostalgia
-Nostalgia Electrics
 Not Your Daughter's Jeans
 Note
 Nothing
@@ -8939,8 +7194,6 @@ Novation
 Novoflex
 Novus
 Now
-Now Designs
-Now Solutions
 Noxzema
 Nsk
 Nu Skin
@@ -8953,7 +7206,6 @@ Nukeproof
 Numark
 Numatic
 Numi
-Numi Tea
 Numph
 Nuna
 Nunix
@@ -8973,7 +7225,6 @@ Nutrilite
 Nutrimaster
 Nutrisse
 Nuvo
-Nuvo Lighting
 Nvidia
 Nw
 Nyko
@@ -8982,7 +7233,6 @@ Nyle
 Nyx
 O'Carly
 O'Neill
-O.P.I
 OAKNET
 OH SO Heavenly
 OMG
@@ -8990,7 +7240,6 @@ OPI
 ORS
 OSCKAL
 OXO
-OXO Tot
 Oakley
 Oasis
 Obey
@@ -9007,12 +7256,9 @@ Octopus
 Oculus
 Ocz
 Odyssey
-Office Point
 Office Star
-Office Supply
 Officepoint
 Ofia
-Ofia Et Gcl
 Ogio
 Ogx
 Oilatum
@@ -9032,12 +7278,9 @@ Ole Henriksen
 Olevs
 Olight
 Olive
-Olive Oil
 Oliver Peoples
 Olivetti
 Olivia
-Olivia Burton
-Olivia Garden
 Olmeca
 OluKai
 Olympia
@@ -9064,7 +7307,6 @@ Opinel
 Opium
 Opk
 Oppo
-Oppo Digital
 Opposuits
 Optex
 Optical Mouse
@@ -9074,11 +7316,7 @@ Optimus
 Optoma
 Optrex
 Opus
-Oraimo Et Fashion
-Oraimo Et Gcl
-Oraimo Et Noosy
 Oral-B
-Orange
 Orbeez
 Orbi 20
 Orbit
@@ -9088,9 +7326,6 @@ Orchestra
 Ordinary Skincare Co
 Oreo
 Org
-Organic
-Organic Choice
-Organic Honey
 Organica
 Organics
 Orgo
@@ -9129,7 +7364,6 @@ Oudihong
 Our Generation
 Our Legacy
 Outbound
-Outdoor Tech
 Outre
 Outset
 Outwell
@@ -9141,7 +7375,6 @@ Owner
 Owngreat
 Owon
 Oxford
-Oxford Cloth
 Oxgord
 Oxy
 Oxygen
@@ -9165,7 +7398,6 @@ PS5
 Pablosky
 Pac
 Pacific
-Pacific Coast
 Pacifica
 Paco Rabanne
 Pacsafe
@@ -9185,7 +7417,6 @@ Palladio
 Palladium
 Palm Angels
 Palm Beach
-Palmer's
 Palmers
 Palmolive
 Paloma Picasso
@@ -9227,15 +7458,12 @@ Parallax
 Parex
 Parfum De Marley
 Parfums De Marly
-Paris
 Paris Corner
 Paris Hilton
 Park Avenue
 Park Lane
 Park Tool
 Parker
-Parker Brothers
-Parker Pen
 Parkside
 Parliament
 Parlux
@@ -9255,7 +7483,6 @@ Pathfinder
 Patisse
 Patons
 Patriot
-Patriot Memory
 Patrol
 Patron
 Paul Frank
@@ -9275,8 +7502,6 @@ Peak Design
 Peak Performance
 Peanuts
 Pearl
-Pearl Drops
-Pearl Izumi
 Pears
 Pearson
 Peavey
@@ -9296,7 +7521,6 @@ Pelican
 Pelikan
 Pellon
 Peltor
-Pen
 Penaten
 Pendaflex
 Pendleton
@@ -9319,14 +7543,12 @@ Percy Nobleman
 Perfect Fit
 Performance
 Perrier
-Perrier Jouet
 Perry Ellis
 Persil
 Personna
 Perspirex
 Pert Plus
 Peruvian
-Pet Brands
 Pet Head
 Peter England
 Peter Kaiser
@@ -9354,23 +7576,11 @@ Phenix
 Philadelphia
 Philco
 Philip
-Philip B
-Philip Kingsley
-Philip Morris
-Philip Persio
 Philipp Plein
 Philippe Starck
-Philips
-Philips Avent
-Philips Electronics
-Philips Sonicare
 Phillips
-Phillips 66
 Philosophy
 Phoenix
-Phoenix Contact
-Phoenix Gold
-Phone Case
 Phonic
 Photoflex
 Photography & Cinema
@@ -9402,7 +7612,6 @@ Pikeur
 Piko
 Pikolinos
 Pilgrim
-Pillow Pets
 Pillsbury
 Pilot
 Pilz
@@ -9410,7 +7619,6 @@ Pimkie
 Pinacle
 Pinarello
 Ping
-Ping Pong
 Pink Floyd
 Pink Lining
 Pink Panther
@@ -9433,7 +7641,6 @@ Pj Masks
 Plan B
 Planet Earth
 Planet Waves
-Plant
 Planter'S
 Plantronics
 Plantur
@@ -9442,7 +7649,6 @@ Plastic Clothes Pins
 Plastic Head
 Plasticine
 Platinum
-Platinum Fubu
 Plato
 Playboy
 Playgro
@@ -9458,7 +7664,6 @@ Plenty
 Plex
 Pli
 Plum
-Plus
 Plush
 Pluto
 Pny
@@ -9476,9 +7681,6 @@ Poise
 Pokemon
 Pola
 Polar
-Polar Bear
-Polar Bottle
-Polar Pro
 Polaris
 Polaroid
 Polartec
@@ -9487,12 +7689,9 @@ Polident
 Polini
 Polistil
 Polk
-Polk Audio
 Pollini
 Polly Pocket
 Polo
-Polo Ralph Lauren
-Polo Sport
 Polti
 Poltrona Frau
 Polycom
@@ -9515,7 +7714,6 @@ Popeye
 Porcelanosa
 Porcher
 Porsche
-Porsche Design
 Port Authority
 Port Designs
 Porta Brace
@@ -9528,19 +7726,12 @@ Portwest
 Pos
 Posh
 Post It
-Post-It
 Postman Pat
 Pottery Barn
 Pouch
 Pour Moi
 Pouxit
 Powell
-Power
-Power 7
-Power Balance
-Power King
-Power Rangers
-Power Support
 Powerade
 Powerbar
 Powerbass
@@ -9563,7 +7754,6 @@ Predator
 Prego
 Preiser
 Premier
-Premier Man
 Prenatal
 Prepara
 Preparation H
@@ -9580,11 +7770,7 @@ Pretty Polly
 Pretty White
 Price Pfister
 Pride
-Pride Mobility
 Prima
-Prima Classe
-Prima Donna
-Prima Marketing
 Primark
 Primavera
 Primax
@@ -9592,25 +7778,17 @@ Primula
 Primus
 Prince
 Princess
-Princess House
 Princeton
-Princeton Tec
 Pringle
-Pringles
 Print Master
 Printronix
 Prinz
 Prismacolor
 Private
 Pro Action
-Pro Art
 Pro Co
-Pro Form
-Pro Garden
 Pro Grip
 Pro Plan
-Pro Plus
-Pro Series
 Prochem
 Procto-Glyvenol
 Proctor Silex
@@ -9618,7 +7796,6 @@ Prodigy
 Prodipe
 Proel
 Profile
-Profile Design
 Proform
 Profoto
 Prolab
@@ -9660,7 +7837,6 @@ Prps
 Ps2
 Ps3
 Psb
-Psg
 Psp
 Psycho Bunny
 Publish
@@ -9673,41 +7849,25 @@ Puffin
 Puffs
 Puig
 Pukka
-Pukka Herbs
 Pull & Bear
 Pullman
 Pulsar
 Pulsin
 Puma
 Pumpkin
-Pumpkin Patch
 Punex
 Punpple
 Puppy
 Pur
 Pura Vida
-Pure
-Pure Egyptian
-Pure Fitness
-Pure Gear
-Pure Glow
-Pure Gold
-Pure Life
-Pure Naturals
-Pure Protein
-Pure White
 Pureflo
 Purflux
 Purina
-Purina One
 Purity
 Puro
-Purple
-Purse
 Pusheen
 Pussycat London
 Putnam
-Puzzle
 Pyary
 Pyle
 Pyramid
@@ -9744,7 +7904,6 @@ Razer
 Rc
 Rdl
 Reactor
-Real Skin
 Real THAI
 Realme
 Realskin
@@ -9765,7 +7924,6 @@ Ricola
 Ridgid
 Rieker
 Rimmel
-Rimmel London
 Rinz
 Ritu
 Roc
@@ -9786,8 +7944,6 @@ Rosmed
 Rotho Babydesign
 Roushun
 Royal
-Royal Mirage
-Royal honey
 Royce
 Russell Hobbs
 Ryobi
@@ -9798,12 +7954,8 @@ SHAWL
 SHEIN
 SHENGKE
 SHINECON
-SHOES
 SHOKZ
-SIGNATURE HOME COLLECTION
 SILK
-SILVER CREST
-SILVERCREST GERMANY
 SIRI
 SIWAR BY NÃ©o Artisanal
 SIWAR BY N횄짤o Artisanal
@@ -9816,13 +7968,11 @@ SOL DE JANEIRO
 SOLITAIRE
 SP
 SPICE MARINE
-SPORT
 SQ
 SRITRANG
 STEREO
 STYLEJIANG
 SUNCOAT
-SUNDABESTS
 SUNDASELF
 SUNKISSED
 SWEEPER
@@ -9831,12 +7981,9 @@ SWS
 Saachi
 Safaricom
 Safety
-Safety Jogger
 Salkin
 Samantha
 Samsung
-Samsung Original
-San Disk
 Sandag
 Sandisk
 Sanford
@@ -9871,16 +8018,12 @@ Senori
 Sensitive
 Sensodyne
 Seoul
-Seoul Secret
 Sepit
-Series
 Seven Seas
 Shalina
 Sharp
 Shave Code
-Shawn K
 Shea Butter
-Shea Moisture
 SheaMoisture
 Shems
 Shenke
@@ -9893,9 +8036,7 @@ Sidchrome
 Siemens
 Signal
 Signature
-Signatures
 Silky cool
-Silver Spoon
 SilverCrest
 Silverado
 Silverline
@@ -9910,7 +8051,6 @@ Skala
 Skechers
 Skeenpoint
 Skil
-Skill Tech
 Skilltech
 Skin Care
 Skin Doctor
@@ -9922,11 +8062,7 @@ Skmei
 Skullcandy
 Skyview
 Skyworth
-Smart 2030
-Smart Accessories
 Smart Collection
-Smart Life
-Smart Pro
 Smart Wall Paint
 SmartBerry
 Smartlife
@@ -9937,9 +8073,6 @@ Soft Sheen-Carson
 Softcare
 Sokany
 Soko
-Solar Light
-Solar Max
-Solar power
 Solgar
 Sollatek
 Sonar
@@ -9949,7 +8082,6 @@ Sony
 Sosoft
 Spa
 Sparko
-Spice
 Spigen
 Splash
 Sportin' Waves
@@ -9962,32 +8094,22 @@ Stanley
 Starlink
 Startimes
 Starworth
-Steel
-Steel Function
 Stelar Lock
 Stick Art
 Stickie Art
-Storage
 Suavecito
 Sumifun
 Summer fridays
 SunPower
 Sundabest
 Sunny
-Sunny Isle
 Sunshine
 Sunsilk
 Sunveat
 Super
-Super Ducha
-Super Facialist
-Super King
-Super Max
-Super Moringa
 Superfeet
 Superfoam
 Superkingmas
-Support
 Suree
 Sutton Tools
 Swan
@@ -9997,36 +8119,27 @@ Swirl
 Syinix
 Sykes-Pickavant
 Synix
-T9
 TABAC
 TAG Heuer
 TAGWOOD
 TATA
 TC
 TCB
-TCB Naturals
 TCL
-TCS
 TECLAST
 TELESIN
 TF
 THE FINAL TOUCH
 THEMRA
-THERMOS FLASKS
 TIK
 TIP
 TLAC
 TM
 TODO
-TOOLS
-TOP 2
 TOTAL
 TOUPHY
 TOZO
-TP Link
-TP-Link
 TPLink
-TRAVEL CHARGER
 TRENDYLOCK
 TRESemmé
 TRUFOODS
@@ -10042,7 +8155,6 @@ Taiyu
 Tana
 Tantra
 Tecno
-Tee Pee
 Teepee
 Tefal
 Telescopic
@@ -10072,19 +8184,14 @@ Tom Ford
 Tommy Hilfiger
 Too Faced
 ToolPro
-Top
-Top Class
-Top Lure
 Tornado
 Toshiba
-Total Tools
 Tote Bag
 Touch Me
 Transcend
 Tronic
 Tropical Heat
 Trust
-Tshirt
 Tudor
 Tummy
 Turkish
@@ -10095,15 +8202,12 @@ UKEN
 UMOJA
 UNIQUE
 URK
-USA
 USA Royal
-USB HUB
 USK Unitech
 USN
 Ubiquiti Networks
 Ugg
 Ugreen
-Ultra
 Umbro
 Unbrand
 Under Armour
@@ -10112,20 +8216,15 @@ Union
 Universal FOOD King
 Urban Decay
 Usag
-Usb
 Ushas
 V.POLO
-V6
 VACUUM
-VEET GOLD
 VELTON
 VERSMAN
 VHT
 VI John
-VI-JOHN
 VIGUER
 VILLAON
-VINTAGE T9
 VMEN
 VUE
 Vacheron Constantin
@@ -10134,7 +8233,6 @@ Valera
 Valon
 Vans
 Vaseline
-Vaseline Original
 Veet
 Veetgold
 Vellmax
@@ -10151,7 +8249,6 @@ Victorious
 Vifone
 Viktor & Rolf
 Vinco
-Vintage
 Viro
 Vision Plus
 Vitale
@@ -10167,7 +8264,6 @@ WERHL
 WHAL professional
 WHO'S THAT Girl
 WID
-WIG SPICES
 WINNING STAR
 WNGREAT
 WRISTWATCH
@@ -10177,31 +8273,25 @@ WakeView
 Wall Art
 Wall deco
 Wallabees
-Wardrobe
 Waritex
 Watches and More
 Weegas
-Weibo
 Wera
 West
 Wet n Wild
 Whirlpool
-White Cap
 White Pearl
 White Secret
 White board
 Whitedent
-Wigap
 Wigenius
 Wigor
-Wigwam
 Wiha
 Wild
 Willynur Spices
 Windsor
 Winnie's Pure Health
 Wins Jown
-Wins Town
 Winstown
 Winters
 Wireless GSM
@@ -10215,10 +8305,8 @@ World of Curls
 Worx
 Wrangler
 Wster
-X MAX
 X-Scoot
 X-TIGI
-X3
 XBC
 XHC
 XPrinter
@@ -10238,7 +8326,6 @@ YOG
 Yamaha
 Yamama
 Yandou
-Yara Home
 Yardley
 Yoko
 Yongkang
@@ -10255,18 +8342,12 @@ Zinger
 Zoe
 bensoo
 calabaza
-e.l.f.
 flattummytea
 foxbox
 i7s Tws
-iPad
-iPhone
-iPhone Lightning
 icook
-itel Energy
 kaliya Beauty
 kmax
-kojie . san
 macun
 my little miracle
 oraimo
@@ -10276,7 +8357,6 @@ shawn
 shuer
 skaisite
 solarmax
-sun
 tenda
 transformers
 tretinoin
