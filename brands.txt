@@ -4244,7 +4244,6 @@ Generation
 Generator
 Generic Surplus
 Generic Xim
-Generic terms like "Best Quality", "Fashion Wear", "New Arrival", "Smart Watch" (unless a specific brand), "Bluetooth Headset".
 Generix
 Generra
 Genesis
@@ -5039,15 +5038,6 @@ Hazel
 Hazelnut
 Hazen
 Hazet
-Head
-Headband
-Headline
-Headset
-Healthcare
-Healthy
-Hear
-Hearing
-Heart
 Hearth
 Heartland
 Heat
@@ -5056,7 +5046,6 @@ Heathrow
 Heating
 Heaven
 Heavenly
-Heavy Duty
 Hebe
 Hebrew
 Hec
@@ -8146,7 +8135,6 @@ TRUFOODS
 TT
 TUO XIN
 TUOREN
-TWS
 Taaj Organics
 Taco
 Tactix
