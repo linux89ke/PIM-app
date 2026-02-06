@@ -10,6 +10,16 @@ import json
 import xlsxwriter
 import zipfile
 import os
+import time
+
+# -------------------------------------------------
+# 0. AI & OPTIONAL IMPORTS
+# -------------------------------------------------
+try:
+    import google.generativeai as genai
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
 
 # -------------------------------------------------
 # CONSTANTS & MAPPING
@@ -284,10 +294,6 @@ def load_restricted_brands_config(filename: str) -> Dict:
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
-    """
-    Returns the mapping of Flag Name -> (Reason Code, Rejection Comment).
-    Updated with specific business rules for Restricted Brands, Fakes, Refurbs, etc.
-    """
     try:
         return {
             'Restricted brands': (
@@ -357,6 +363,10 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
             'Duplicate product': (
                 '1000007 - Other Reason',
                 "Please note this product is a duplicate"
+            ),
+            'Wrong Category (AI)': (
+                '1000006 - Product Assigned to Wrong Category', 
+                "Our AI system detected this product is likely in the wrong category. Please ensure accessories are not listed in main device categories."
             ),
         }
     except Exception:
@@ -859,9 +869,97 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 # -------------------------------------------------
+# AI CATEGORY CHECK (Using Google Gemini)
+# -------------------------------------------------
+def check_categories_with_ai(data: pd.DataFrame, api_key: str) -> pd.DataFrame:
+    """
+    Uses Google Gemini Flash to detect wrong categories contextually.
+    """
+    if not HAS_GENAI or not api_key or data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # Filter columns to minimize token usage
+    if not {'PRODUCT_SET_SID', 'NAME', 'CATEGORY'}.issubset(data.columns):
+        return pd.DataFrame(columns=data.columns)
+
+    # Configure AI
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Prepare batch processing
+    batch_size = 20
+    records = data[['PRODUCT_SET_SID', 'NAME', 'CATEGORY']].to_dict('records')
+    flagged_reasons = {}
+    
+    progress_text = st.empty()
+    bar = st.progress(0)
+
+    # Prompt Template
+    base_prompt = """
+    Act as an E-commerce QA Specialist. Analyze this list of products.
+    Each line is: ID | Product Name | Listed Category.
+    
+    Identify products that are clearly MISCATEGORIZED. Common errors:
+    1. Accessories (Cases, Chargers, Straps) listed in Main Device categories (Phones, Laptops, TVs).
+    2. Gender mismatch (Women's Dress in Men's Fashion).
+    3. Wrong item type (Shoes in Clothing).
+
+    Return ONLY a JSON object where the key is the ID and the value is the brief reason.
+    Example Output: {"123": "Case listed in Mobile Phones", "456": "Dress in Men's Category"}
+    If no errors, return {}.
+    
+    Data to check:
+    """
+
+    for i in range(0, len(records), batch_size):
+        batch = records[i:i+batch_size]
+        
+        # Format batch as a string block
+        batch_text = "\n".join([f"{r['PRODUCT_SET_SID']} | {r['NAME']} | {r['CATEGORY']}" for r in batch])
+        
+        try:
+            response = model.generate_content(base_prompt + batch_text)
+            
+            # Clean and parse JSON response
+            text_response = response.text.strip()
+            # Remove markdown code blocks if present
+            if "```json" in text_response:
+                text_response = text_response.replace("```json", "").replace("```", "")
+            
+            batch_results = json.loads(text_response)
+            flagged_reasons.update(batch_results)
+            
+            # Update UI
+            progress_text.text(f"AI Scanning: {min(i+batch_size, len(records))}/{len(records)} products...")
+            bar.progress(min((i+batch_size) / len(records), 1.0))
+            
+            # Respect Free Tier Rate Limits (approx 15 requests/min)
+            time.sleep(4) 
+            
+        except Exception as e:
+            logger.error(f"AI Batch Error: {e}")
+            time.sleep(2) # Backoff on error
+            continue
+
+    bar.empty()
+    progress_text.empty()
+
+    if not flagged_reasons:
+        return pd.DataFrame(columns=data.columns)
+
+    # Create result DataFrame
+    mask = data['PRODUCT_SET_SID'].astype(str).isin(flagged_reasons.keys())
+    result_df = data[mask].drop_duplicates(subset=['PRODUCT_SET_SID']).copy()
+    
+    # Map reasons
+    result_df['Comment_Detail'] = result_df['PRODUCT_SET_SID'].astype(str).map(flagged_reasons)
+    
+    return result_df
+
+# -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
-def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None):
+def validate_products(data: pd.DataFrame, support_files: Dict, country_validator: CountryValidator, data_has_warranty_cols: bool, common_sids: Optional[set] = None, api_key: str = None, enable_ai: bool = False):
     # Ensure ID match compatibility
     data['PRODUCT_SET_SID'] = data['PRODUCT_SET_SID'].astype(str).str.strip()
     
@@ -893,6 +991,11 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             'known_colors': support_files['colors'],
         }),
     ]
+    
+    # --- INSERT AI CHECK HERE ---
+    if enable_ai and api_key and HAS_GENAI:
+        validations.append(("Wrong Category (AI)", check_categories_with_ai, {'api_key': api_key}))
+    # ----------------------------
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -1000,11 +1103,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
             continue
         
         # --- MAPPING UPDATE ---
-        # Instead of using a default tuple, we fetch from the loaded mapping
         if name in flags_mapping:
             reason_info = flags_mapping[name]
         else:
-            # Fallback for unknown flags
             reason_info = ("1000007 - Other Reason", f"Flagged by {name}")
         
         res['PRODUCT_SET_SID'] = res['PRODUCT_SET_SID'].astype(str).str.strip()
@@ -1190,7 +1291,14 @@ with st.sidebar:
     else:
         st.error(f"❌ 'brands.txt' missing in {os.getcwd()}")
         
-    # 2. Cache & Memory Check
+    # 2. AI CONFIGURATION
+    st.markdown("---")
+    st.subheader("🤖 AI Category Check")
+    api_key = st.text_input("Gemini API Key", type="password", help="Get free key at aistudio.google.com")
+    enable_ai_check = st.checkbox("Enable AI Category Check", value=False, disabled=not api_key)
+    
+    # 3. Cache & Memory Check
+    st.markdown("---")
     if st.button("♻️ Force Reload Files"):
         st.cache_data.clear()
         st.rerun()
@@ -1307,9 +1415,14 @@ if uploaded_files:
                 
                 with st.spinner("Running validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
-                    # REMOVED IMAGE PARAMETER HERE
+                    # --- AI KEY PASSING ---
+                    ai_key_to_use = api_key if enable_ai_check else None
+                    
                     final_report, flag_dfs = validate_products(
-                        data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
+                        data, support_files, country_validator, data_has_warranty_cols, 
+                        common_sids=common_sids_to_pass,
+                        api_key=ai_key_to_use,
+                        enable_ai=enable_ai_check
                     )
                     st.session_state.final_report = final_report
                     st.session_state.all_data_map = data
