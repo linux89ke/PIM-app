@@ -21,7 +21,7 @@ FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", 
-    "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
+    "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE", "COUNT_VARIATIONS"
 ]
 FX_RATE = 132.0
 SPLIT_LIMIT = 9998 
@@ -44,7 +44,8 @@ NEW_FILE_MAPPING = {
     'product_warranty': 'PRODUCT_WARRANTY',
     'warranty_duration': 'WARRANTY_DURATION',
     'warranty_address': 'WARRANTY_ADDRESS',
-    'warranty_type': 'WARRANTY_TYPE'
+    'warranty_type': 'WARRANTY_TYPE',
+    'count_variations': 'COUNT_VARIATIONS' # Added Mapping
 }
 
 # Logger setup
@@ -354,6 +355,10 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000007 - Other Reason',
                 "Please note this product is a duplicate"
             ),
+            'Wrong Variation': (
+                '1000039 - Product Poorly Created. Each Variation Of This Product Should Be Created Uniquely (Not Authorized) (Not Authorized)',
+                "Please create different SKUs for this product and not as variations as variations are only used for sizes"
+            ),
         }
     except Exception:
         return {}
@@ -385,7 +390,8 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in safe_load_txt('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': safe_load_txt('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'known_brands': safe_load_txt('brands.txt'), 
+        'known_brands': safe_load_txt('brands.txt'),
+        'variation_allowed_codes': safe_load_txt('variation.txt'),
     }
     return files
 
@@ -476,6 +482,25 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
+def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]) -> pd.DataFrame:
+    if 'COUNT_VARIATIONS' not in data.columns or 'CATEGORY_CODE' not in data.columns:
+        return pd.DataFrame(columns=data.columns)
+
+    # Clean allowed codes
+    allowed_set = set(clean_category_code(c) for c in allowed_variation_codes)
+
+    # Prepare data
+    check_data = data.copy()
+    check_data['cat_clean'] = check_data['CATEGORY_CODE'].apply(clean_category_code)
+    
+    # Convert count to numeric, coerce errors to 1 (safe)
+    check_data['qty_var'] = pd.to_numeric(check_data['COUNT_VARIATIONS'], errors='coerce').fillna(1)
+
+    # Logic: Flag if qty > 1 AND cat NOT in allowed
+    mask = (check_data['qty_var'] > 1) & (~check_data['cat_clean'].isin(allowed_set))
+    
+    return check_data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_duplicate_products(
     data: pd.DataFrame,
     exempt_categories: List[str] = None,
@@ -556,7 +581,10 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
-                        duplicate_groups[dup['sid']] = [current['PRODUCT_SET_SID'], dup['sid']]
+                        # Corrected Logic for grouping
+                        if dup['sid'] not in duplicate_groups:
+                            duplicate_groups[dup['sid']] = []
+                        duplicate_groups[dup['sid']].extend([current_sid, dup['sid']])
     
     if not rejected_sids: return pd.DataFrame(columns=data.columns)
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
@@ -865,6 +893,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     flags_mapping = support_files['flags_mapping']
     
     validations = [
+        ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
