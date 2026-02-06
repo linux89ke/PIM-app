@@ -1457,11 +1457,18 @@ if uploaded_files:
                         
                         for index, row in checked_rows.iterrows():
                             st.divider()
-                            # Display full width image in sidebar
-                            if pd.notna(row['MAIN_IMAGE']):
-                                st.image(row['MAIN_IMAGE'], use_container_width=True, caption=row['PRODUCT_SET_SID'])
+                            # Ensure strict check for valid URL string before displaying
+                            img_url = str(row['MAIN_IMAGE']).strip()
+                            valid_img = img_url and img_url.lower() not in ['nan', 'none', '']
+                            
+                            if valid_img:
+                                try:
+                                    st.image(img_url, use_container_width=True, caption=str(row['PRODUCT_SET_SID']))
+                                except Exception as e:
+                                    st.error(f"⚠️ Error loading image")
                             else:
-                                st.warning("No Image URL")
+                                st.warning(f"⚠️ No Image URL for SID: {row['PRODUCT_SET_SID']}")
+                                
                             st.write(f"**Name:** {row['NAME']}")
                             st.write(f"**Category:** {row['CATEGORY']}")
 
