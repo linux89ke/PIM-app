@@ -556,6 +556,7 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
+                        duplicate_groups[dup['sid']] = [current['PRODUCT_SET_SID'], dup['sid']]
     
     if not rejected_sids: return pd.DataFrame(columns=data.columns)
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
@@ -1486,16 +1487,28 @@ if uploaded_files:
                 if selected_sids:
                     with btn_col1:
                         if st.button(f"Flag {len(selected_sids)}: Poor Image", type="primary"):
-                            reason_code = "1000002 - Kindly Provide High Quality Image"
-                            comment = "Your product image quality is low. Please upload clear, high-resolution images."
+                            reason_code = "1000042 - Kindly follow our product image upload guideline."
+                            comment = """Please make sure your product images follow Jumia’s image upload guidelines.
+Images must be clear, well-lit, and focused, with the product presented in a clean and professional way.
+Following these standards is essential to maintain the quality and consistency of product listings across the platform.
+Non-compliant images may result in listing rejection ."""
                             st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
                             st.rerun()
                     
                     with btn_col2:
                         if st.button(f"Flag {len(selected_sids)}: Wrong Category"):
-                            reason_code = "1000004 - Kindly select the correct Category"
-                            comment = "The product has been listed in the wrong category. Please move it to the correct department."
+                            reason_code = "1000004 - Wrong Category"
+                            comment = """Your products are currently assigned to the wrong category.
+Please review and update the listing with the correct category to ensure your product is properly classified and visible to customers.
+Correct categorization improves search results and helps customers find your product more easily.
+
+✅ You may:
+
+- Choose the appropriate category manually if you know it.
+
+- Visit the Jumia website to take inspiration from similar products and see where they are listed.
+- Contact your Seller Support."""
                             st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
                             st.rerun()
