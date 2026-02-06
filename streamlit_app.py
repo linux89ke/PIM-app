@@ -364,6 +364,10 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000007 - Other Reason',
                 "Please note this product is a duplicate"
             ),
+            'Wrong Category': (
+                '1000006 - Product Assigned to Wrong Category', 
+                "Product appears to be miscategorized (e.g. Accessory in Main Category or Gender Mismatch). Please review."
+            ),
             'Wrong Category (AI)': (
                 '1000006 - Product Assigned to Wrong Category', 
                 "Our AI system detected this product is likely in the wrong category. Please ensure accessories are not listed in main device categories."
@@ -490,6 +494,60 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
+def check_wrong_categories(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Flags products that violate specific category rules:
+    1. Accessories listed in main device categories (e.g., 'Case' in 'Mobile Phones').
+    2. Gender mismatches (e.g., 'Women' in 'Men's Fashion').
+    """
+    if not {'CATEGORY', 'NAME'}.issubset(data.columns): 
+        return pd.DataFrame(columns=data.columns)
+    
+    # RULE SET 1: Accessories hiding in High-Value Categories
+    accessory_rules = {
+        'Mobile Phones': ['case', 'cover', 'glass', 'screen protector', 'film', 'bumper', 'pouch', 'holder'],
+        'Tablets': ['case', 'cover', 'glass', 'keyboard', 'stand', 'stylus'],
+        'Laptops': ['bag', 'sleeve', 'skin', 'sticker', 'cover', 'charger', 'adapter', 'backpack'],
+        'Televisions': ['bracket', 'mount', 'remote', 'stand', 'antenna', 'cable', 'cleaner'],
+        'Cameras': ['tripod', 'bag', 'strap', 'lens cap', 'battery'],
+    }
+
+    # RULE SET 2: Gender/Demographic Mismatches
+    gender_rules = {
+        "Men's": ['women', 'woman', 'lady', 'ladies', 'girl', 'female', 'dress', 'skirt', 'heels'],
+        "Women's": ['men', 'man', 'boy', 'male', 'tuxedo'],
+        "Boys": ['girl', 'princess', 'dress', 'skirt'],
+        "Girls": ['boy', 'spiderman', 'batman']
+    }
+
+    def identify_error(row):
+        cat = str(row['CATEGORY']).lower()
+        name = str(row['NAME']).lower()
+        
+        # Check Accessory Rules
+        for cat_key, forbidden_words in accessory_rules.items():
+            if cat_key.lower() in cat:
+                for word in forbidden_words:
+                    if re.search(r'\b' + re.escape(word) + r'\b', name):
+                        return f"Wrong Category: Accessory '{word}' listed in '{cat_key}'"
+
+        # Check Gender Rules
+        for cat_key, forbidden_words in gender_rules.items():
+            if cat_key.lower() in cat:
+                for word in forbidden_words:
+                    if re.search(r'\b' + re.escape(word) + r'\b', name):
+                        return f"Gender Mismatch: '{word}' found in '{cat_key}' category"
+        return None
+
+    df_check = data.copy()
+    df_check['Category_Error_Reason'] = df_check.apply(identify_error, axis=1)
+    flagged = df_check[df_check['Category_Error_Reason'].notna()].copy()
+    
+    if not flagged.empty:
+        flagged['Comment_Detail'] = flagged['Category_Error_Reason']
+        
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_duplicate_products(
     data: pd.DataFrame,
     exempt_categories: List[str] = None,
@@ -497,10 +555,7 @@ def check_duplicate_products(
     known_colors: List[str] = None,
     **kwargs
 ) -> pd.DataFrame:
-    """
-    Duplicate Check (Text-Based Only)
-    Recognizes color/size/storage variants as DIFFERENT products.
-    """
+    """Duplicate Check (Text-Based Only)"""
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
@@ -986,6 +1041,10 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Generic branded products with genuine brands", check_generic_with_brand_in_name, {'brands_list': support_files.get('known_brands', [])}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
+        
+        # --- NEW: Rule-Based Category Check ---
+        ("Wrong Category", check_wrong_categories, {}),
+        
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
