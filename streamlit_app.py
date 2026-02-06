@@ -1397,7 +1397,7 @@ if uploaded_files:
         # -------------------------------------------------
         st.markdown("---")
         st.header("🖼️ Manual Image & Category Review")
-        st.info("Select items using checkboxes to see a High-Res preview in the Sidebar.")
+        st.info("Click on any row to inspect the image in the Sidebar. Hold Ctrl/Cmd to select multiple rows.")
 
         # Filter for products currently approved
         review_data = pd.merge(
@@ -1425,59 +1425,60 @@ if uploaded_files:
                 if ir_cat_filter:
                     df_ir_display = df_ir_display[df_ir_display['CATEGORY'].isin(ir_cat_filter)]
 
-                # Pre-setup the selection column
-                df_ir_display.insert(0, "Select", False)
-                
-                # Use st.data_editor (Compatible with older Streamlit versions)
-                edited_ir_df = st.data_editor(
-                    df_ir_display[["Select", "MAIN_IMAGE", "NAME", "CATEGORY", "PRODUCT_SET_SID"]],
+                # Use st.dataframe with on_select for "Click to Zoom" behavior
+                # We show specific columns and enable multi-row selection
+                selection_event = st.dataframe(
+                    df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "PRODUCT_SET_SID"]],
                     column_config={
-                        "Select": st.column_config.CheckboxColumn(required=True),
-                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="medium", help="Tick box to see Full Size in Sidebar"),
+                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="medium", help="Click row to inspect"),
                         "NAME": st.column_config.TextColumn("Product Name", width="large"),
                         "CATEGORY": st.column_config.TextColumn("Category"),
                         "PRODUCT_SET_SID": st.column_config.TextColumn("SID")
                     },
                     hide_index=True,
                     use_container_width=True,
-                    disabled=["MAIN_IMAGE", "NAME", "CATEGORY", "PRODUCT_SET_SID"],
-                    key="image_review_editor"
+                    on_select="rerun",  # Triggers sidebar update on click
+                    selection_mode="multi-row",
+                    key="image_review_grid"
                 )
 
                 # ---------------------------------------------------------
                 # SIDEBAR INSPECTOR LOGIC
                 # ---------------------------------------------------------
-                # Get the selected rows based on the checkbox
-                checked_rows = edited_ir_df[edited_ir_df['Select'] == True]
+                # Get the selected indices from the dataframe event
+                selected_indices = selection_event.selection.rows
                 
-                if not checked_rows.empty:
+                # Filter the dataframe to get the actual selected data rows
+                selected_rows = df_ir_display.iloc[selected_indices]
+                
+                if not selected_rows.empty:
                     with st.sidebar:
                         st.markdown("---")
                         st.header("🔍 Image Inspector")
-                        st.info(f"{len(checked_rows)} items selected")
+                        st.info(f"{len(selected_rows)} items selected")
                         
-                        for index, row in checked_rows.iterrows():
+                        for index, row in selected_rows.iterrows():
                             st.divider()
                             # ROBUST IMAGE LOADING CHECK
                             img_url = str(row['MAIN_IMAGE']).strip()
                             
-                            # Check if valid URL (basic check)
-                            is_valid_url = img_url.lower().startswith(('http://', 'https://'))
-                            
-                            if is_valid_url:
+                            # check if it looks like a valid URL
+                            if img_url.lower().startswith(('http://', 'https://')):
                                 try:
                                     st.image(img_url, use_container_width=True, caption=str(row['PRODUCT_SET_SID']))
                                 except Exception:
+                                    # Fallback if image fails to render
                                     st.error(f"⚠️ Could not load image")
+                                    st.caption(f"URL: {img_url[:30]}...")
                             else:
-                                st.warning(f"⚠️ No valid Image URL")
+                                st.warning("⚠️ Invalid or missing URL")
                                 
                             st.write(f"**Name:** {row['NAME']}")
                             st.write(f"**Category:** {row['CATEGORY']}")
 
-                # Action Buttons
+                # Action Buttons (Operate on selected_rows)
                 btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
-                selected_sids = checked_rows['PRODUCT_SET_SID'].tolist()
+                selected_sids = selected_rows['PRODUCT_SET_SID'].tolist()
 
                 if selected_sids:
                     with btn_col1:
@@ -1496,7 +1497,7 @@ if uploaded_files:
                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
                             st.rerun()
                 else:
-                    st.caption("Select items above to inspect in Sidebar & enable flagging buttons.")
+                    st.caption("Click rows above to inspect & flag.")
         else:
             st.success("No approved items available for review.")
 
