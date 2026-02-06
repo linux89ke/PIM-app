@@ -284,6 +284,10 @@ def load_restricted_brands_config(filename: str) -> Dict:
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
+    """
+    Returns the mapping of Flag Name -> (Reason Code, Rejection Comment).
+    Updated with specific business rules for Restricted Brands, Fakes, Refurbs, etc.
+    """
     try:
         return {
             'Restricted brands': (
@@ -1303,6 +1307,7 @@ if uploaded_files:
                 
                 with st.spinner("Running validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
+                    # REMOVED IMAGE PARAMETER HERE
                     final_report, flag_dfs = validate_products(
                         data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
                     )
@@ -1391,117 +1396,6 @@ if uploaded_files:
                     st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
         else:
             st.success("No rejections found! All products approved.")
-
-        # -------------------------------------------------
-        # NEW: MANUAL IMAGE & CATEGORY REVIEW
-        # -------------------------------------------------
-        st.markdown("---")
-        st.header("🖼️ Manual Image & Category Review")
-        st.info("Click on any row to inspect the image in the Sidebar. Hold Ctrl/Cmd to select multiple rows.")
-
-        # Filter for products currently approved
-        review_data = pd.merge(
-            approved_df[['ProductSetSid']], 
-            data, 
-            left_on='ProductSetSid', 
-            right_on='PRODUCT_SET_SID', 
-            how='left'
-        )
-
-        if not review_data.empty:
-            with st.expander(f"Review Approved Images ({len(review_data)} items)", expanded=True):
-                # Search and Filter
-                ir_col1, ir_col2 = st.columns([2, 1])
-                with ir_col1:
-                    ir_search = st.text_input("🔍 Search Image Review", placeholder="Search name or category...", key="ir_search")
-                with ir_col2:
-                    ir_cat_filter = st.multiselect("📂 Filter Category", sorted(review_data['CATEGORY'].unique()), key="ir_cat")
-
-                # Apply Filters
-                df_ir_display = review_data.copy()
-                if ir_search:
-                    df_ir_display = df_ir_display[df_ir_display['NAME'].str.contains(ir_search, case=False, na=False) | 
-                                                 df_ir_display['CATEGORY'].str.contains(ir_search, case=False, na=False)]
-                if ir_cat_filter:
-                    df_ir_display = df_ir_display[df_ir_display['CATEGORY'].isin(ir_cat_filter)]
-
-                # Use st.dataframe with on_select for "Click to Zoom" behavior
-                # We show specific columns and enable multi-row selection
-                selection_event = st.dataframe(
-                    df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "SELLER_NAME", "PRODUCT_SET_SID"]],
-                    column_config={
-                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="large", help="Click row to inspect"),
-                        "NAME": st.column_config.TextColumn("Product Name", width="large"),
-                        "CATEGORY": st.column_config.TextColumn("Category"),
-                        "SELLER_NAME": st.column_config.TextColumn("Seller Name"),
-                        "PRODUCT_SET_SID": st.column_config.TextColumn("SID")
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    on_select="rerun",  # Triggers sidebar update on click
-                    selection_mode="multi-row",
-                    key="image_review_grid"
-                )
-
-                # ---------------------------------------------------------
-                # SIDEBAR INSPECTOR LOGIC
-                # ---------------------------------------------------------
-                # Get the selected indices from the dataframe event
-                selected_indices = selection_event.selection.rows
-                
-                # Filter the dataframe to get the actual selected data rows
-                selected_rows = df_ir_display.iloc[selected_indices]
-                
-                if not selected_rows.empty:
-                    with st.sidebar:
-                        st.markdown("---")
-                        st.header("🔍 Image Inspector")
-                        st.info(f"{len(selected_rows)} items selected")
-                        
-                        for index, row in selected_rows.iterrows():
-                            st.divider()
-                            # ROBUST IMAGE LOADING CHECK
-                            img_url = str(row['MAIN_IMAGE']).strip()
-                            
-                            # check if it looks like a valid URL
-                            if img_url.lower().startswith(('http://', 'https://')):
-                                try:
-                                    st.image(img_url, use_container_width=True, caption=str(row['PRODUCT_SET_SID']))
-                                except Exception:
-                                    # Fallback if image fails to render
-                                    st.error(f"⚠️ Could not load image")
-                                    st.caption(f"URL: {img_url[:30]}...")
-                            else:
-                                st.warning("⚠️ Invalid or missing URL")
-                                
-                            st.write(f"**Name:** {row['NAME']}")
-                            st.write(f"**Seller:** {row['SELLER_NAME']}")
-                            st.write(f"**Category:** {row['CATEGORY']}")
-
-                # Action Buttons (Operate on selected_rows)
-                btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
-                selected_sids = selected_rows['PRODUCT_SET_SID'].tolist()
-
-                if selected_sids:
-                    with btn_col1:
-                        if st.button(f"🚫 Flag {len(selected_sids)}: Poor Image", type="primary"):
-                            reason_code = "1000002 - Kindly Provide High Quality Image"
-                            comment = "Your product image quality is low. Please upload clear, high-resolution images."
-                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
-                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
-                            st.rerun()
-                    
-                    with btn_col2:
-                        if st.button(f"📂 Flag {len(selected_sids)}: Wrong Category"):
-                            reason_code = "1000004 - Kindly select the correct Category"
-                            comment = "The product has been listed in the wrong category. Please move it to the correct department."
-                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
-                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
-                            st.rerun()
-                else:
-                    st.caption("Click rows above to inspect & flag.")
-        else:
-            st.success("No approved items available for review.")
 
         st.markdown("---")
         st.header("Overall Exports")
