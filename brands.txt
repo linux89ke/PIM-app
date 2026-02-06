@@ -4456,13 +4456,9 @@ Lupilu
 LurnaoQueen
 Luron
 Luxe Cosmetic
-Luxury
 Lyons
 Lyons Maid
 M Horse
-M1
-M10
-M3
 M4 Plus Connected
 Ma Cuisine
 Mabox
@@ -4485,7 +4481,7 @@ Magic Hose
 Magnet
 Magnetic
 Magnus
-Magsafe2
+Magsafe
 Mahinda
 Main-One
 Maison Alhambra
@@ -4505,10 +4501,8 @@ Mamaearth
 Mangalam
 Manicure Set
 Manji
-Manual
 Mara
 Marado
-Marble
 Marble Berry
 Maries
 Marigold
@@ -4553,7 +4547,6 @@ Megir
 Meidu
 Mejagron
 Mekis
-Melamine Ware
 Melano
 Melii
 Melvins
