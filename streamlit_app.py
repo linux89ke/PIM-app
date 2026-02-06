@@ -487,9 +487,16 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]) -> pd.DataFrame:
     # Ensure COUNT_VARIATIONS is present, even if empty
     check_data = data.copy()
+    
+    # Try to ensure COUNT_VARIATIONS is populated
     if 'COUNT_VARIATIONS' not in check_data.columns:
-        check_data['COUNT_VARIATIONS'] = 1  # Default to 1 if missing so we don't crash
-        
+        # If the column is completely missing, we try to calculate it based on how many
+        # rows share the same PRODUCT_SET_SID. This is a common way to count variations.
+        if 'PRODUCT_SET_SID' in check_data.columns:
+            check_data['COUNT_VARIATIONS'] = check_data.groupby('PRODUCT_SET_SID')['PRODUCT_SET_SID'].transform('count')
+        else:
+            check_data['COUNT_VARIATIONS'] = 1  # Fallback to 1 if we can't count
+    
     if 'CATEGORY_CODE' not in check_data.columns:
         return pd.DataFrame(columns=data.columns)
 
@@ -498,13 +505,22 @@ def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]
 
     check_data['cat_clean'] = check_data['CATEGORY_CODE'].apply(clean_category_code)
     
-    # Convert count to numeric, coerce errors to 1 (safe)
-    check_data['qty_var'] = pd.to_numeric(check_data['COUNT_VARIATIONS'], errors='coerce').fillna(1)
+    # Convert count to numeric, coerce errors to 1 (safe) and force integer
+    check_data['qty_var'] = pd.to_numeric(check_data['COUNT_VARIATIONS'], errors='coerce').fillna(1).astype(int)
 
-    # Logic: Flag if qty > 1 AND cat NOT in allowed
+    # Logic: Flag if qty > 1 AND cat NOT in allowed list
     mask = (check_data['qty_var'] > 1) & (~check_data['cat_clean'].isin(allowed_set))
     
-    return check_data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    flagged = check_data[mask].copy()
+    
+    # Add comment detail for clarity
+    if not flagged.empty:
+        flagged['Comment_Detail'] = flagged.apply(
+            lambda row: f"Variations: {row['qty_var']}, Category: {row['cat_clean']}", 
+            axis=1
+        )
+    
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_duplicate_products(
     data: pd.DataFrame,
@@ -857,9 +873,9 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     # 1. Identify Generic Items
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     
-    # 2. Exemption: Cases, Covers
+    # 2. Exemption: "Cases" or "Covers"
     if 'CATEGORY' in data.columns:
-        # Check for case/cases/cover/covers/back cover etc
+        # Exempt if category contains "case", "cases", "cover", or "covers"
         is_exempt = data['CATEGORY'].astype(str).str.lower().str.contains(r'\b(case|cases|cover|covers)\b', regex=True, na=False)
         mask = is_generic & ~is_exempt
     else:
