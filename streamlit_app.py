@@ -45,7 +45,7 @@ NEW_FILE_MAPPING = {
     'warranty_duration': 'WARRANTY_DURATION',
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE',
-    'count_variations': 'COUNT_VARIATIONS' # Added Mapping
+    'count_variations': 'COUNT_VARIATIONS'
 }
 
 # Logger setup
@@ -581,7 +581,6 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
-                        # Corrected Logic for grouping
                         if dup['sid'] not in duplicate_groups:
                             duplicate_groups[dup['sid']] = []
                         duplicate_groups[dup['sid']].extend([current_sid, dup['sid']])
@@ -850,8 +849,20 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     if not {'NAME', 'BRAND'}.issubset(data.columns) or not brands_list:
         return pd.DataFrame(columns=data.columns)
 
+    # 1. Identify Generic Items
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
-    generic_items = data[is_generic].copy()
+    
+    # 2. Exemption: "Cases"
+    # We check if the 'CATEGORY' column exists and filter out rows containing "case" or "cases"
+    if 'CATEGORY' in data.columns:
+        # Check for case/cases/cover/covers just to be safe, but user said "cases"
+        # I will stick to "case" to capture "Phone Cases", "Cases & Covers" etc.
+        is_exempt = data['CATEGORY'].astype(str).str.lower().str.contains(r'\b(case|cases)\b', regex=True, na=False)
+        mask = is_generic & ~is_exempt
+    else:
+        mask = is_generic
+
+    generic_items = data[mask].copy()
     
     if generic_items.empty:
         return pd.DataFrame(columns=data.columns)
@@ -893,7 +904,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     flags_mapping = support_files['flags_mapping']
     
     validations = [
-        ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
@@ -912,6 +922,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Generic BRAND Issues", check_generic_brand_issues, {}),
         ("Fashion brand issues", check_fashion_brand_issues, {}),
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
+        ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Generic branded products with genuine brands", check_generic_with_brand_in_name, {'brands_list': support_files.get('known_brands', [])}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
         ("Duplicate product", check_duplicate_products, {
