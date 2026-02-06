@@ -13,13 +13,17 @@ import os
 import time
 
 # -------------------------------------------------
-# 0. AI & OPTIONAL IMPORTS
+# 0. IMPORTS & SETUP
 # -------------------------------------------------
+# AI Library (Optional - Only for AI Category Check)
 try:
     import google.generativeai as genai
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
 # CONSTANTS & MAPPING
@@ -56,9 +60,6 @@ NEW_FILE_MAPPING = {
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE'
 }
-
-# Logger setup
-logger = logging.getLogger(__name__)
 
 # -------------------------------------------------
 # UTILITIES
@@ -296,85 +297,26 @@ def load_restricted_brands_config(filename: str) -> Dict:
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
     try:
         return {
-            'Restricted brands': (
-                '1000024 - Product does not have a license to be sold via Jumia (Not Authorized)',
-                "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."
-            ),
-            'Suspected Fake product': (
-                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
-                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
-            ),
-            'Seller Not approved to sell Refurb': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this refurbished product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'Product Warranty': (
-                '1000013 - Kindly Provide Product Warranty Details',
-                "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."
-            ),
-            'Seller Approve to sell books': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this book is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'Seller Approved to Sell Perfume': (
-                '1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim',
-                "Please contact Jumia Seller Support and raise a claim to confirm whether this perfume is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."
-            ),
-            'Counterfeit Sneakers': (
-                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
-                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
-            ),
-            'Suspected counterfeit Jerseys': (
-                '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)',
-                "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"
-            ),
-            'Prohibited products': (
-                '1000007 - Other Reason',
-                "Please note listing of this product is prohibited … Please contact Jumia Seller Support and raise a claim"
-            ),
-            'Unnecessary words in NAME': (
-                '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title using this format: Name – Type of the Products – Color.avoid unnecesary words"
-            ),
-            'Single-word NAME': (
-                '1000008 - Kindly Improve Product Name Description',
-                "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."
-            ),
-            'Generic BRAND Issues': (
-                '1000007 - Other Reason',
-                "Please use the correct brand for Fashion items or use Fashion ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"
-            ),
-            'Fashion brand issues': (
-                '1000007 - Other Reason',
-                "Please use the correct brand for this item instead of Fashion use Generic ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"
-            ),
-            'BRAND name repeated in NAME': (
-                '1000007 - Other Reason',
-                "Please note that brand name should not be repeated in product name"
-            ),
-            'Generic branded products with genuine brands': (
-                '1000007 - Other Reason',
-                "Kindly use the displayed brand on the product instead of Generic"
-            ),
-            'Missing COLOR': (
-                '1000005 - Kindly confirm the actual product colour',
-                "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."
-            ),
-            'Duplicate product': (
-                '1000007 - Other Reason',
-                "Please note this product is a duplicate"
-            ),
-            'Wrong Category': (
-                '1000006 - Product Assigned to Wrong Category', 
-                "Product appears to be miscategorized (e.g. Accessory in Main Category or Gender Mismatch). Please review."
-            ),
-            'Wrong Category (AI)': (
-                '1000006 - Product Assigned to Wrong Category', 
-                "Our AI system detected this product is likely in the wrong category. Please ensure accessories are not listed in main device categories."
-            ),
+            'Restricted brands': ('1000024 - Product does not have a license to be sold via Jumia (Not Authorized)', "Your product listing has been rejected due to the absence of a required license for this item.\nAs a result, the product cannot be authorized for sale on Jumia.\n\nPlease ensure that you obtain and submit the necessary license(s) before attempting to relist the product.\nFor further assistance or clarification, Please raise a claim via Vendor Center."),
+            'Suspected Fake product': ('1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"),
+            'Seller Not approved to sell Refurb': ('1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim', "Please contact Jumia Seller Support and raise a claim to confirm whether this refurbished product is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."),
+            'Product Warranty': ('1000013 - Kindly Provide Product Warranty Details', "For listing this type of product requires a valid warranty as per our platform guidelines.\nTo proceed, please ensure the warranty details are clearly mentioned in:\n\nProduct Description tab\n\nWarranty Tab.\n\nThis helps build customer trust and ensures your listing complies with Jumia’s requirements."),
+            'Seller Approve to sell books': ('1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim', "Please contact Jumia Seller Support and raise a claim to confirm whether this book is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."),
+            'Seller Approved to Sell Perfume': ('1000028 - Kindly Contact Jumia Seller Support To Confirm Possibility Of Sale Of This Product By Raising A Claim', "Please contact Jumia Seller Support and raise a claim to confirm whether this perfume is eligible for listing.\nThis step will help ensure that all necessary requirements and approvals are addressed before proceeding with the sale, and prevent any future compliance issues."),
+            'Counterfeit Sneakers': ('1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"),
+            'Suspected counterfeit Jerseys': ('1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.\nAs a result, this item cannot be sold on the platform.\n\nPlease ensure that all products listed are 100% authentic to comply with Jumia’s policies and protect customer trust.\n\nIf you believe this decision is incorrect or need further clarification, please contact the Seller Support team"),
+            'Prohibited products': ('1000007 - Other Reason', "Please note listing of this product is prohibited … Please contact Jumia Seller Support and raise a claim"),
+            'Unnecessary words in NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type of the Products – Color.avoid unnecesary words"),
+            'Single-word NAME': ('1000008 - Kindly Improve Product Name Description', "Kindly update the product title using this format: Name – Type of the Products – Color.\nIf available, please also add key details such as weight, capacity, type, and warranty to make the title clear and complete for customers."),
+            'Generic BRAND Issues': ('1000007 - Other Reason', "Please use the correct brand for Fashion items or use Fashion ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"),
+            'Fashion brand issues': ('1000007 - Other Reason', "Please use the correct brand for this item instead of Fashion use Generic ..To create the actual brand name for this product, please fill out the form at: https://bit.ly/2kpjja8.\nYou will receive an email within the coming 48 working hours the result of your request — whether it’s approved or rejected, along with the reason"),
+            'BRAND name repeated in NAME': ('1000007 - Other Reason', "Please note that brand name should not be repeated in product name"),
+            'Generic branded products with genuine brands': ('1000007 - Other Reason', "Kindly use the displayed brand on the product instead of Generic"),
+            'Missing COLOR': ('1000005 - Kindly confirm the actual product colour', "Please make sure that the product color is clearly mentioned in both the title and in the color tab.\nAlso, the images you upload must match the exact color being sold in this specific listing.\nAvoid including pictures of other colors, as this may confuse customers and lead to order cancellations."),
+            'Duplicate product': ('1000007 - Other Reason', "Please note this product is a duplicate"),
+            'Wrong Category (AI)': ('1000006 - Product Assigned to Wrong Category', "Our AI system detected this product is likely in the wrong category. Please ensure accessories are not listed in main device categories."),
         }
-    except Exception:
-        return {}
+    except Exception: return {}
 
 @st.cache_data(ttl=3600)
 def load_all_support_files() -> Dict:
@@ -494,60 +436,6 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
-def check_wrong_categories(data: pd.DataFrame) -> pd.DataFrame:
-    """
-    Flags products that violate specific category rules:
-    1. Accessories listed in main device categories (e.g., 'Case' in 'Mobile Phones').
-    2. Gender mismatches (e.g., 'Women' in 'Men's Fashion').
-    """
-    if not {'CATEGORY', 'NAME'}.issubset(data.columns): 
-        return pd.DataFrame(columns=data.columns)
-    
-    # RULE SET 1: Accessories hiding in High-Value Categories
-    accessory_rules = {
-        'Mobile Phones': ['case', 'cover', 'glass', 'screen protector', 'film', 'bumper', 'pouch', 'holder'],
-        'Tablets': ['case', 'cover', 'glass', 'keyboard', 'stand', 'stylus'],
-        'Laptops': ['bag', 'sleeve', 'skin', 'sticker', 'cover', 'charger', 'adapter', 'backpack'],
-        'Televisions': ['bracket', 'mount', 'remote', 'stand', 'antenna', 'cable', 'cleaner'],
-        'Cameras': ['tripod', 'bag', 'strap', 'lens cap', 'battery'],
-    }
-
-    # RULE SET 2: Gender/Demographic Mismatches
-    gender_rules = {
-        "Men's": ['women', 'woman', 'lady', 'ladies', 'girl', 'female', 'dress', 'skirt', 'heels'],
-        "Women's": ['men', 'man', 'boy', 'male', 'tuxedo'],
-        "Boys": ['girl', 'princess', 'dress', 'skirt'],
-        "Girls": ['boy', 'spiderman', 'batman']
-    }
-
-    def identify_error(row):
-        cat = str(row['CATEGORY']).lower()
-        name = str(row['NAME']).lower()
-        
-        # Check Accessory Rules
-        for cat_key, forbidden_words in accessory_rules.items():
-            if cat_key.lower() in cat:
-                for word in forbidden_words:
-                    if re.search(r'\b' + re.escape(word) + r'\b', name):
-                        return f"Wrong Category: Accessory '{word}' listed in '{cat_key}'"
-
-        # Check Gender Rules
-        for cat_key, forbidden_words in gender_rules.items():
-            if cat_key.lower() in cat:
-                for word in forbidden_words:
-                    if re.search(r'\b' + re.escape(word) + r'\b', name):
-                        return f"Gender Mismatch: '{word}' found in '{cat_key}' category"
-        return None
-
-    df_check = data.copy()
-    df_check['Category_Error_Reason'] = df_check.apply(identify_error, axis=1)
-    flagged = df_check[df_check['Category_Error_Reason'].notna()].copy()
-    
-    if not flagged.empty:
-        flagged['Comment_Detail'] = flagged['Category_Error_Reason']
-        
-    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
-
 def check_duplicate_products(
     data: pd.DataFrame,
     exempt_categories: List[str] = None,
@@ -555,7 +443,6 @@ def check_duplicate_products(
     known_colors: List[str] = None,
     **kwargs
 ) -> pd.DataFrame:
-    """Duplicate Check (Text-Based Only)"""
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
@@ -924,11 +811,12 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 # -------------------------------------------------
-# AI CATEGORY CHECK (Using Google Gemini)
+# AI FUNCTIONS (Gemini)
 # -------------------------------------------------
 def check_categories_with_ai(data: pd.DataFrame, api_key: str) -> pd.DataFrame:
     """
     Uses Google Gemini Flash to detect wrong categories contextually.
+    OPTIMIZED: Batches of 60 items + Concise Prompt + Smart Sleep.
     """
     if not HAS_GENAI or not api_key or data.empty:
         return pd.DataFrame(columns=data.columns)
@@ -939,61 +827,75 @@ def check_categories_with_ai(data: pd.DataFrame, api_key: str) -> pd.DataFrame:
 
     # Configure AI
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Safety settings to prevent blocking harmless e-commerce content
+    safety_settings = [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+    ]
+    model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
     
-    # Prepare batch processing
-    batch_size = 20
+    # --- SPEED OPTIMIZATION: BATCH SIZE 60 ---
+    batch_size = 60 
     records = data[['PRODUCT_SET_SID', 'NAME', 'CATEGORY']].to_dict('records')
     flagged_reasons = {}
     
     progress_text = st.empty()
     bar = st.progress(0)
 
-    # Prompt Template
+    # --- SPEED OPTIMIZATION: CONCISE PROMPT ---
     base_prompt = """
-    Act as an E-commerce QA Specialist. Analyze this list of products.
-    Each line is: ID | Product Name | Listed Category.
+    You are an E-commerce QA Specialist. Analyze this batch of products.
+    Format: ID | Product Name | Listed Category.
     
-    Identify products that are clearly MISCATEGORIZED. Common errors:
-    1. Accessories (Cases, Chargers, Straps) listed in Main Device categories (Phones, Laptops, TVs).
+    Identify products that are clearly MISCATEGORIZED.
+    1. Accessories (Cases, Chargers, Straps, Screen Protectors) found in Main Device categories (Phones, Laptops, TVs).
     2. Gender mismatch (Women's Dress in Men's Fashion).
-    3. Wrong item type (Shoes in Clothing).
+    3. Wrong item type (Shoes in Clothing, Watch in Sunglasses).
 
-    Return ONLY a JSON object where the key is the ID and the value is the brief reason.
-    Example Output: {"123": "Case listed in Mobile Phones", "456": "Dress in Men's Category"}
-    If no errors, return {}.
+    CRITICAL: Return a JSON object containing ONLY the items that are WRONG.
+    Key = ID, Value = Short reason (max 5 words).
+    Example: {"123": "Case in Phones", "456": "Dress in Men's"}
+    If all items in the batch are correct, return: {}
     
-    Data to check:
+    Products to check:
     """
 
-    for i in range(0, len(records), batch_size):
+    total_records = len(records)
+    
+    for i in range(0, total_records, batch_size):
         batch = records[i:i+batch_size]
         
-        # Format batch as a string block
-        batch_text = "\n".join([f"{r['PRODUCT_SET_SID']} | {r['NAME']} | {r['CATEGORY']}" for r in batch])
+        # Format batch as a clean string block
+        batch_text = "\n".join([f"{r['PRODUCT_SET_SID']}|{r['NAME']}|{r['CATEGORY']}" for r in batch])
         
         try:
             response = model.generate_content(base_prompt + batch_text)
             
-            # Clean and parse JSON response
             text_response = response.text.strip()
-            # Remove markdown code blocks if present
+            # Clean markdown if present
             if "```json" in text_response:
                 text_response = text_response.replace("```json", "").replace("```", "")
             
             batch_results = json.loads(text_response)
-            flagged_reasons.update(batch_results)
+            if batch_results:
+                flagged_reasons.update(batch_results)
             
             # Update UI
-            progress_text.text(f"AI Scanning: {min(i+batch_size, len(records))}/{len(records)} products...")
-            bar.progress(min((i+batch_size) / len(records), 1.0))
+            current_progress = min((i + batch_size) / total_records, 1.0)
+            progress_text.text(f"AI Scanning: {min(i+batch_size, total_records)}/{total_records} items... (Found {len(flagged_reasons)} issues)")
+            bar.progress(current_progress)
             
-            # Respect Free Tier Rate Limits (approx 15 requests/min)
-            time.sleep(4) 
+            # --- RATE LIMIT HANDLING ---
+            time.sleep(2.5) 
             
         except Exception as e:
-            logger.error(f"AI Batch Error: {e}")
-            time.sleep(2) # Backoff on error
+            # If we hit a rate limit (429), wait longer and continue
+            if "429" in str(e):
+                time.sleep(10)
+            else:
+                time.sleep(1)
             continue
 
     bar.empty()
@@ -1020,6 +922,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     
     flags_mapping = support_files['flags_mapping']
     
+    # 1. DEFINE VALIDATIONS (Removed "Wrong Category" Rule-Based and "Poor Images" OpenCV)
     validations = [
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
@@ -1041,20 +944,15 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("BRAND name repeated in NAME", check_brand_in_name, {}),
         ("Generic branded products with genuine brands", check_generic_with_brand_in_name, {'brands_list': support_files.get('known_brands', [])}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        
-        # --- NEW: Rule-Based Category Check ---
-        ("Wrong Category", check_wrong_categories, {}),
-        
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
         }),
     ]
     
-    # --- INSERT AI CHECK HERE ---
+    # 2. ADD AI TEXT CHECK (IF ENABLED)
     if enable_ai and api_key and HAS_GENAI:
         validations.append(("Wrong Category (AI)", check_categories_with_ai, {'api_key': api_key}))
-    # ----------------------------
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -1161,7 +1059,6 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         if 'PRODUCT_SET_SID' not in res.columns:
             continue
         
-        # --- MAPPING UPDATE ---
         if name in flags_mapping:
             reason_info = flags_mapping[name]
         else:
@@ -1353,8 +1250,22 @@ with st.sidebar:
     # 2. AI CONFIGURATION
     st.markdown("---")
     st.subheader("🤖 AI Category Check")
-    api_key = st.text_input("Gemini API Key", type="password", help="Get free key at aistudio.google.com")
-    enable_ai_check = st.checkbox("Enable AI Category Check", value=False, disabled=not api_key)
+    
+    if not HAS_GENAI:
+        st.error("❌ Library Missing!")
+        st.caption("Run: pip install google-generativeai")
+        api_key = ""
+        enable_ai_check = False
+    else:
+        api_key = st.text_input("Gemini API Key", type="password", help="Get free key at aistudio.google.com")
+        
+        if api_key:
+            enable_ai_check = st.checkbox("Enable AI Category Check", value=False)
+            if enable_ai_check:
+                st.success("AI Enabled & Ready")
+        else:
+            st.info("Enter Key to enable AI")
+            enable_ai_check = False
     
     # 3. Cache & Memory Check
     st.markdown("---")
@@ -1381,7 +1292,7 @@ except Exception as e:
     st.error(f"Failed to load configuration files: {e}")
     st.stop()
 
-# --- REST OF SIDEBAR (FIXED: NO TRY/EXCEPT BLOCK) ---
+# --- REST OF SIDEBAR ---
 with st.sidebar:
     st.header("Display Settings")
     
@@ -1475,7 +1386,7 @@ if uploaded_files:
                 with st.spinner("Running validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
                     # --- AI KEY PASSING ---
-                    ai_key_to_use = api_key if enable_ai_check else None
+                    ai_key_to_use = api_key if (enable_ai_check and HAS_GENAI) else None
                     
                     final_report, flag_dfs = validate_products(
                         data, support_files, country_validator, data_has_warranty_cols, 
