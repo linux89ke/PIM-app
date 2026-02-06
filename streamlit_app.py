@@ -1397,7 +1397,7 @@ if uploaded_files:
         # -------------------------------------------------
         st.markdown("---")
         st.header("🖼️ Manual Image & Category Review")
-        st.info("Review products currently marked as 'Approved' to flag Poor Images or Wrong Categories.")
+        st.info("Select items to inspect their High-Resolution image in the sidebar.")
 
         # Filter for products currently approved
         review_data = pd.merge(
@@ -1433,7 +1433,7 @@ if uploaded_files:
                     df_ir_display[["Select", "MAIN_IMAGE", "NAME", "CATEGORY", "PRODUCT_SET_SID"]],
                     column_config={
                         "Select": st.column_config.CheckboxColumn(required=True),
-                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", help="Product Preview"),
+                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="medium", help="Tick box to see Full Size in Sidebar"),
                         "NAME": st.column_config.TextColumn("Product Name", width="large"),
                         "CATEGORY": st.column_config.TextColumn("Category"),
                         "PRODUCT_SET_SID": st.column_config.TextColumn("SID")
@@ -1444,9 +1444,30 @@ if uploaded_files:
                     key="image_review_editor"
                 )
 
+                # ---------------------------------------------------------
+                # SIDEBAR INSPECTOR LOGIC
+                # ---------------------------------------------------------
+                checked_rows = edited_ir_df[edited_ir_df['Select'] == True]
+                
+                if not checked_rows.empty:
+                    with st.sidebar:
+                        st.markdown("---")
+                        st.header("🔍 Image Inspector")
+                        st.info(f"{len(checked_rows)} items selected")
+                        
+                        for index, row in checked_rows.iterrows():
+                            st.divider()
+                            # Display full width image in sidebar
+                            if pd.notna(row['MAIN_IMAGE']):
+                                st.image(row['MAIN_IMAGE'], use_container_width=True, caption=row['PRODUCT_SET_SID'])
+                            else:
+                                st.warning("No Image URL")
+                            st.write(f"**Name:** {row['NAME']}")
+                            st.write(f"**Category:** {row['CATEGORY']}")
+
                 # Action Buttons
                 btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
-                selected_sids = edited_ir_df[edited_ir_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
+                selected_sids = checked_rows['PRODUCT_SET_SID'].tolist()
 
                 if selected_sids:
                     with btn_col1:
@@ -1465,7 +1486,7 @@ if uploaded_files:
                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
                             st.rerun()
                 else:
-                    st.caption("Select items above to enable flagging buttons.")
+                    st.caption("Select items above to inspect in Sidebar & enable flagging buttons.")
         else:
             st.success("No approved items available for review.")
 
