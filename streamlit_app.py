@@ -1428,11 +1428,12 @@ if uploaded_files:
                 # Use st.dataframe with on_select for "Click to Zoom" behavior
                 # We show specific columns and enable multi-row selection
                 selection_event = st.dataframe(
-                    df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "PRODUCT_SET_SID"]],
+                    df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "SELLER_NAME", "PRODUCT_SET_SID"]],
                     column_config={
-                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="medium", help="Click row to inspect"),
+                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="large", help="Click row to inspect"),
                         "NAME": st.column_config.TextColumn("Product Name", width="large"),
                         "CATEGORY": st.column_config.TextColumn("Category"),
+                        "SELLER_NAME": st.column_config.TextColumn("Seller Name"),
                         "PRODUCT_SET_SID": st.column_config.TextColumn("SID")
                     },
                     hide_index=True,
@@ -1474,6 +1475,7 @@ if uploaded_files:
                                 st.warning("⚠️ Invalid or missing URL")
                                 
                             st.write(f"**Name:** {row['NAME']}")
+                            st.write(f"**Seller:** {row['SELLER_NAME']}")
                             st.write(f"**Category:** {row['CATEGORY']}")
 
                 # Action Buttons (Operate on selected_rows)
