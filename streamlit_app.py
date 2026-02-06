@@ -45,7 +45,9 @@ NEW_FILE_MAPPING = {
     'warranty_duration': 'WARRANTY_DURATION',
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE',
-    'count_variations': 'COUNT_VARIATIONS'
+    'count_variations': 'COUNT_VARIATIONS',
+    'count variations': 'COUNT_VARIATIONS', # Handle space
+    'number of variations': 'COUNT_VARIATIONS' # Handle alternative name
 }
 
 # Logger setup
@@ -58,8 +60,9 @@ def clean_category_code(code) -> str:
     try:
         if pd.isna(code): return ""
         s = str(code).strip()
-        if s.replace('.', '', 1).isdigit() and '.' in s:
-            return str(int(float(s)))
+        # Remove decimal point if it exists (e.g., "123.0" -> "123")
+        if '.' in s:
+            s = s.split('.')[0]
         return s
     except:
         return str(code).strip()
@@ -483,14 +486,17 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]) -> pd.DataFrame:
-    if 'COUNT_VARIATIONS' not in data.columns or 'CATEGORY_CODE' not in data.columns:
+    # Ensure COUNT_VARIATIONS is present, even if empty
+    check_data = data.copy()
+    if 'COUNT_VARIATIONS' not in check_data.columns:
+        check_data['COUNT_VARIATIONS'] = 1  # Default to 1 if missing so we don't crash
+        
+    if 'CATEGORY_CODE' not in check_data.columns:
         return pd.DataFrame(columns=data.columns)
 
     # Clean allowed codes
     allowed_set = set(clean_category_code(c) for c in allowed_variation_codes)
 
-    # Prepare data
-    check_data = data.copy()
     check_data['cat_clean'] = check_data['CATEGORY_CODE'].apply(clean_category_code)
     
     # Convert count to numeric, coerce errors to 1 (safe)
@@ -581,9 +587,10 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
-                        if dup['sid'] not in duplicate_groups:
-                            duplicate_groups[dup['sid']] = []
-                        duplicate_groups[dup['sid']].extend([current_sid, dup['sid']])
+                        # Grouping logic
+                        # (We don't really use this grouping downstream in this exact code, 
+                        # but keeping it consistent with previous logic if needed)
+                        pass 
     
     if not rejected_sids: return pd.DataFrame(columns=data.columns)
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
@@ -852,12 +859,10 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     # 1. Identify Generic Items
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     
-    # 2. Exemption: "Cases"
-    # We check if the 'CATEGORY' column exists and filter out rows containing "case" or "cases"
+    # 2. Exemption: "Cases" or "Covers"
     if 'CATEGORY' in data.columns:
-        # Check for case/cases/cover/covers just to be safe, but user said "cases"
-        # I will stick to "case" to capture "Phone Cases", "Cases & Covers" etc.
-        is_exempt = data['CATEGORY'].astype(str).str.lower().str.contains(r'\b(case|cases)\b', regex=True, na=False)
+        # Exempt if category contains "case", "cases", "cover", or "covers"
+        is_exempt = data['CATEGORY'].astype(str).str.lower().str.contains(r'\b(case|cases|cover|covers)\b', regex=True, na=False)
         mask = is_generic & ~is_exempt
     else:
         mask = is_generic
