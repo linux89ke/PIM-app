@@ -8,3 +8,4 @@ imagehash
 Pillow
 requests
 opencv-python-headless
+google-generativeai
