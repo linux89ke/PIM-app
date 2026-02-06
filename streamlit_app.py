@@ -466,7 +466,15 @@ def validate_input_schema(df: pd.DataFrame) -> Tuple[bool, List[str]]:
 
 def filter_by_country(df: pd.DataFrame, country_validator: CountryValidator, source: str) -> pd.DataFrame:
     if 'ACTIVE_STATUS_COUNTRY' not in df.columns: return df
-    df['ACTIVE_STATUS_COUNTRY'] = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
+    
+    # Standardize column
+    s = df['ACTIVE_STATUS_COUNTRY'].astype(str).str.strip().str.upper()
+    
+    # Handle 'JUMIA-KE', 'JUMIA-UG' etc
+    s = s.str.replace(r'^JUMIA-', '', regex=True)
+    
+    df['ACTIVE_STATUS_COUNTRY'] = s
+    
     mask = df['ACTIVE_STATUS_COUNTRY'] == country_validator.code
     filtered = df[mask].copy()
     if filtered.empty:
