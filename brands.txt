@@ -648,10 +648,6 @@ CENTRAMAN
 Centurion
 CEO
 Cera-Care
-Ceramic
-Ceramic Knife
-Ceramic non Stick
-Ceramics
 Ceriotti
 Cetaphil
 Chadni
@@ -660,11 +656,9 @@ Chagme
 Champion
 Chandelier
 Chandni
-Chapstick
 Charles Walters Bespoke
 Chaxigo
 Chenxi
-Chess Bag
 Chest
 Chicago Skates
 Chicco
@@ -4733,7 +4727,6 @@ No
 No Longer
 Nobel
 Nokia
-non
 Noor Gold
 Nora
 Nordic
@@ -4750,7 +4743,6 @@ Nunix
 Nuspa
 Nutrameal
 Nutricia
-Nuts
 Nw
 Nyle
 NYX
@@ -4794,18 +4786,13 @@ Oraimo ET Noosy
 ORAL-B
 Ordinary Skincare Co
 Org
-Organic
 Organic Choice
-Organic Honey
 Organic Living
 Organica
-Organizer
 ORGANO
 Orgo
 Oriflame
 Original Femtight
-Originals
-Orignal
 Orimo
 Orimono
 Oronzo
@@ -4866,7 +4853,6 @@ Pedro
 Pei Mei
 PeiMei
 Pembe
-Pen
 PENFORMA
 Pepets
 Peptang
@@ -4888,9 +4874,6 @@ Pinnacle
 Pioneer
 PIXOR
 PK
-Plant
-Platinum
-Playstation
 PLOKAMA
 Plus
 Plush
@@ -4908,11 +4891,8 @@ Porcupine
 Porcupine Ridge
 PORNTHAP
 Porsche
-Portable Digital Speaker
-Portable Fan
 Portia M
 Post It
-POWER
 Powermate
 Pradhan
 Pradip
