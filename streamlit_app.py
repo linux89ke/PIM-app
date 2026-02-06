@@ -21,7 +21,7 @@ FULL_DATA_COLS = [
     "PRODUCT_SET_SID", "ACTIVE_STATUS_COUNTRY", "NAME", "BRAND", "CATEGORY", "CATEGORY_CODE",
     "COLOR", "COLOR_FAMILY", "MAIN_IMAGE", "VARIATION", "PARENTSKU", "SELLER_NAME", "SELLER_SKU",
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", 
-    "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE"
+    "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE", "COUNT_VARIATIONS"
 ]
 FX_RATE = 132.0
 SPLIT_LIMIT = 9998 
@@ -44,7 +44,8 @@ NEW_FILE_MAPPING = {
     'product_warranty': 'PRODUCT_WARRANTY',
     'warranty_duration': 'WARRANTY_DURATION',
     'warranty_address': 'WARRANTY_ADDRESS',
-    'warranty_type': 'WARRANTY_TYPE'
+    'warranty_type': 'WARRANTY_TYPE',
+    'count_variations': 'COUNT_VARIATIONS' # Added Mapping
 }
 
 # Logger setup
@@ -218,18 +219,18 @@ def load_txt_file(filename: str) -> List[str]:
     try:
         full_path = os.path.abspath(filename)
         if not os.path.exists(full_path):
-            st.warning(f"⚠️ File Not Found: {filename} (looked in {os.getcwd()})")
+            st.warning(f"File Not Found: {filename} (looked in {os.getcwd()})")
             return []
         with open(filename, 'r', encoding='utf-8') as f:
             data = [line.strip() for line in f if line.strip()]
         if not data:
-            st.warning(f"⚠️ File is Empty: {filename}")
+            st.warning(f"File is Empty: {filename}")
         return data
     except UnicodeDecodeError:
-        st.error(f"❌ Encoding Error: '{filename}' is not UTF-8.")
+        st.error(f"Encoding Error: '{filename}' is not UTF-8.")
         return []
     except Exception as e:
-        st.error(f"❌ Error reading {filename}: {e}")
+        st.error(f"Error reading {filename}: {e}")
         return []
 
 @st.cache_data(ttl=3600)
@@ -284,10 +285,6 @@ def load_restricted_brands_config(filename: str) -> Dict:
 
 @st.cache_data(ttl=3600)
 def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
-    """
-    Returns the mapping of Flag Name -> (Reason Code, Rejection Comment).
-    Updated with specific business rules for Restricted Brands, Fakes, Refurbs, etc.
-    """
     try:
         return {
             'Restricted brands': (
@@ -358,6 +355,10 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000007 - Other Reason',
                 "Please note this product is a duplicate"
             ),
+            'Wrong Variation': (
+                '1000039 - Product Poorly Created. Each Variation Of This Product Should Be Created Uniquely (Not Authorized) (Not Authorized)',
+                "Please create different SKUs for this product and not as variations as variations are only used for sizes"
+            ),
         }
     except Exception:
         return {}
@@ -389,7 +390,8 @@ def load_all_support_files() -> Dict:
         'approved_refurb_sellers_ug': [s.lower() for s in safe_load_txt('Refurb_LaptopUG.txt')],
         'duplicate_exempt_codes': safe_load_txt('duplicate_exempt.txt'),
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
-        'known_brands': safe_load_txt('brands.txt'), 
+        'known_brands': safe_load_txt('brands.txt'),
+        'variation_allowed_codes': safe_load_txt('variation.txt'),
     }
     return files
 
@@ -480,6 +482,25 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Validation Logic Functions ---
 
+def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]) -> pd.DataFrame:
+    if 'COUNT_VARIATIONS' not in data.columns or 'CATEGORY_CODE' not in data.columns:
+        return pd.DataFrame(columns=data.columns)
+
+    # Clean allowed codes
+    allowed_set = set(clean_category_code(c) for c in allowed_variation_codes)
+
+    # Prepare data
+    check_data = data.copy()
+    check_data['cat_clean'] = check_data['CATEGORY_CODE'].apply(clean_category_code)
+    
+    # Convert count to numeric, coerce errors to 1 (safe)
+    check_data['qty_var'] = pd.to_numeric(check_data['COUNT_VARIATIONS'], errors='coerce').fillna(1)
+
+    # Logic: Flag if qty > 1 AND cat NOT in allowed
+    mask = (check_data['qty_var'] > 1) & (~check_data['cat_clean'].isin(allowed_set))
+    
+    return check_data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 def check_duplicate_products(
     data: pd.DataFrame,
     exempt_categories: List[str] = None,
@@ -560,6 +581,10 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
+                        # Corrected Logic for grouping
+                        if dup['sid'] not in duplicate_groups:
+                            duplicate_groups[dup['sid']] = []
+                        duplicate_groups[dup['sid']].extend([current_sid, dup['sid']])
     
     if not rejected_sids: return pd.DataFrame(columns=data.columns)
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
@@ -868,6 +893,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
     flags_mapping = support_files['flags_mapping']
     
     validations = [
+        ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Restricted brands", check_restricted_brands, {'restricted_config': support_files['restricted_brands_config']}),
         ("Suspected Fake product", check_suspected_fake_products, {'suspected_fake_df': support_files['suspected_fake'], 'fx_rate': FX_RATE}),
         ("Seller Not approved to sell Refurb", check_refurb_seller_approval, {
@@ -1182,16 +1208,16 @@ except:
 
 # --- DEBUG & CONFIG SIDEBAR (MOVED TO TOP) ---
 with st.sidebar:
-    st.header("🛠️ System Status")
+    st.header("System Status")
     
     # 1. Physical Check
     if os.path.exists('brands.txt'):
-        st.success("✅ 'brands.txt' found.")
+        st.success("'brands.txt' found.")
     else:
-        st.error(f"❌ 'brands.txt' missing in {os.getcwd()}")
+        st.error(f"'brands.txt' missing in {os.getcwd()}")
         
     # 2. Cache & Memory Check
-    if st.button("♻️ Force Reload Files"):
+    if st.button("Force Reload Files"):
         st.cache_data.clear()
         st.rerun()
 
@@ -1209,7 +1235,7 @@ try:
             if cnt > 0:
                 st.info(f"Loaded {cnt} brands.")
             else:
-                st.warning("⚠️ 'brands.txt' is empty!")
+                st.warning("'brands.txt' is empty!")
 except Exception as e:
     st.error(f"Failed to load configuration files: {e}")
     st.stop()
@@ -1307,7 +1333,6 @@ if uploaded_files:
                 
                 with st.spinner("Running validations..."):
                     common_sids_to_pass = intersection_sids if intersection_count > 0 else None
-                    # REMOVED IMAGE PARAMETER HERE
                     final_report, flag_dfs = validate_products(
                         data, support_files, country_validator, data_has_warranty_cols, common_sids_to_pass
                     )
@@ -1352,10 +1377,11 @@ if uploaded_files:
             c5.metric("SKUs in Both Files", intersection_count)
         
         if intersection_count > 0:
-            common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
-            csv_buffer = BytesIO()
-            common_skus_df.to_csv(csv_buffer, index=False)
-            st.download_button(label=f"📥 Download Common SKUs ({intersection_count})", data=csv_buffer.getvalue(), file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv", mime="text/csv")
+            # common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
+            # csv_buffer = BytesIO()
+            # common_skus_df.to_csv(csv_buffer, index=False)
+            # st.download_button(label=f"Download Common SKUs ({intersection_count})", data=csv_buffer.getvalue(), file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv", mime="text/csv")
+            pass
         
         st.subheader("Validation Results by Flag")
         if not rejected_df.empty:
@@ -1369,10 +1395,10 @@ if uploaded_files:
 
                 with st.expander(f"{title} ({len(df_display)})"):
                     col1, col2 = st.columns([1, 1])
-                    with col1: search_term = st.text_input(f"🔍 Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
+                    with col1: search_term = st.text_input(f"Search {title}", placeholder="Name, Brand, or SKU...", key=f"search_{title}")
                     with col2:
                         all_sellers = sorted(df_display['SELLER_NAME'].astype(str).unique())
-                        seller_filter = st.multiselect(f"🏪 Filter Seller ({title})", all_sellers, key=f"filter_{title}")
+                        seller_filter = st.multiselect(f"Filter Seller ({title})", all_sellers, key=f"filter_{title}")
                     
                     if search_term:
                         mask = df_display.apply(lambda x: x.astype(str).str.contains(search_term, case=False).any(), axis=1)
@@ -1387,15 +1413,138 @@ if uploaded_files:
                     
                     to_approve = edited_df[edited_df['Select'] == True]['PRODUCT_SET_SID'].tolist()
                     if to_approve:
-                        if st.button(f"✅ Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
+                        if st.button(f"Approve {len(to_approve)} Selected Items", key=f"btn_{title}"):
                             st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(to_approve), ['Status', 'Reason', 'Comment', 'FLAG']] = ['Approved', '', '', 'Approved by User']
                             st.success("Updated! Rerunning to refresh...")
                             st.rerun()
 
                     flag_export_df = pd.merge(df_flagged_report[['ProductSetSid']], data, left_on='ProductSetSid', right_on='PRODUCT_SET_SID', how='left')
-                    st.download_button(f"📥 Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
+                    st.download_button(f"Export {title} Data", to_excel_flag_data(flag_export_df, title), f"{file_prefix}_{title}.xlsx")
         else:
             st.success("No rejections found! All products approved.")
+
+        # -------------------------------------------------
+        # NEW: MANUAL IMAGE & CATEGORY REVIEW
+        # -------------------------------------------------
+        st.markdown("---")
+        st.header("Manual Image & Category Review")
+        st.info("Click on any row to inspect the image in the Sidebar. Hold Ctrl/Cmd to select multiple rows.")
+
+        # Filter for products currently approved
+        review_data = pd.merge(
+            approved_df[['ProductSetSid']], 
+            data, 
+            left_on='ProductSetSid', 
+            right_on='PRODUCT_SET_SID', 
+            how='left'
+        )
+
+        if not review_data.empty:
+            with st.expander(f"Review Approved Images ({len(review_data)} items)", expanded=True):
+                # Search and Filter
+                ir_col1, ir_col2 = st.columns([2, 1])
+                with ir_col1:
+                    ir_search = st.text_input("Search Image Review", placeholder="Search name or category...", key="ir_search")
+                with ir_col2:
+                    ir_cat_filter = st.multiselect("Filter Category", sorted(review_data['CATEGORY'].unique()), key="ir_cat")
+
+                # Apply Filters
+                df_ir_display = review_data.copy()
+                if ir_search:
+                    df_ir_display = df_ir_display[df_ir_display['NAME'].str.contains(ir_search, case=False, na=False) | 
+                                                 df_ir_display['CATEGORY'].str.contains(ir_search, case=False, na=False)]
+                if ir_cat_filter:
+                    df_ir_display = df_ir_display[df_ir_display['CATEGORY'].isin(ir_cat_filter)]
+
+                # Use st.dataframe with on_select for "Click to Zoom" behavior
+                # We show specific columns and enable multi-row selection
+                selection_event = st.dataframe(
+                    df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "SELLER_NAME", "PRODUCT_SET_SID"]],
+                    column_config={
+                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="large", help="Click row to inspect"),
+                        "NAME": st.column_config.TextColumn("Product Name", width="large"),
+                        "CATEGORY": st.column_config.TextColumn("Category"),
+                        "SELLER_NAME": st.column_config.TextColumn("Seller Name"),
+                        "PRODUCT_SET_SID": st.column_config.TextColumn("SID")
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    on_select="rerun",  # Triggers sidebar update on click
+                    selection_mode="multi-row",
+                    key="image_review_grid"
+                )
+
+                # ---------------------------------------------------------
+                # SIDEBAR INSPECTOR LOGIC
+                # ---------------------------------------------------------
+                # Get the selected indices from the dataframe event
+                selected_indices = selection_event.selection.rows
+                
+                # Filter the dataframe to get the actual selected data rows
+                selected_rows = df_ir_display.iloc[selected_indices]
+                
+                if not selected_rows.empty:
+                    with st.sidebar:
+                        st.markdown("---")
+                        st.header("Image Inspector")
+                        st.info(f"{len(selected_rows)} items selected")
+                        
+                        for index, row in selected_rows.iterrows():
+                            st.divider()
+                            # ROBUST IMAGE LOADING CHECK
+                            img_url = str(row['MAIN_IMAGE']).strip()
+                            
+                            # check if it looks like a valid URL
+                            if img_url.lower().startswith(('http://', 'https://')):
+                                try:
+                                    st.image(img_url, use_container_width=True, caption=str(row['PRODUCT_SET_SID']))
+                                except Exception:
+                                    # Fallback if image fails to render
+                                    st.error(f"Could not load image")
+                                    st.caption(f"URL: {img_url[:30]}...")
+                            else:
+                                st.warning("Invalid or missing URL")
+                                
+                            st.write(f"**Name:** {row['NAME']}")
+                            st.write(f"**Seller:** {row['SELLER_NAME']}")
+                            st.write(f"**Category:** {row['CATEGORY']}")
+
+                # Action Buttons (Operate on selected_rows)
+                btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
+                selected_sids = selected_rows['PRODUCT_SET_SID'].tolist()
+
+                if selected_sids:
+                    with btn_col1:
+                        if st.button(f"Flag {len(selected_sids)}: Poor Image", type="primary"):
+                            reason_code = "1000042 - Kindly follow our product image upload guideline."
+                            comment = """Please make sure your product images follow Jumia’s image upload guidelines.
+Images must be clear, well-lit, and focused, with the product presented in a clean and professional way.
+Following these standards is essential to maintain the quality and consistency of product listings across the platform.
+Non-compliant images may result in listing rejection ."""
+                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
+                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
+                            st.rerun()
+                    
+                    with btn_col2:
+                        if st.button(f"Flag {len(selected_sids)}: Wrong Category"):
+                            reason_code = "1000004 - Wrong Category"
+                            comment = """Your products are currently assigned to the wrong category.
+Please review and update the listing with the correct category to ensure your product is properly classified and visible to customers.
+Correct categorization improves search results and helps customers find your product more easily.
+
+✅ You may:
+
+- Choose the appropriate category manually if you know it.
+
+- Visit the Jumia website to take inspiration from similar products and see where they are listed.
+- Contact your Seller Support."""
+                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
+                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
+                            st.rerun()
+                else:
+                    st.caption("Click rows above to inspect & flag.")
+        else:
+            st.success("No approved items available for review.")
 
         st.markdown("---")
         st.header("Overall Exports")
