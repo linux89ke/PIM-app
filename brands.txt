@@ -863,7 +863,6 @@ Domino
 Doom
 Dormans
 Dot
-DOUBLE
 DOUBLE DOSE
 Dove
 Downy
@@ -1229,8 +1228,6 @@ Health & Beyond
 HEALTHY Air Fryer
 HEALTHY Shop
 HEAVEN Dove
-Heavy
-Heavy Duty
 Heinz
 Hello Kitty
 Hemani
@@ -4389,9 +4386,7 @@ LANGMANNI
 Lansinoh
 LansYade
 Lanthome
-Laptop
 Latafa
-Latest
 Lattafa
 Lattafa PRIDE
 Lava
@@ -4403,8 +4398,6 @@ Ldnio
 Le FALCONE
 Leaderhub
 Leafael
-Leather
-Leather Case
 Leatherite
 LEDS
 Lee
@@ -4608,10 +4601,7 @@ Mimi
 Mindy
 Minecraft
 Mingzheng
-MINI
-MINI Dispenser
 MINI FOCUS
-MINI Speaker
 Minimax
 Miniso
 Mino
@@ -4624,7 +4614,6 @@ Mitchum
 MK
 MK Massage Oil
 Mniboom Bluetooth Speaker
-Modern
 MODI
 Modio
 Moika
@@ -4668,7 +4657,6 @@ Mumias
 Mums Pishori Rice
 Munchkin
 Musedo
-Music Digital Wireless
 Music Farm
 Music Guitar
 Music Man
@@ -4684,7 +4672,6 @@ Mxq Pro
 My Caddy
 My Perfume Shop
 My perfumes
-NA
 NAIL Pro
 NAIL TIPS
 Naked Wolfe
@@ -4893,7 +4880,6 @@ Philip
 Philips
 Phillip
 Phillips
-Phone Case
 Photography & Cinema
 Pictionary
 Pinacle
