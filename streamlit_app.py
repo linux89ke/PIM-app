@@ -46,8 +46,8 @@ NEW_FILE_MAPPING = {
     'warranty_address': 'WARRANTY_ADDRESS',
     'warranty_type': 'WARRANTY_TYPE',
     'count_variations': 'COUNT_VARIATIONS',
-    'count variations': 'COUNT_VARIATIONS', # Handle space
-    'number of variations': 'COUNT_VARIATIONS' # Handle alternative name
+    'count variations': 'COUNT_VARIATIONS',
+    'number of variations': 'COUNT_VARIATIONS'
 }
 
 # Logger setup
@@ -60,7 +60,6 @@ def clean_category_code(code) -> str:
     try:
         if pd.isna(code): return ""
         s = str(code).strip()
-        # Remove decimal point if it exists (e.g., "123.0" -> "123")
         if '.' in s:
             s = s.split('.')[0]
         return s
@@ -587,10 +586,9 @@ def check_duplicate_products(
                             'variant': ", ".join(variant_desc) if variant_desc else "Same specs",
                             'score': dup['score']
                         }
-                        # Grouping logic
-                        # (We don't really use this grouping downstream in this exact code, 
-                        # but keeping it consistent with previous logic if needed)
-                        pass 
+                        if dup['sid'] not in duplicate_groups:
+                            duplicate_groups[dup['sid']] = []
+                        duplicate_groups[dup['sid']].extend([current_sid, dup['sid']])
     
     if not rejected_sids: return pd.DataFrame(columns=data.columns)
     rejected_df = data_to_check[data_to_check['PRODUCT_SET_SID'].astype(str).isin(rejected_sids)].copy()
@@ -859,9 +857,9 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
     # 1. Identify Generic Items
     is_generic = data['BRAND'].astype(str).str.strip().str.lower() == 'generic'
     
-    # 2. Exemption: "Cases" or "Covers"
+    # 2. Exemption: Cases, Covers
     if 'CATEGORY' in data.columns:
-        # Exempt if category contains "case", "cases", "cover", or "covers"
+        # Check for case/cases/cover/covers/back cover etc
         is_exempt = data['CATEGORY'].astype(str).str.lower().str.contains(r'\b(case|cases|cover|covers)\b', regex=True, na=False)
         mask = is_generic & ~is_exempt
     else:
@@ -1497,7 +1495,9 @@ if uploaded_files:
                 selected_indices = selection_event.selection.rows
                 
                 # Filter the dataframe to get the actual selected data rows
-                selected_rows = df_ir_display.iloc[selected_indices]
+                # SAFETY FILTER: Keep only indices that are valid for current view
+                valid_indices = [i for i in selected_indices if i < len(df_ir_display)]
+                selected_rows = df_ir_display.iloc[valid_indices]
                 
                 if not selected_rows.empty:
                     with st.sidebar:
