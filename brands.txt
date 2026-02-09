@@ -697,8 +697,6 @@ Coco
 Cocoderm
 Cocopulp
 COFE
-Coffee
-Coffee Table
 Colgate
 Collagen
 Collagen Peptide
@@ -1036,7 +1034,6 @@ Fixtec
 Fk
 Flamingo
 Flash
-Flat Tummy Tea
 Fleece
 Flip
 Flip Back
@@ -5132,9 +5129,7 @@ Skinu
 Skmei
 Skyview
 Skyworth
-Slimming Tea
 SMAPEX
-Smart Accessories
 Smart Berry
 Smart Collection
 Smart Life
