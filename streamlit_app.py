@@ -565,6 +565,8 @@ def check_duplicate_products(
     duplicate_details = {}
     grouped = data_to_check.groupby(['_seller_lower', '_base_key'])
     
+    duplicate_groups = {} # Define duplicate_groups to avoid UnboundLocalError
+
     for (seller, base_key), group in grouped:
         if len(group) < 2: continue
         variant_groups = group.groupby('_variant_key')
@@ -1246,14 +1248,6 @@ except:
 
 # --- DEBUG & CONFIG SIDEBAR (MOVED TO TOP) ---
 with st.sidebar:
-    st.header("System Status")
-    
-    # 1. Physical Check
-    if os.path.exists('brands.txt'):
-        st.success("'brands.txt' found.")
-    else:
-        st.error(f"'brands.txt' missing in {os.getcwd()}")
-        
     # 2. Cache & Memory Check
     if st.button("Force Reload Files"):
         st.cache_data.clear()
