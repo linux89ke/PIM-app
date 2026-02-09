@@ -3292,9 +3292,6 @@ Kids Spry
 Kids Star
 Kids Station
 Kids Station Marketing
-Kids Story
-Kids Tablets
-Kids Tales
 Kids Toothbrush
 Kids Trike
 Kids Venture
@@ -4462,8 +4459,6 @@ Magic
 Magic Bullet
 Magic Glass
 Magic Hose
-Magnet
-Magnetic
 Magnus
 Magsafe
 Mahinda
@@ -4472,7 +4467,6 @@ Maison Alhambra
 Maison Asrar
 Maison Jules
 Makari
-Make Up
 Makita
 Makita Accessories
 Makute
@@ -4483,7 +4477,6 @@ Mama Earth
 Mamado
 Mamaearth
 Mangalam
-Manicure Set
 Manji
 Mara
 Marado
@@ -4646,7 +4639,6 @@ Nano Bakeware
 Nashi Spread
 Nataraj
 NATASIA
-Natural
 Natural Factors
 Natural Products Ltd
 Naturalli
@@ -4695,7 +4687,6 @@ Nirmal
 Nisha
 Nissan
 Nitrile
-No
 No Longer
 Nobel
 Nokia
@@ -4848,7 +4839,6 @@ PIXOR
 PK
 PLOKAMA
 Plus
-Plush
 Pms Uk
 Pocket Binocular
 POD
@@ -4858,7 +4848,6 @@ Polene
 Polo
 Polo Ralph Lauren
 Ponal
-Popcorns
 Porcupine
 Porcupine Ridge
 PORNTHAP
@@ -4985,7 +4974,6 @@ Romantic Deluxe
 Romantic MAY
 Roniki
 ROOT & RESIN
-Rose
 Roseleaf
 Roshun
 Rosmed
@@ -5006,7 +4994,6 @@ S Color
 S&K
 SADOER
 Safaricom
-Safety
 Safety Jogger
 Safisha
 Sail
@@ -5087,7 +5074,6 @@ Shirley MAY
 Shivanya
 SHK
 Shokki
-Shower
 Shure
 Signature
 Signature HOME Collection
