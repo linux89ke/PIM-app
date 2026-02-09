@@ -5,7 +5,7 @@ from datetime import datetime
 import altair as alt
 
 # --- CONFIG & UI ---
-st.set_page_config(page_title="Weekly Analysis", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Weekly Analysis", layout="wide", page_icon="")
 
 # Custom CSS for Infographic Style
 st.markdown("""
@@ -16,8 +16,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 Weekly Insights Dashboard")
-st.caption("Aggregate Daily exports to identify high-risk sellers, categories, and patterns.")
+st.title(" Weekly Insights Dashboard")
+
 
 # --- UTILS ---
 def get_top_stats(df, col, limit=5):
@@ -71,7 +71,7 @@ if weekly_files:
         col_left, col_right = st.columns(2)
 
         with col_left:
-            st.subheader("⚠️ Top Rejection Reasons")
+            st.subheader(" Top Rejection Reasons")
             reason_data = get_top_stats(rejected, 'FLAG', 10)
             chart_reasons = alt.Chart(reason_data).mark_bar(cornerRadiusEnd=5).encode(
                 x=alt.X('Rejections:Q', title="Number of Rejections"),
@@ -82,7 +82,7 @@ if weekly_files:
             st.altair_chart(chart_reasons, use_container_width=True)
 
         with col_right:
-            st.subheader("🏢 Top Rejected Sellers")
+            st.subheader(" Top Rejected Sellers")
             seller_rej = get_top_stats(rejected, 'SELLER_NAME', 10)
             chart_sellers = alt.Chart(seller_rej).mark_bar(cornerRadiusEnd=5).encode(
                 x=alt.X('Rejections:Q'),
@@ -94,7 +94,7 @@ if weekly_files:
 
         # --- DETAILED TABLES ---
         st.divider()
-        st.subheader("📋 Top 5 Breakdown")
+        st.subheader(" Top 5 Breakdown")
         t1, t2, t3 = st.columns(3)
         
         top5_reasons = get_top_stats(rejected, 'FLAG', 5)
@@ -127,7 +127,7 @@ if weekly_files:
             rejected.to_excel(writer, sheet_name='All Rejected Products', index=False)
 
         st.download_button(
-            label="📥 Download Comprehensive Report (Excel)",
+            label=" Download Comprehensive Report (Excel)",
             data=output.getvalue(), # .getvalue() is critical for the fix
             file_name=f"Weekly_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
