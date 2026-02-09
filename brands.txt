@@ -497,13 +497,10 @@ Bontempi
 Bontrager
 Boo
 Boohoo
-Books
 BoomBest
 Boompods
 Boon
 Boost
-Boot
-Boots
 Bopai
 Borghese
 Borotalco
@@ -978,7 +975,6 @@ Ezviz
 F&W
 Fa
 Fabric And Fabric
-Face
 Face Facts
 Face Republic
 Fade Out
