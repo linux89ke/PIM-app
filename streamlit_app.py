@@ -23,7 +23,7 @@ FULL_DATA_COLS = [
     "GLOBAL_PRICE", "GLOBAL_SALE_PRICE", "TAX_CLASS", "FLAG", "LISTING_STATUS", 
     "PRODUCT_WARRANTY", "WARRANTY_DURATION", "WARRANTY_ADDRESS", "WARRANTY_TYPE", "COUNT_VARIATIONS"
 ]
-FX_RATE = 132.0
+FX_RATE = 128.0
 SPLIT_LIMIT = 9998 
 
 NEW_FILE_MAPPING = {
@@ -1240,7 +1240,7 @@ if 'layout_mode' not in st.session_state:
 
 try:
     st.set_page_config(
-        page_title="Product Validation Tool",
+        page_title="Product Tool",
         layout=st.session_state.layout_mode
     )
 except:
@@ -1274,14 +1274,14 @@ except Exception as e:
 
 # --- REST OF SIDEBAR (FIXED: NO TRY/EXCEPT BLOCK) ---
 with st.sidebar:
-    st.header("Display Settings")
+    st.header("Display")
     
     # Logic to ensure the radio button matches the current session state
     index = 1 if st.session_state.layout_mode == "wide" else 0
     
     layout_choice = st.radio(
         "Layout Mode", 
-        ["Centered (Mobile-Friendly)", "Wide (Desktop-Optimized)"],
+        ["Centered ", "Wide "],
         index=index,
         key="layout_selector"
     )
@@ -1295,7 +1295,7 @@ with st.sidebar:
 # -------------------------------------------------
 # DAILY VALIDATION (NOW THE MAIN VIEW)
 # -------------------------------------------------
-st.header("Daily Product Validation")
+st.header("Upload CSV/XLSX")
 country = st.selectbox("Select Country", ["Kenya", "Uganda"], key="daily_country")
 country_validator = CountryValidator(country)
 
