@@ -1409,10 +1409,6 @@ if uploaded_files:
             c5.metric("SKUs in Both Files", intersection_count)
         
         if intersection_count > 0:
-            # common_skus_df = data[data['PRODUCT_SET_SID'].isin(intersection_sids)]
-            # csv_buffer = BytesIO()
-            # common_skus_df.to_csv(csv_buffer, index=False)
-            # st.download_button(label=f"Download Common SKUs ({intersection_count})", data=csv_buffer.getvalue(), file_name=f"{file_prefix}_Common_SKUs_{current_date}.csv", mime="text/csv")
             pass
         
         st.subheader("Validation Results by Flag")
@@ -1456,7 +1452,7 @@ if uploaded_files:
             st.success("No rejections found! All products approved.")
 
         # -------------------------------------------------
-        # NEW: MANUAL IMAGE & CATEGORY REVIEW
+        # MANUAL IMAGE & CATEGORY REVIEW
         # -------------------------------------------------
         st.markdown("---")
         st.header("Manual Image & Category Review")
@@ -1484,16 +1480,19 @@ if uploaded_files:
                 df_ir_display = review_data.copy()
                 if ir_search:
                     df_ir_display = df_ir_display[df_ir_display['NAME'].str.contains(ir_search, case=False, na=False) | 
-                                                 df_ir_display['CATEGORY'].str.contains(ir_search, case=False, na=False)]
+                                                  df_ir_display['CATEGORY'].str.contains(ir_search, case=False, na=False)]
                 if ir_cat_filter:
                     df_ir_display = df_ir_display[df_ir_display['CATEGORY'].isin(ir_cat_filter)]
 
                 # Use st.dataframe with on_select for "Click to Zoom" behavior
-                # We show specific columns and enable multi-row selection
                 selection_event = st.dataframe(
                     df_ir_display[["MAIN_IMAGE", "NAME", "CATEGORY", "SELLER_NAME", "PRODUCT_SET_SID"]],
                     column_config={
-                        "MAIN_IMAGE": st.column_config.ImageColumn("Image", width="large", help="Click row to inspect"),
+                        "MAIN_IMAGE": st.column_config.ImageColumn(
+                            "Image", 
+                            width=150,  # Increased preview size
+                            help="Click row to inspect"
+                        ),
                         "NAME": st.column_config.TextColumn("Product Name", width="large"),
                         "CATEGORY": st.column_config.TextColumn("Category"),
                         "SELLER_NAME": st.column_config.TextColumn("Seller Name"),
@@ -1507,76 +1506,79 @@ if uploaded_files:
                 )
 
                 # ---------------------------------------------------------
-                # SIDEBAR INSPECTOR LOGIC
+                # SIDEBAR INSPECTOR & QUICK-ACTION BUTTONS
                 # ---------------------------------------------------------
-                # Get the selected indices from the dataframe event
                 selected_indices = selection_event.selection.rows
-                
-                # Filter the dataframe to get the actual selected data rows
-                # SAFETY FILTER: Keep only indices that are valid for current view
-                valid_indices = [i for i in selected_indices if i < len(df_ir_display)]
-                selected_rows = df_ir_display.iloc[valid_indices]
-                
-                if not selected_rows.empty:
+
+                if selected_indices:
                     with st.sidebar:
                         st.markdown("---")
-                        st.header("Image Inspector")
-                        st.info(f"{len(selected_rows)} items selected")
+                        st.header("🔍 Image Inspector")
+                        st.caption(f"{len(selected_indices)} item(s) selected")
                         
-                        for index, row in selected_rows.iterrows():
-                            st.divider()
-                            # ROBUST IMAGE LOADING CHECK
-                            img_url = str(row['MAIN_IMAGE']).strip()
-                            
-                            # check if it looks like a valid URL
-                            if img_url.lower().startswith(('http://', 'https://')):
-                                try:
-                                    st.image(img_url, use_container_width=True, caption=str(row['PRODUCT_SET_SID']))
-                                except Exception:
-                                    # Fallback if image fails to render
-                                    st.error(f"Could not load image")
-                                    st.caption(f"URL: {img_url[:30]}...")
-                            else:
-                                st.warning("Invalid or missing URL")
+                        # Track SIDs for bulk actions at the top if multiple are selected
+                        current_selected_sids = []
+
+                        for idx in selected_indices:
+                            # Handle indices that might be out of bounds if filter changed
+                            if idx < len(df_ir_display):
+                                row = df_ir_display.iloc[idx]
+                                sid = str(row['PRODUCT_SET_SID'])
+                                current_selected_sids.append(sid)
                                 
-                            st.write(f"**Name:** {row['NAME']}")
-                            st.write(f"**Seller:** {row['SELLER_NAME']}")
-                            st.write(f"**Category:** {row['CATEGORY']}")
+                                with st.container(border=True):
+                                    img_url = str(row['MAIN_IMAGE']).strip()
+                                    
+                                    if img_url.lower().startswith(('http', 'https')):
+                                        st.image(img_url, use_container_width=True)
+                                    else:
+                                        st.error("Invalid Image URL")
 
-                # Action Buttons (Operate on selected_rows)
-                btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 2])
-                selected_sids = selected_rows['PRODUCT_SET_SID'].tolist()
+                                    st.write(f"**{row['NAME'][:50]}...**")
+                                    st.caption(f"SID: {sid} | {row['CATEGORY']}")
 
-                if selected_sids:
-                    with btn_col1:
-                        if st.button(f"Flag {len(selected_sids)}: Poor Image", type="primary"):
-                            reason_code = "1000042 - Kindly follow our product image upload guideline."
-                            comment = """Please make sure your product images follow Jumia’s image upload guidelines.
-Images must be clear, well-lit, and focused, with the product presented in a clean and professional way.
-Following these standards is essential to maintain the quality and consistency of product listings across the platform.
-Non-compliant images may result in listing rejection ."""
-                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
-                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
-                            st.rerun()
-                    
-                    with btn_col2:
-                        if st.button(f"Flag {len(selected_sids)}: Wrong Category"):
-                            reason_code = "1000004 - Wrong Category"
-                            comment = """Your products are currently assigned to the wrong category.
-Please review and update the listing with the correct category to ensure your product is properly classified and visible to customers.
-Correct categorization improves search results and helps customers find your product more easily.
+                                    # --- Individual Action Buttons ---
+                                    col_a, col_b = st.columns(2)
+                                    
+                                    if col_a.button("🚩 Poor Image", key=f"rej_img_{sid}", type="secondary", use_container_width=True):
+                                        reason_code = "1000042 - Kindly follow our product image upload guideline."
+                                        comment = "Please make sure your product images follow Jumia’s image upload guidelines. Images must be clear and professional."
+                                        st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
+                                                                       ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
+                                        st.toast(f"Rejected {sid}: Poor Image")
+                                        st.rerun()
 
-✅ You may:
+                                    if col_b.button("📂 Wrong Cat", key=f"rej_cat_{sid}", type="secondary", use_container_width=True):
+                                        reason_code = "1000004 - Wrong Category"
+                                        comment = "Your products are currently assigned to the wrong category. Please review and update the listing."
+                                        st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
+                                                                       ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
+                                        st.toast(f"Rejected {sid}: Wrong Category")
+                                        st.rerun()
 
-- Choose the appropriate category manually if you know it.
+                        # --- Bulk Actions (Only shows if multiple rows are selected) ---
+                        if len(current_selected_sids) > 1:
+                            st.divider()
+                            st.write("**Bulk Actions for Selected**")
+                            b_col1, b_col2 = st.columns(2)
+                            
+                            if b_col1.button("Reject All: Image", key="bulk_img", type="primary", use_container_width=True):
+                                reason_code = "1000042 - Kindly follow our product image upload guideline."
+                                comment = "Multiple items rejected for image quality guidelines."
+                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(current_selected_sids), 
+                                                               ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
+                                st.rerun()
 
-- Visit the Jumia website to take inspiration from similar products and see where they are listed.
-- Contact your Seller Support."""
-                            st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(selected_sids), 
-                                                           ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
-                            st.rerun()
+                            if b_col2.button("Reject All: Cat", key="bulk_cat", type="primary", use_container_width=True):
+                                reason_code = "1000004 - Wrong Category"
+                                comment = "Multiple items rejected for being in the wrong category."
+                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(current_selected_sids), 
+                                                               ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
+                                st.rerun()
                 else:
-                    st.caption("Click rows above to inspect & flag.")
+                    with st.sidebar:
+                        st.info("💡 **Tip:** Click a row in the review table to inspect the image and use quick-rejection buttons here.")
+
         else:
             st.success("No approved items available for review.")
 
