@@ -10,6 +10,7 @@ import json
 import xlsxwriter
 import zipfile
 import os
+from dataclasses import dataclass
 
 # -------------------------------------------------
 # CONSTANTS & MAPPING
@@ -84,7 +85,6 @@ def create_match_key(row: pd.Series) -> str:
 # -------------------------------------------------
 # ATTRIBUTE EXTRACTION
 # -------------------------------------------------
-from dataclasses import dataclass
 
 COLOR_PATTERNS = {
     'red': ['red', 'crimson', 'scarlet', 'maroon', 'burgundy', 'wine', 'ruby'],
@@ -1456,7 +1456,7 @@ if uploaded_files:
         # -------------------------------------------------
         st.markdown("---")
         st.header("Manual Image & Category Review")
-        st.info("Click on any row to inspect the image in the Sidebar. Hold Ctrl/Cmd to select multiple rows.")
+        st.info("Click on rows to inspect images in the Sidebar. Hold Ctrl/Cmd to select multiple rows.")
 
         # Filter for products currently approved
         review_data = pd.merge(
@@ -1490,7 +1490,7 @@ if uploaded_files:
                     column_config={
                         "MAIN_IMAGE": st.column_config.ImageColumn(
                             "Image", 
-                            width=150,  # Increased preview size
+                            width=150, 
                             help="Click row to inspect"
                         ),
                         "NAME": st.column_config.TextColumn("Product Name", width="large"),
@@ -1500,7 +1500,7 @@ if uploaded_files:
                     },
                     hide_index=True,
                     use_container_width=True,
-                    on_select="rerun",  # Triggers sidebar update on click
+                    on_select="rerun", 
                     selection_mode="multi-row",
                     key="image_review_grid"
                 )
@@ -1512,72 +1512,137 @@ if uploaded_files:
 
                 if selected_indices:
                     with st.sidebar:
-                        st.markdown("---")
-                        st.header("🔍 Image Inspector")
-                        st.caption(f"{len(selected_indices)} item(s) selected")
-                        
-                        # Track SIDs for bulk actions at the top if multiple are selected
-                        current_selected_sids = []
+                        # --- CSS FOR STICKY HEADER ---
+                        st.markdown("""
+                            <style>
+                            /* Make the specific container sticky */
+                            div[data-testid="stVerticalBlock"] > div:has(div.sidebar-sticky-wrapper) {
+                                position: sticky;
+                                top: 0;
+                                z-index: 999;
+                                background-color: #f0f2f6; /* Match default sidebar light mode */
+                                padding-bottom: 10px;
+                                border-bottom: 2px solid #ddd;
+                            }
+                            @media (prefers-color-scheme: dark) {
+                                div[data-testid="stVerticalBlock"] > div:has(div.sidebar-sticky-wrapper) {
+                                    background-color: #262730; /* Match default sidebar dark mode */
+                                    border-bottom: 2px solid #444;
+                                }
+                            }
+                            .sidebar-sticky-wrapper {
+                                padding-top: 1rem;
+                            }
+                            </style>
+                        """, unsafe_allow_html=True)
 
+                        # --- STICKY HEADER SECTION ---
+                        # We wrap this in a container that the CSS above will target
+                        sticky_container = st.container()
+                        with sticky_container:
+                            st.markdown('<div class="sidebar-sticky-wrapper">', unsafe_allow_html=True)
+                            st.header("🔍 Image Inspector")
+                            st.caption(f"{len(selected_indices)} item(s) loaded from table.")
+                            
+                            # Bulk Actions Menu
+                            if len(selected_indices) > 1:
+                                with st.expander("⚡ Bulk Actions (Selected Below)", expanded=True):
+                                    b_col1, b_col2, b_col3 = st.columns(3)
+                                    
+                                    reject_img = b_col1.button("Reject: Image", key="bulk_img", type="primary", use_container_width=True)
+                                    reject_cat = b_col2.button("Reject: Cat", key="bulk_cat", type="primary", use_container_width=True)
+                                    reject_fake = b_col3.button("Reject: Fake", key="bulk_fake", type="primary", use_container_width=True)
+                            else:
+                                reject_img, reject_cat, reject_fake = False, False, False
+
+                            st.markdown('</div>', unsafe_allow_html=True)
+
+                        # --- SCROLLABLE IMAGES LIST ---
+                        # We collect the SIDs to process based on the buttons clicked above
+                        target_sids_for_bulk = []
+                        
+                        # Loop through selected rows
                         for idx in selected_indices:
-                            # Handle indices that might be out of bounds if filter changed
                             if idx < len(df_ir_display):
                                 row = df_ir_display.iloc[idx]
                                 sid = str(row['PRODUCT_SET_SID'])
-                                current_selected_sids.append(sid)
                                 
+                                # Visual Container for each item
                                 with st.container(border=True):
-                                    img_url = str(row['MAIN_IMAGE']).strip()
+                                    # Checkbox for Multi-Select in Sidebar
+                                    # Default to True so Bulk Actions work immediately
+                                    is_checked = st.checkbox(f"{row['NAME'][:20]}...", value=True, key=f"chk_side_{sid}")
                                     
+                                    if is_checked:
+                                        target_sids_for_bulk.append(sid)
+
+                                    img_url = str(row['MAIN_IMAGE']).strip()
                                     if img_url.lower().startswith(('http', 'https')):
                                         st.image(img_url, use_container_width=True)
                                     else:
                                         st.error("Invalid Image URL")
 
-                                    st.write(f"**{row['NAME'][:50]}...**")
                                     st.caption(f"SID: {sid} | {row['CATEGORY']}")
-
-                                    # --- Individual Action Buttons ---
-                                    col_a, col_b = st.columns(2)
                                     
-                                    if col_a.button("🚩 Poor Image", key=f"rej_img_{sid}", type="secondary", use_container_width=True):
-                                        reason_code = "1000042 - Kindly follow our product image upload guideline."
-                                        comment = "Please make sure your product images follow Jumia’s image upload guidelines. Images must be clear and professional."
+                                    # Individual Buttons (3 Columns)
+                                    c_a, c_b, c_c = st.columns(3)
+                                    
+                                    # 1. Image Reject
+                                    if c_a.button("📷 Image", key=f"rej_img_{sid}", help="Reject: Poor Image"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                       ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
-                                        st.toast(f"Rejected {sid}: Poor Image")
+                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                        ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                         "Please make sure your product images follow Jumia’s guidelines.", 'Poor Image Quality']
+                                        st.toast(f"Rejected {sid}: Image")
                                         st.rerun()
 
-                                    if col_b.button("📂 Wrong Cat", key=f"rej_cat_{sid}", type="secondary", use_container_width=True):
-                                        reason_code = "1000004 - Wrong Category"
-                                        comment = "Your products are currently assigned to the wrong category. Please review and update the listing."
+                                    # 2. Category Reject
+                                    if c_b.button("📂 Cat", key=f"rej_cat_{sid}", help="Reject: Wrong Category"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                       ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
-                                        st.toast(f"Rejected {sid}: Wrong Category")
+                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                        ['Rejected', '1000004 - Wrong Category', 
+                                                                         "Your products are currently assigned to the wrong category.", 'Wrong Category']
+                                        st.toast(f"Rejected {sid}: Category")
+                                        st.rerun()
+                                    
+                                    # 3. Counterfeit Reject
+                                    if c_c.button("🚫 Fake", key=f"rej_fake_{sid}", help="Reject: Counterfeit/Fake"):
+                                        st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
+                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                        ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                         "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.", 'Suspected Fake product']
+                                        st.toast(f"Rejected {sid}: Counterfeit")
                                         st.rerun()
 
-                        # --- Bulk Actions (Only shows if multiple rows are selected) ---
-                        if len(current_selected_sids) > 1:
-                            st.divider()
-                            st.write("**Bulk Actions for Selected**")
-                            b_col1, b_col2 = st.columns(2)
+                        # --- EXECUTE BULK ACTIONS ---
+                        # This runs after the loop has populated target_sids_for_bulk
+                        if target_sids_for_bulk:
+                            if reject_img:
+                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                 "Multiple items rejected for image quality guidelines.", 'Poor Image Quality']
+                                st.success(f"Rejected {len(target_sids_for_bulk)} items (Image)")
+                                st.rerun()
                             
-                            if b_col1.button("Reject All: Image", key="bulk_img", type="primary", use_container_width=True):
-                                reason_code = "1000042 - Kindly follow our product image upload guideline."
-                                comment = "Multiple items rejected for image quality guidelines."
-                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(current_selected_sids), 
-                                                               ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Poor Image Quality']
+                            if reject_cat:
+                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000004 - Wrong Category', 
+                                                                 "Multiple items rejected for being in the wrong category.", 'Wrong Category']
+                                st.success(f"Rejected {len(target_sids_for_bulk)} items (Category)")
                                 st.rerun()
 
-                            if b_col2.button("Reject All: Cat", key="bulk_cat", type="primary", use_container_width=True):
-                                reason_code = "1000004 - Wrong Category"
-                                comment = "Multiple items rejected for being in the wrong category."
-                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(current_selected_sids), 
-                                                               ['Status', 'Reason', 'Comment', 'FLAG']] = ['Rejected', reason_code, comment, 'Wrong Category']
+                            if reject_fake:
+                                st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                 "Multiple listings rejected as confirmed counterfeit.", 'Suspected Fake product']
+                                st.success(f"Rejected {len(target_sids_for_bulk)} items (Counterfeit)")
                                 st.rerun()
                 else:
                     with st.sidebar:
-                        st.info("💡 **Tip:** Click a row in the review table to inspect the image and use quick-rejection buttons here.")
+                        st.info("💡 **Tip:** Click rows in the table to inspect images here.")
 
         else:
             st.success("No approved items available for review.")
