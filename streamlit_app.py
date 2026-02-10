@@ -361,6 +361,11 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000039 - Product Poorly Created. Each Variation Of This Product Should Be Created Uniquely (Not Authorized) (Not Authorized)',
                 "Please create different SKUs for this product and not as variations as variations are only used for sizes"
             ),
+            # --- NEW MAPPING FOR WEIGHT/VOLUME ---
+            'Missing Weight/Volume': (
+                '1000008 - Kindly Improve Product Name Description',
+                "For this category, the product name must include the weight or volume (e.g., '1kg', '500ml', '2L').\nThis helps customers understand the quantity they are purchasing."
+            ),
         }
     except Exception:
         return {}
@@ -394,6 +399,8 @@ def load_all_support_files() -> Dict:
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
         'known_brands': safe_load_txt('brands.txt'),
         'variation_allowed_codes': safe_load_txt('variation.txt'),
+        # --- NEW FILE LOADING FOR WEIGHT/VOLUME CHECK ---
+        'weight_category_codes': safe_load_txt('weight.txt'),
     }
     return files
 
@@ -493,54 +500,30 @@ def propagate_metadata(df: pd.DataFrame) -> pd.DataFrame:
 # --- Validation Logic Functions ---
 
 def check_wrong_variation(data: pd.DataFrame, allowed_variation_codes: List[str]) -> pd.DataFrame:
-    # Ensure COUNT_VARIATIONS is present, even if empty
     check_data = data.copy()
-    
-    # Try to ensure COUNT_VARIATIONS is populated
     if 'COUNT_VARIATIONS' not in check_data.columns:
-        # If the column is completely missing, we try to calculate it based on how many
-        # rows share the same PRODUCT_SET_SID. This is a common way to count variations.
         if 'PRODUCT_SET_SID' in check_data.columns:
             check_data['COUNT_VARIATIONS'] = check_data.groupby('PRODUCT_SET_SID')['PRODUCT_SET_SID'].transform('count')
         else:
-            check_data['COUNT_VARIATIONS'] = 1  # Fallback to 1 if we can't count
+            check_data['COUNT_VARIATIONS'] = 1
     
     if 'CATEGORY_CODE' not in check_data.columns:
         return pd.DataFrame(columns=data.columns)
 
-    # Clean allowed codes
     allowed_set = set(clean_category_code(c) for c in allowed_variation_codes)
-
     check_data['cat_clean'] = check_data['CATEGORY_CODE'].apply(clean_category_code)
-    
-    # Convert count to numeric, coerce errors to 1 (safe) and force integer
     check_data['qty_var'] = pd.to_numeric(check_data['COUNT_VARIATIONS'], errors='coerce').fillna(1).astype(int)
 
-    # Logic: Flag if qty > 1 AND cat NOT in allowed list
     mask = (check_data['qty_var'] > 1) & (~check_data['cat_clean'].isin(allowed_set))
-    
     flagged = check_data[mask].copy()
-    
-    # Add comment detail for clarity
     if not flagged.empty:
         flagged['Comment_Detail'] = flagged.apply(
             lambda row: f"Variations: {row['qty_var']}, Category: {row['cat_clean']}", 
             axis=1
         )
-    
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-def check_duplicate_products(
-    data: pd.DataFrame,
-    exempt_categories: List[str] = None,
-    similarity_threshold: float = 0.70,
-    known_colors: List[str] = None,
-    **kwargs
-) -> pd.DataFrame:
-    """
-    Duplicate Check (Text-Based Only)
-    Recognizes color/size/storage variants as DIFFERENT products.
-    """
+def check_duplicate_products(data: pd.DataFrame, exempt_categories: List[str] = None, similarity_threshold: float = 0.70, known_colors: List[str] = None, **kwargs) -> pd.DataFrame:
     duplicate_threshold = int(similarity_threshold * 100) if similarity_threshold <= 1 else int(similarity_threshold)
     required_cols = ['NAME', 'SELLER_NAME', 'BRAND']
     if not all(col in data.columns for col in required_cols): return pd.DataFrame(columns=data.columns)
@@ -564,8 +547,7 @@ def check_duplicate_products(
     rejected_sids = set()
     duplicate_details = {}
     grouped = data_to_check.groupby(['_seller_lower', '_base_key'])
-    
-    duplicate_groups = {} # Define duplicate_groups to avoid UnboundLocalError
+    duplicate_groups = {} 
 
     for (seller, base_key), group in grouped:
         if len(group) < 2: continue
@@ -923,6 +905,35 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
         
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
+# --- NEW FUNCTION FOR WEIGHT/VOLUME CHECK ---
+def check_weight_volume_in_name(data: pd.DataFrame, weight_category_codes: List[str]) -> pd.DataFrame:
+    """
+    Flags products in specific categories if their NAME lacks weight or volume information.
+    """
+    if not {'CATEGORY_CODE', 'NAME'}.issubset(data.columns) or not weight_category_codes:
+        return pd.DataFrame(columns=data.columns)
+
+    # Clean the category codes
+    target_cats = set(clean_category_code(c) for c in weight_category_codes)
+    data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
+    
+    # Filter for target categories
+    target_data = data[data_cats.isin(target_cats)].copy()
+    if target_data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # Regex for weight/volume units: kg, g, grams, ml, l, litres, oz, etc.
+    # Handles numbers followed by units (e.g., 500ml, 1.5kg, 2L)
+    # Includes variants like kgs, gms, lb, lbs, liter, litre
+    unit_pattern = re.compile(r'\b\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gms|grams|ml|l|ltr|liter|litres|oz|ounces|lb|lbs)\b', re.IGNORECASE)
+
+    def has_measurement(name):
+        return bool(unit_pattern.search(str(name)))
+
+    mask = ~target_data['NAME'].apply(has_measurement)
+    
+    return target_data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
 # -------------------------------------------------
 # Master validation runner
 # -------------------------------------------------
@@ -954,6 +965,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Generic branded products with genuine brands", check_generic_with_brand_in_name, {'brands_list': support_files.get('known_brands', [])}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
+        # --- NEW VALIDATION REGISTERED HERE ---
+        ("Missing Weight/Volume", check_weight_volume_in_name, {'weight_category_codes': support_files.get('weight_category_codes', [])}),
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
@@ -975,7 +988,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         for dup_key, sid_list in dup_counts.items():
             if len(sid_list) > 1:
                 for sid in sid_list:
-                    duplicate_groups[sid] = sid_list
+                    for sid in sid_list:
+                        duplicate_groups[sid] = sid_list
     
     restricted_issue_keys = {}
 
@@ -1610,27 +1624,27 @@ if uploaded_files:
                                     # 1. Image Reject
                                     if c_a.button("Image", key=f"rej_img_{sid}", help="Reject: Poor Image"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                        ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
-                                                                         "Please make sure your product images follow Jumia’s guidelines.", 'Poor Image Quality']
+                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                            ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                             "Please make sure your product images follow Jumia’s guidelines.", 'Poor Image Quality']
                                         st.toast(f"Rejected {sid}: Image")
                                         st.rerun()
 
                                     # 2. Category Reject
                                     if c_b.button("Cat", key=f"rej_cat_{sid}", help="Reject: Wrong Category"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                        ['Rejected', '1000004 - Wrong Category', 
-                                                                         "Your products are currently assigned to the wrong category.", 'Wrong Category']
+                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                            ['Rejected', '1000004 - Wrong Category', 
+                                                                             "Your products are currently assigned to the wrong category.", 'Wrong Category']
                                         st.toast(f"Rejected {sid}: Category")
                                         st.rerun()
                                     
                                     # 3. Counterfeit Reject
                                     if c_c.button("Fake", key=f"rej_fake_{sid}", help="Reject: Counterfeit/Fake"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                        ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                        ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
-                                                                         "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.", 'Suspected Fake product']
+                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                            ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                             "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.", 'Suspected Fake product']
                                         st.toast(f"Rejected {sid}: Counterfeit")
                                         st.rerun()
 
@@ -1638,25 +1652,25 @@ if uploaded_files:
                         if target_sids_for_bulk:
                             if reject_img:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
-                                                                 "Multiple items rejected for image quality guidelines.", 'Poor Image Quality']
+                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                    ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                     "Multiple items rejected for image quality guidelines.", 'Poor Image Quality']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Image)")
                                 st.rerun()
                             
                             if reject_cat:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                ['Rejected', '1000004 - Wrong Category', 
-                                                                 "Multiple items rejected for being in the wrong category.", 'Wrong Category']
+                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                    ['Rejected', '1000004 - Wrong Category', 
+                                                                     "Multiple items rejected for being in the wrong category.", 'Wrong Category']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Category)")
                                 st.rerun()
 
                             if reject_fake:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
-                                                                 "Multiple listings rejected as confirmed counterfeit.", 'Suspected Fake product']
+                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                    ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                     "Multiple listings rejected as confirmed counterfeit.", 'Suspected Fake product']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Counterfeit)")
                                 st.rerun()
                 else:
