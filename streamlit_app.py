@@ -1536,17 +1536,34 @@ if uploaded_files:
                             </style>
                         """, unsafe_allow_html=True)
 
+                        # Identify SIDs currently in view
+                        visible_sids = []
+                        for idx in selected_indices:
+                            if idx < len(df_ir_display):
+                                visible_sids.append(str(df_ir_display.iloc[idx]['PRODUCT_SET_SID']))
+
                         # --- STICKY HEADER SECTION ---
-                        # We wrap this in a container that the CSS above will target
                         sticky_container = st.container()
                         with sticky_container:
                             st.markdown('<div class="sidebar-sticky-wrapper">', unsafe_allow_html=True)
-                            st.header("🔍 Image Inspector")
-                            st.caption(f"{len(selected_indices)} item(s) loaded from table.")
+                            st.header("Image Inspector")
+                            st.caption(f"{len(selected_indices)} item(s) loaded.")
                             
+                            # Select All / Unselect All Buttons
+                            sa_col1, sa_col2 = st.columns(2)
+                            if sa_col1.button("Select All", use_container_width=True):
+                                for sid in visible_sids:
+                                    st.session_state[f"chk_side_{sid}"] = True
+                                st.rerun()
+                            
+                            if sa_col2.button("Unselect All", use_container_width=True):
+                                for sid in visible_sids:
+                                    st.session_state[f"chk_side_{sid}"] = False
+                                st.rerun()
+
                             # Bulk Actions Menu
                             if len(selected_indices) > 1:
-                                with st.expander("⚡ Bulk Actions (Selected Below)", expanded=True):
+                                with st.expander("Bulk Actions (Selected)", expanded=True):
                                     b_col1, b_col2, b_col3 = st.columns(3)
                                     
                                     reject_img = b_col1.button("Reject: Image", key="bulk_img", type="primary", use_container_width=True)
@@ -1558,7 +1575,6 @@ if uploaded_files:
                             st.markdown('</div>', unsafe_allow_html=True)
 
                         # --- SCROLLABLE IMAGES LIST ---
-                        # We collect the SIDs to process based on the buttons clicked above
                         target_sids_for_bulk = []
                         
                         # Loop through selected rows
@@ -1570,8 +1586,12 @@ if uploaded_files:
                                 # Visual Container for each item
                                 with st.container(border=True):
                                     # Checkbox for Multi-Select in Sidebar
-                                    # Default to True so Bulk Actions work immediately
-                                    is_checked = st.checkbox(f"{row['NAME'][:20]}...", value=True, key=f"chk_side_{sid}")
+                                    # Note: Default value is set to True if key doesn't exist, otherwise reads from session state
+                                    chk_key = f"chk_side_{sid}"
+                                    if chk_key not in st.session_state:
+                                        st.session_state[chk_key] = True
+                                        
+                                    is_checked = st.checkbox(f"{row['NAME'][:20]}...", key=chk_key)
                                     
                                     if is_checked:
                                         target_sids_for_bulk.append(sid)
@@ -1588,7 +1608,7 @@ if uploaded_files:
                                     c_a, c_b, c_c = st.columns(3)
                                     
                                     # 1. Image Reject
-                                    if c_a.button("📷 Image", key=f"rej_img_{sid}", help="Reject: Poor Image"):
+                                    if c_a.button("Image", key=f"rej_img_{sid}", help="Reject: Poor Image"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
                                                                         ['Status', 'Reason', 'Comment', 'FLAG']] = \
                                                                         ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
@@ -1597,7 +1617,7 @@ if uploaded_files:
                                         st.rerun()
 
                                     # 2. Category Reject
-                                    if c_b.button("📂 Cat", key=f"rej_cat_{sid}", help="Reject: Wrong Category"):
+                                    if c_b.button("Cat", key=f"rej_cat_{sid}", help="Reject: Wrong Category"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
                                                                         ['Status', 'Reason', 'Comment', 'FLAG']] = \
                                                                         ['Rejected', '1000004 - Wrong Category', 
@@ -1606,7 +1626,7 @@ if uploaded_files:
                                         st.rerun()
                                     
                                     # 3. Counterfeit Reject
-                                    if c_c.button("🚫 Fake", key=f"rej_fake_{sid}", help="Reject: Counterfeit/Fake"):
+                                    if c_c.button("Fake", key=f"rej_fake_{sid}", help="Reject: Counterfeit/Fake"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
                                                                         ['Status', 'Reason', 'Comment', 'FLAG']] = \
                                                                         ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
@@ -1615,7 +1635,6 @@ if uploaded_files:
                                         st.rerun()
 
                         # --- EXECUTE BULK ACTIONS ---
-                        # This runs after the loop has populated target_sids_for_bulk
                         if target_sids_for_bulk:
                             if reject_img:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
@@ -1642,7 +1661,7 @@ if uploaded_files:
                                 st.rerun()
                 else:
                     with st.sidebar:
-                        st.info("💡 **Tip:** Click rows in the table to inspect images here.")
+                        st.info("Tip: Click rows in the table to inspect images here.")
 
         else:
             st.success("No approved items available for review.")
