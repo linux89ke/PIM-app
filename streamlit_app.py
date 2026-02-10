@@ -361,10 +361,14 @@ def load_flags_mapping() -> Dict[str, Tuple[str, str]]:
                 '1000039 - Product Poorly Created. Each Variation Of This Product Should Be Created Uniquely (Not Authorized) (Not Authorized)',
                 "Please create different SKUs for this product and not as variations as variations are only used for sizes"
             ),
-            # --- NEW MAPPING FOR WEIGHT/VOLUME ---
             'Missing Weight/Volume': (
                 '1000008 - Kindly Improve Product Name Description',
                 "For this category, the product name must include the weight or volume (e.g., '1kg', '500ml', '2L').\nThis helps customers understand the quantity they are purchasing."
+            ),
+            # --- NEW MAPPING FOR SMARTPHONE NAMES ---
+            'Incomplete Smartphone Name': (
+                '1000008 - Kindly Improve Product Name Description',
+                "Smartphone and Tablet titles must include specific memory/storage details to distinguish the version.\nExample: 'Redmi Note 12, 128GB + 4GB RAM'.\nPlease update the name to include the GB/TB capacity."
             ),
         }
     except Exception:
@@ -399,8 +403,9 @@ def load_all_support_files() -> Dict:
         'restricted_brands_config': load_restricted_brands_config('restric_brands.xlsx'),
         'known_brands': safe_load_txt('brands.txt'),
         'variation_allowed_codes': safe_load_txt('variation.txt'),
-        # --- NEW FILE LOADING FOR WEIGHT/VOLUME CHECK ---
         'weight_category_codes': safe_load_txt('weight.txt'),
+        # --- NEW FILE LOADING FOR SMARTPHONES ---
+        'smartphone_category_codes': safe_load_txt('smartphones.txt'),
     }
     return files
 
@@ -905,7 +910,6 @@ def check_generic_with_brand_in_name(data: pd.DataFrame, brands_list: List[str])
         
     return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
-# --- NEW FUNCTION FOR WEIGHT/VOLUME CHECK ---
 def check_weight_volume_in_name(data: pd.DataFrame, weight_category_codes: List[str]) -> pd.DataFrame:
     """
     Flags products in specific categories if their NAME lacks weight or volume information.
@@ -933,6 +937,41 @@ def check_weight_volume_in_name(data: pd.DataFrame, weight_category_codes: List[
     mask = ~target_data['NAME'].apply(has_measurement)
     
     return target_data[mask].drop_duplicates(subset=['PRODUCT_SET_SID'])
+
+# --- NEW FUNCTION FOR SMARTPHONE NAMES ---
+def check_incomplete_smartphone_name(data: pd.DataFrame, smartphone_category_codes: List[str]) -> pd.DataFrame:
+    """
+    Flags Smartphones/Tablets that are missing essential storage/memory specs 
+    (e.g., '64GB', '4GB RAM') in the Product Name.
+    """
+    if not {'CATEGORY_CODE', 'NAME'}.issubset(data.columns) or not smartphone_category_codes:
+        return pd.DataFrame(columns=data.columns)
+
+    # 1. Setup Categories
+    target_cats = set(clean_category_code(c) for c in smartphone_category_codes)
+    data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
+    
+    # 2. Filter Data
+    target_data = data[data_cats.isin(target_cats)].copy()
+    if target_data.empty:
+        return pd.DataFrame(columns=data.columns)
+
+    # 3. Define Regex for Storage/Memory
+    # Matches: 32GB, 32gb, 128 GB, 1TB, 4GB RAM, etc.
+    spec_pattern = re.compile(r'\b\d+\s*(gb|tb)\b', re.IGNORECASE)
+
+    def is_missing_specs(name):
+        # Returns True if the pattern is NOT found
+        return not bool(spec_pattern.search(str(name)))
+
+    # 4. Apply Check
+    mask = target_data['NAME'].apply(is_missing_specs)
+    
+    flagged = target_data[mask].copy()
+    if not flagged.empty:
+        flagged['Comment_Detail'] = "Name missing Storage/Memory spec (e.g., 64GB)"
+
+    return flagged.drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 # -------------------------------------------------
 # Master validation runner
@@ -965,8 +1004,9 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         ("Wrong Variation", check_wrong_variation, {'allowed_variation_codes': support_files.get('variation_allowed_codes', [])}),
         ("Generic branded products with genuine brands", check_generic_with_brand_in_name, {'brands_list': support_files.get('known_brands', [])}),
         ("Missing COLOR", check_missing_color, {'pattern': compile_regex_patterns(support_files['colors']), 'color_categories': support_files['color_categories']}),
-        # --- NEW VALIDATION REGISTERED HERE ---
         ("Missing Weight/Volume", check_weight_volume_in_name, {'weight_category_codes': support_files.get('weight_category_codes', [])}),
+        # --- NEW VALIDATION REGISTERED HERE ---
+        ("Incomplete Smartphone Name", check_incomplete_smartphone_name, {'smartphone_category_codes': support_files.get('smartphone_category_codes', [])}),
         ("Duplicate product", check_duplicate_products, {
             'exempt_categories': support_files.get('duplicate_exempt_codes', []),
             'known_colors': support_files['colors'],
@@ -988,8 +1028,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         for dup_key, sid_list in dup_counts.items():
             if len(sid_list) > 1:
                 for sid in sid_list:
-                    for sid in sid_list:
-                        duplicate_groups[sid] = sid_list
+                    duplicate_groups[sid] = sid_list
     
     restricted_issue_keys = {}
 
