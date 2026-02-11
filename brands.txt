@@ -366,7 +366,6 @@ Baby Care
 Baby Delight
 Babybee
 Bag For YOU
-Bag Hook
 Bag Lady
 Bag Paradise
 Bags Unlimited
@@ -378,12 +377,9 @@ Bakers
 Balance
 Ballet
 Bambeado
-Bamboo
 Bamsi
 Banana Republic
 Bandai Namco
-Bandana
-Banner
 Baofeng
 Baoke
 Baraka
@@ -924,7 +920,6 @@ EMPER
 Empire
 Emporio Armani
 Emtop
-Enamel
 Enchanteur
 Enerbras
 Energetics
@@ -3241,11 +3236,8 @@ Kids & Toys
 Kids Academy
 Kids Attire
 Kids Babys Love
-Kids Battery
-Kids Book
 Kids By Exist
 Kids Can Press
-Kids Center
 Kids Classic
 Kids Corner
 Kids Create
@@ -3260,9 +3252,7 @@ Kids Kanai
 Kids King
 Kids Konserve
 Kids Legend
-Kids Licensing
 Kids Look
-Kids M
 Kids Master
 Kids Melody
 Kids Nala
