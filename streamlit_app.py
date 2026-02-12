@@ -832,7 +832,8 @@ def check_generic_brand_issues(data: pd.DataFrame, valid_category_codes_fas: Lis
     if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns): return pd.DataFrame(columns=data.columns)
     data_cats = data['CATEGORY_CODE'].apply(clean_category_code)
     fas_cats = set(clean_category_code(c) for c in valid_category_codes_fas)
-    return data[data_cats.isin(fas_cats) & (data['BRAND']=='Generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
+    # UPDATED: Case-insensitive check for 'generic'
+    return data[data_cats.isin(fas_cats) & (data['BRAND'].astype(str).str.lower() == 'generic')].drop_duplicates(subset=['PRODUCT_SET_SID'])
 
 def check_fashion_brand_issues(data: pd.DataFrame, valid_category_codes_fas: List[str]) -> pd.DataFrame:
     if not {'CATEGORY_CODE','BRAND'}.issubset(data.columns): 
@@ -1063,7 +1064,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         status_text.text(f"Running: {name}")
         
         if name in ["Generic BRAND Issues", "Fashion brand issues"]:
-            # --- UPDATED: Pass the list directly from the text file ---
+            # --- UPDATED: Pass the list directly from support_files ---
             ckwargs['valid_category_codes_fas'] = support_files.get('category_fas', [])
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
