@@ -429,7 +429,18 @@ def compile_regex_patterns(words: List[str]) -> re.Pattern:
 class CountryValidator:
     COUNTRY_CONFIG = {
         "Kenya": {"code": "KE", "skip_validations": [], "prohibited_products_file": "prohibited_productsKE.txt"},
-        "Uganda": {"code": "UG", "skip_validations": ["Seller Approve to sell books", "Seller Approved to Sell Perfume", "Counterfeit Sneakers", "Product Warranty"], "prohibited_products_file": "prohibited_productsUG.txt"}
+        "Uganda": {
+            "code": "UG", 
+            # --- UPDATED: Exclude Generic BRAND Issues for UG ---
+            "skip_validations": [
+                "Seller Approve to sell books", 
+                "Seller Approved to Sell Perfume", 
+                "Counterfeit Sneakers", 
+                "Product Warranty",
+                "Generic BRAND Issues"
+            ], 
+            "prohibited_products_file": "prohibited_productsUG.txt"
+        }
     }
     
     def __init__(self, country: str):
