@@ -391,7 +391,7 @@ def load_all_support_files() -> Dict:
         'unnecessary_words': [w.lower() for w in safe_load_txt('unnecessary.txt')],
         'colors': [c.lower() for c in safe_load_txt('colors.txt')],
         'color_categories': safe_load_txt('color_cats.txt'),
-        # --- CHANGED: Now using text file instead of Excel ---
+        # --- CHANGED: Now using safe_load_txt for Fashion_cat.txt ---
         'category_fas': safe_load_txt('Fashion_cat.txt'),
         'reasons': load_excel_file('reasons.xlsx'),
         'flags_mapping': load_flags_mapping(),
@@ -1063,7 +1063,7 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         status_text.text(f"Running: {name}")
         
         if name in ["Generic BRAND Issues", "Fashion brand issues"]:
-            # --- UPDATED: Pass list directly from support_files ---
+            # --- UPDATED: Pass the list directly from the text file ---
             ckwargs['valid_category_codes_fas'] = support_files.get('category_fas', [])
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
