@@ -391,7 +391,8 @@ def load_all_support_files() -> Dict:
         'unnecessary_words': [w.lower() for w in safe_load_txt('unnecessary.txt')],
         'colors': [c.lower() for c in safe_load_txt('colors.txt')],
         'color_categories': safe_load_txt('color_cats.txt'),
-        'category_fas': load_excel_file('category_FAS.xlsx'),
+        # --- CHANGED: Now using text file instead of Excel ---
+        'category_fas': safe_load_txt('Fashion_cat.txt'),
         'reasons': load_excel_file('reasons.xlsx'),
         'flags_mapping': load_flags_mapping(),
         'jerseys_config': load_excel_file('Jerseys.xlsx'),
@@ -1062,8 +1063,8 @@ def validate_products(data: pd.DataFrame, support_files: Dict, country_validator
         status_text.text(f"Running: {name}")
         
         if name in ["Generic BRAND Issues", "Fashion brand issues"]:
-            fas = support_files.get('category_fas', pd.DataFrame())
-            ckwargs['valid_category_codes_fas'] = fas['ID'].astype(str).tolist() if not fas.empty and 'ID' in fas.columns else []
+            # --- UPDATED: Pass list directly from support_files ---
+            ckwargs['valid_category_codes_fas'] = support_files.get('category_fas', [])
         elif name == "Missing COLOR":
             ckwargs['country_code'] = country_validator.code
         
@@ -1663,27 +1664,27 @@ if uploaded_files:
                                     # 1. Image Reject
                                     if c_a.button("Image", key=f"rej_img_{sid}", help="Reject: Poor Image"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                            ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
-                                                                             "Please make sure your product images follow Jumia’s guidelines.", 'Poor Image Quality']
+                                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                                ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                                 "Please make sure your product images follow Jumia’s guidelines.", 'Poor Image Quality']
                                         st.toast(f"Rejected {sid}: Image")
                                         st.rerun()
 
                                     # 2. Category Reject
                                     if c_b.button("Cat", key=f"rej_cat_{sid}", help="Reject: Wrong Category"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                            ['Rejected', '1000004 - Wrong Category', 
-                                                                             "Your products are currently assigned to the wrong category.", 'Wrong Category']
+                                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                                ['Rejected', '1000004 - Wrong Category', 
+                                                                                 "Your products are currently assigned to the wrong category.", 'Wrong Category']
                                         st.toast(f"Rejected {sid}: Category")
                                         st.rerun()
                                     
                                     # 3. Counterfeit Reject
                                     if c_c.button("Fake", key=f"rej_fake_{sid}", help="Reject: Counterfeit/Fake"):
                                         st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'] == sid, 
-                                                                            ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                            ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
-                                                                             "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.", 'Suspected Fake product']
+                                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                                ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                                 "Your listing has been rejected as Jumia’s technical team has confirmed the product is counterfeit.", 'Suspected Fake product']
                                         st.toast(f"Rejected {sid}: Counterfeit")
                                         st.rerun()
 
@@ -1691,25 +1692,25 @@ if uploaded_files:
                         if target_sids_for_bulk:
                             if reject_img:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                    ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
-                                                                     "Multiple items rejected for image quality guidelines.", 'Poor Image Quality']
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000042 - Kindly follow our product image upload guideline.', 
+                                                                 "Multiple items rejected for image quality guidelines.", 'Poor Image Quality']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Image)")
                                 st.rerun()
                             
                             if reject_cat:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                    ['Rejected', '1000004 - Wrong Category', 
-                                                                     "Multiple items rejected for being in the wrong category.", 'Wrong Category']
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000004 - Wrong Category', 
+                                                                 "Multiple items rejected for being in the wrong category.", 'Wrong Category']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Category)")
                                 st.rerun()
 
                             if reject_fake:
                                 st.session_state.final_report.loc[st.session_state.final_report['ProductSetSid'].isin(target_sids_for_bulk), 
-                                                                    ['Status', 'Reason', 'Comment', 'FLAG']] = \
-                                                                    ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
-                                                                     "Multiple listings rejected as confirmed counterfeit.", 'Suspected Fake product']
+                                                                ['Status', 'Reason', 'Comment', 'FLAG']] = \
+                                                                ['Rejected', '1000023 - Confirmation of counterfeit product by Jumia technical team (Not Authorized)', 
+                                                                 "Multiple listings rejected as confirmed counterfeit.", 'Suspected Fake product']
                                 st.success(f"Rejected {len(target_sids_for_bulk)} items (Counterfeit)")
                                 st.rerun()
                 else:
